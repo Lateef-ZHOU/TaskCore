@@ -5,10 +5,17 @@ include(cmake/Dependencies.cmake)
 if(NOT TARGET Lidar::DeviceCore OR NOT TARGET Lidar::Algorithm)
     message(FATAL_ERROR "TaskCore requires Lidar::DeviceCore and Lidar::Algorithm")
 endif()
-add_library(LidarTaskCore INTERFACE)
+add_library(LidarTaskCore STATIC
+    include/Device/DAQ/DAQDevice.h
+    include/Device/GMB/GMBDevice.h)
+set_target_properties(LidarTaskCore PROPERTIES AUTOMOC ON)
+qt_extract_metatypes(LidarTaskCore)
+if(MSVC)
+    target_compile_options(LidarTaskCore PRIVATE /W4)
+endif()
 add_library(Lidar::TaskCore ALIAS LidarTaskCore)
-target_include_directories(LidarTaskCore INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(LidarTaskCore INTERFACE Lidar::DeviceCore Lidar::Algorithm)
+target_include_directories(LidarTaskCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(LidarTaskCore PUBLIC Lidar::DeviceCore Lidar::Algorithm)
 
 # 作为依赖时不接管宿主的测试开关。
 if(PROJECT_IS_TOP_LEVEL)

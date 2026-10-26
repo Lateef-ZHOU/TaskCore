@@ -10,6 +10,6 @@ endif()
 if(NOT TARGET Lidar::DeviceCore)
     FetchContent_Declare(lidar_devicecore
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/DeviceCore.git
-        GIT_TAG eb3876e9b10b69d3161b34d6c26d17631d77545d)
+        GIT_TAG 5c63ec5c501d83a15daa65a41dca438ee4ff330f)
     FetchContent_MakeAvailable(lidar_devicecore)
 endif()

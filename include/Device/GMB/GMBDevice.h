@@ -35,58 +35,19 @@ struct GMBMoveParameters
     }
 };
 
-// ============================================================
-// GMBDevice.h — **云台族**的两层：纯接口族基 GMBDeviceBase（编排层拿的就是它）+ 模板族层
-// GMBDevice<HandleT, CollectorT>（族级实现写一次）。
-//
-// **为什么要有族，以及族分在哪**：编排层要能对"任意型号、任意台数"的云台下单，那就得有一个
-// 能同时指向 SqafDevice 与 McztDevice 的指针 —— 即类型擦除，即非模板基类。而"是云台还是采集
-// 卡"这件事编排层**必须**知道（任务组合一台云台和多选采集卡），"是哪个型号"则**不该**
-// 知道（知道了就被型号污染，加一个型号就要改编排层）。族基正落在这两句话之间。
-//
-// **族是旁挂的，不串在设备链上**（用户定）：
-//     GMBDeviceBase（不继承任何东西）
-//     Device<HandleT, CollectorT> : DeviceBase : QObject      ← 机制链，一个字不动
-//     GMBDevice<HandleT, CollectorT> : Device<H, CollectorT>, GMBDeviceBase  ← 在此汇合
-//     官邸 : GMBDevice<...>
-// **不菱形**：族基不继承 DeviceBase，故官邸只有一份 DeviceBase 子对象。**QObject 也只有一份**
-// （Qt 禁止多重继承 QObject；族基不是 QObject，且 QObject 那条基必须写在前面）。
-// 族基通过 `device()` 交出 DeviceBase 面以访问锁；`begin` / `stop` 由本族声明，
-// 族模板层分别接到 Device 的启动与撤单机制。
-// 族基不是 QObject，族级通知以纯虚函数声明，由带 Q_OBJECT 的官邸用同名 Qt 信号覆写，
-// moc 提供发射实现；模板层继承该契约，不把业务通知塞进 DeviceBase，也不增加转发层。
-// （不做成串链形 `Device<H,C,BaseT=GMBDeviceBase>`——单链、族基指针免费上行、族基还能带
-// Q_OBJECT——是因为机制层的基类可配置这件事本身不可接受，且那套形制在本仓库无先例、扩展性
-// 未知（用户定）。）
-//
-// 族口统一定位与完成结果；运动参数按值交入，定位协议不带速度的型号使用空参数。
-// 扇扫、循环和方向点动仍是型号专有命令，不进入任务编排。
-// ============================================================
-
-// ── GMBDeviceBase：云台族的**契约**（不继承任何东西 = 编排层的擦除口）。各口都不碰 HandleT，
-//    故本类不必是模板：
-//      · device —— 交出自己的 DeviceBase 面。**旁挂形制的必需口**：编排层拿族基引用要加锁
-//        （锁请求收 DeviceBase&），而族基不在那条链上，只能由实现方把 this 交出来。
-//      · collectorFor —— 按云台位形创建只读原型，不启动设备；越出本台行程由
-//        官邸拒收（空份额）。编排层把它连同本族基一起交给 `RunAwaiter<GMBDeviceBase>`。
-//      · begin / stop —— 启动那只斗 / 撤单。等待器在挂起成立后调 begin 一次（返"设备收不收"），
-//        析构时对未结的单调 stop。
-//      · setMounting / mounting —— 安装标定（写口验锁）。
-//      · gimbalOf / worldOf —— 世界朝向 ⇄ 云台位形（含安装标定），一去一回，**两边都只认位形**。
-//      · hasSlipRing —— 方位轴有没有滑环（机械事实，官邸答）。
-//
-// **几何换算住本类**（用户定：层次更准）：`mounting_` 私有持有，`gimbalOf`（反解）/ `worldOf`
-// （正向）/ `setMounting` 都是非虚的族级实现——它们不碰 HandleT。
-// setMounting 经 device().lockMatches 验锁，与其他设置写口共用机制层谓词。
-//
-// **收集器是收集器，位形是位形**（用户定）：族口里没有"收斗、在里面取位形"的混合口——
-// `collectorFor` 收位形，从斗取位形（`measured()` / `target()`）是调用方的事；
-// 世界角 → 位形（gimbalOf）→ 造斗（collectorFor，官邸查行程）各是一步。
-// **族基不碰角度数值**（用户定）：本类只经手 `WorldModel` / `PanTiltModel` 两个类型，不读其中
-// 任何一个 double。所以它也不替任务排行进顺序——那由人工在任务页排；将来要自动排，归官邸。
-class GMBDeviceBase
+// 云台族定义标准能力并持有安装姿态；具体官邸拥有一台 Device 运行机制。
+// 编排只持族引用，通过 device() 使用锁，不认识具体 Handle 或 Collector。
+class GMBDeviceBase : public QObject
 {
+    Q_OBJECT
+    Q_PROPERTY(DeviceBase *device READ deviceObject CONSTANT)
+    Q_PROPERTY(WorldModel mounting READ mounting NOTIFY mountingChanged)
+    Q_PROPERTY(bool slipRing READ hasSlipRing CONSTANT)
 public:
+    explicit GMBDeviceBase(QObject *parent = nullptr) : QObject(parent) {}
+    ~GMBDeviceBase() override = default;
+    [[nodiscard]] DeviceBase *deviceObject() noexcept { return &device(); }
+
     // 本族的收集器基（`RunAwaiter<GMBDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
     using CollectorBase = GMBCollector;
@@ -107,7 +68,7 @@ public:
     static constexpr std::chrono::milliseconds kPcapReadTimeout{20};
     static constexpr int kPcapKernelBufferBytes = 1024 * 1024;
 
-    // 交出 DeviceBase 面（族模板层一行实现：`return *this;` 走隐式上行）。
+    // 借出本族持有的机制对象，用于锁与状态读取。
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
     // ── 这台云台的方位轴上有没有滑环（铭辰有、视强没有）───────────────
@@ -209,48 +170,39 @@ public:
                                      const std::shared_ptr<const DeviceLock> &lock) = 0;
 
     // 停机 / 撤单（等待器析构时对未结的单调）。**与 begin 同一笔账**：编排层只认族基，而停机的实现住机制层
-    // Device<>——族基不在那条链上（旁挂形制），故本族声明停机虚口，由族模板层转到机制层。
+    // Device<>——族基组合持有机制对象，故本族声明停机虚口，由族模板层转到机制层。
     // 可反复调用（幂等）：对交付 / 取消 / 拒收回滚三条出路一视同仁。
     virtual void stop(const std::shared_ptr<const DeviceLock> &lock) = 0;
 
-protected:
-    GMBDeviceBase() = default;
-    // 非虚 + protected：族接口只供借用；具体后端由对应 QML 官邸通过 QObject 所有权持有。
-    // protected 封死 `delete (GMBDeviceBase *)p`，非虚遂安全——同 Collector 的判例。
-    ~GMBDeviceBase() = default;
+Q_SIGNALS:
+    void mountingChanged(const WorldModel &mounting);
+    void anglesReady(RxTime at, double pan, double tilt, double azimuth, double elevation);
 
-    // [主] 每次成功写入完整安装姿态后通知；拒绝写入不发。官邸声明为同名 Qt 信号。
-    virtual void mountingChanged(const WorldModel &mounting) = 0;
+protected:
+    virtual void PreDestruction() noexcept = 0;
 
 private:
     // 安装标定：这台云台架在哪（世界系作动量；出生态 = 水平正北）。读写全在主线程，无需同步。
     WorldModel mounting_;
 };
 
-// ── GMBDevice<HandleT, CollectorT>：云台族的**实现层**（模板 = 族级样板写一次）。
-//    **QObject 那条基必须写在前面**（Qt 规矩），族接口旁挂在后。
-//    族口在此一律 final：`device` / `collectorFor` / `begin` / `stop`（`gimbalOf` / `worldOf` /
-//    `setMounting` 住族基、非虚），以及常态灶 `onStream`（画角度图、交回喂斗的位形）。这些是
-//    **族级管线与机制层词汇，官邸本不该认识**。
-//    官邸的可变点：`makeMoveCollector`（给我一只斗）、`decodeStream`（把一口上行
-//    解开）和 `issueGoTo` / `issueStop`（设备页直发怎么发）；页面与分区由 QML 官邸组织。
-// 族口借出公共位形读口；具体型号运行类型在 begin 验型后保持到完成。
+// 模板层完成具体 Collector 验型及收包接入；型号只解析协议、检查行程和组装命令。
 template <HandleLike HandleT, GMBCollectorLike CollectorT>
-class GMBDevice : public Device<HandleT, CollectorT>, public GMBDeviceBase
+class GMBDevice : public GMBDeviceBase
 {
+    using Core = Device<HandleT, CollectorT>;
 protected:
-    using Base = Device<HandleT, CollectorT>;
-
-    void PreDestruction() noexcept override { Base::PreDestruction(); }
+    void PreDestruction() noexcept override { delete device_; }
 
 public:
-    explicit GMBDevice(QObject *parent = nullptr) : Base(parent)
+    GMBDevice(QString name, QString subtitle, QObject *parent = nullptr)
+        : GMBDeviceBase(parent), device_(new Core(std::move(name), std::move(subtitle), makeOnStream(this), {}, this))
     {
         static_assert(DeviceLifecycleLayer<GMBDevice, decltype(&GMBDevice::PreDestruction)>);
     }
 
-    // 旁挂形制的接线：本类**是**一台 Device，故 `*this` 隐式上行即得 DeviceBase 面。
-    [[nodiscard]] DeviceBase &device() noexcept final { return *this; }
+    [[nodiscard]] Core &device() noexcept final { return *device_; }
+    [[nodiscard]] const Core &device() const noexcept { return *device_; }
 
     // 族口落地（final：管线是族级不变量，型号无权改）。本口只有"造哪只斗"这一个决定——交给官邸的
     // makeMoveCollector（它查本台行程并组装命令），本层只将其结果上转为族基份额。
@@ -272,7 +224,7 @@ public:
         const auto parameters = GMBMoveParameters::fromQml(values);
         if (!parameters)
         {
-            Q_EMIT this->logSource().logMessage(QStringLiteral("云台运动参数无效，未下发"));
+            Q_EMIT device().logSource().logMessage(QStringLiteral("云台运动参数无效，未下发"));
             return false;
         }
         return issueGoTo(PanTiltModel(pan, tilt), *parameters);
@@ -286,46 +238,29 @@ public:
         const auto typed = std::dynamic_pointer_cast<const CollectorT>(proto);
         if (!typed)
         {
-            Q_EMIT this->logSource().logMessage(QStringLiteral("云台请求的 Collector 型号不匹配，未启动"));
+            Q_EMIT device().logSource().logMessage(QStringLiteral("云台请求的 Collector 型号不匹配，未启动"));
             return false;
         }
-        return this->start(typed, std::move(done), lock);
+        return device().start(typed, std::move(done), lock);
     }
 
     // 停机：族基的纯虚 stop 在此落地（final），实现就是机制层 Device::stop（它不是虚的，停机虚口只在族基）。
-    void stop(const std::shared_ptr<const DeviceLock> &lock) final { Base::stop(lock); }
+    void stop(const std::shared_ptr<const DeviceLock> &lock) final { device().stop(lock); }
 
 private:
 
-    // GMB 连续回显已由 onStream 处理；到位不再绘图或提交处理器。
-    void onCompleted(const std::shared_ptr<const CollectorT> &) final {}
-
-    // ── 常态灶：本层接管（用户定）──────────────────────────────────
-    // [worker] 模板层 `onStream` 的族级落地，**final**：每一口上行都过，有没有 run 都照跑。
-    // 型号只做一件事：`decodeStream` 把字节解成**实测位形**。本层拿它做两件事：
-    //   · 投回主线程换世界角、画角度图（设备页的实时角度也取自那条通路）；
-    //   · 返回给机制层喂斗（喂料类型 = GMBCollector::Feed = PanTiltModel）。
-    //
-    // 每口有效位形都投递、都喂斗，不在这里抽样；GMBCollector 完成等待仍需新的圈内回报。
-    // SeriesChart 的显示抽稀由绘图层负责，不改变交给 Collector 的样本。
-    // **final 的代价**：官邸不能覆写常态灶；型号的额外解析（如 MCZT 的 BIT 报警日志）在 decodeStream 里做。
-    [[nodiscard]] std::optional<PanTiltModel> onStream(const QByteArray &raw, const RxTime at) final
+    // Device 独持此回调。解析在收包线程；安装姿态只在主线程读取和换算。
+    static typename Core::OnStream makeOnStream(GMBDevice *self)
     {
-        auto pose = decodeStream(raw);
-        if (!pose)
-            return std::nullopt;
-        // **时间戳不在这里盖**：`at` 是 Handle 层交上来的到料时刻——网口是网卡驱动在收包回调里
-        // 盖的章，串口是帧首那块料的时刻（在链路末端盖章会把内核缓冲、定时唤醒、线程调度的延迟
-        // 全算进去，见 RxTime）。
-        // 世界角换算要读 mounting_ [主]，故投回主线程再算。
-        // 上下文对象 = 本设备（QObject）：设备先亡则排队中的调用随之作废，捕获裸 this 由此成立（receiver = 自身）。
-        // 每一格都投递，不节流；按值携带到料时刻，排队延迟不改变采样时间。
-        QMetaObject::invokeMethod(
-            this, [this, at, p = *pose] {
-                const WorldModel world = this->worldOf(p);
-                Q_EMIT anglesReady(at, p.pan(), p.tilt(), world.azimuth(), world.elevation());
+        return [self](const QByteArray &raw, const RxTime at) -> std::optional<PanTiltModel> {
+            const auto pose = self->decodeStream(raw);
+            if (!pose) return std::nullopt;
+            QMetaObject::invokeMethod(self, [self, at, p = *pose] {
+                const auto world = self->worldOf(p);
+                Q_EMIT self->anglesReady(at, p.pan(), p.tilt(), world.azimuth(), world.elevation());
             }, Qt::QueuedConnection);
-        return pose; // 同一格位形喂斗
+            return pose;
+        };
     }
 
     // [worker] **型号该填**：一口上行 → 实测位形（云台系）。
@@ -349,8 +284,7 @@ private:
     [[nodiscard]] virtual bool issueGoTo(const PanTiltModel &target, const GMBMoveParameters &parameters) = 0;
     [[nodiscard]] virtual bool issueStop() = 0;
 
-    // [主] 一个回显采样 → 换算世界角 → 发布给读数与图表。
-    // 官邸交来的就是位形（decodeStream），世界角走族基 worldOf（正向）。
-    virtual void anglesReady(RxTime at, double pan, double tilt, double azimuth, double elevation) = 0;
-
+    // QObject 父子关系兜底构造失败；正常预析构先显式销毁，保证回调依赖仍在。
+    // 删除期间保留指针值，retiring 同步撤单仍可访问 Device；没有可继续使用的预析构阶段。
+    Core *const device_;
 };

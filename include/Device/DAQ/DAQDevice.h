@@ -6,19 +6,26 @@
 #include <QDir>
 #include <QString>
 #include <QThread>
+#include <QSemaphore>
+#include <functional>
 #include <QUrl>
 
 #include "Device/DAQ/DAQCollector.h"          // 采集帧与不可变消费上下文
-#include "Device/DAQ/DAQWorker.h"             // 族级帧处理契约（兼投递锚点）
 #include "Device/Base/DeviceCoro.h"           // DeviceCoro / LockRequest / HeldLock / RunAwaiter（测试采集协程）
 #include "Device/Base/DeviceBase.h" // DeviceBase / Device<H,C>
 #include "Device/Base/RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
 
-// 采集卡族接口供任务多选组合；模板实现持具体 Collector、worker 和测试协程。
+// 采集卡族接口供任务多选组合；模板实现持具体 Collector、组合 Device 和测试协程。
 // begin 是唯一的族基到型号验型边界；成功帧由主线程触发 onConsume，独立于协程是否仍等待。
-class DAQDeviceBase
+class DAQDeviceBase : public QThread
 {
+    Q_OBJECT
+    Q_PROPERTY(DeviceBase *device READ deviceObject CONSTANT)
 public:
+    explicit DAQDeviceBase(QObject *parent = nullptr) : QThread(parent) {}
+    ~DAQDeviceBase() override = default;
+    [[nodiscard]] DeviceBase *deviceObject() noexcept { return &device(); }
+
     // 本族的收集器基（`RunAwaiter<DAQDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
     using CollectorBase = DAQCollector;
@@ -36,7 +43,7 @@ public:
     static constexpr std::chrono::milliseconds kPcapReadTimeout{100};
     static constexpr int kPcapKernelBufferBytes = 4 * 1024 * 1024;
 
-    // 交出 DeviceBase 面（族模板层一行实现）。**旁挂形制的必需口**，理由见 GMBDeviceBase。
+    // 借出组合持有的机制对象；编排通过它验锁和读取状态。
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
     // 只按传入的采集参数与消费上下文创建原型，不改变设备或发送命令。
@@ -52,63 +59,72 @@ public:
     virtual void stop(const std::shared_ptr<const DeviceLock> &lock) = 0;
 
 protected:
-    DAQDeviceBase() = default;
-    ~DAQDeviceBase() = default; // 非虚 + protected：本类从不拥有对象，理由同 GMBDeviceBase
+    virtual void PreDestruction() noexcept = 0;
+    void run() override = 0;
 };
 
-// 同一具体 Collector 类型贯穿启动、运行、重试和处理器。
+// 同一具体 Collector 贯穿启动、重试与消费。处理状态由官邸 run() 的局部 lambda 独持。
 template <HandleLike HandleT, DAQCollectorLike CollectorT>
-class DAQDevice : public Device<HandleT, CollectorT>, public DAQDeviceBase
+class DAQDevice : public DAQDeviceBase
 {
+    using Core = Device<HandleT, CollectorT>;
 protected:
-    using Base = Device<HandleT, CollectorT>;
-
-    explicit DAQDevice(QObject *parent, std::unique_ptr<DAQWorker<CollectorT>> worker)
-        : Base(parent), sink_(std::move(worker))
+    DAQDevice(QString name, QString subtitle, QObject *parent)
+        : DAQDeviceBase(parent), device_(new Core(std::move(name), std::move(subtitle), makeOnStream(), {}, this))
     {
         static_assert(DeviceLifecycleLayer<DAQDevice, decltype(&DAQDevice::PreDestruction)>);
-        sink_->moveToThread(&worker_);
-        worker_.start(); // QThread::run 的默认体就是 exec()，正是我们要的事件循环
     }
 
-protected:
-    // 本层独占处理器；官邸只借用接线，不得转移所有权或另存处理器成员。
-    // const unique_ptr 不能复制、release 或 reset；实际接线处自行 get/解引用。
-    [[nodiscard]] const std::unique_ptr<DAQWorker<CollectorT>> &worker() const noexcept
+    // 末端构造完成配置后调用一次；只等待线程内锚点和消费回调就绪，不泵主线程事件。
+    void startProcessing()
     {
-        return sink_;
+        QThread::start();
+        ready_.acquire();
     }
 
-public:
-    // 构造失败时末端析构不会执行；此处只兜底退出独立 worker，不触发设备业务回调。
-    ~DAQDevice() override { stopWorker(); }
+    // 官邸 run() 创建处理 lambda 后交入。锚点和唯一处理闭包都在本线程构造、执行、销毁。
+    // 回调只排队帧份额，不复制处理闭包，因此风廓线环会跨帧延续。
+    template<class Processor>
+        requires std::invocable<Processor &, const std::shared_ptr<const CollectorT> &>
+    void consumeFrames(Processor processor)
+    {
+        QObject anchor;
+        device().setOnConsume([&anchor, &processor](std::shared_ptr<const CollectorT> frame) {
+            QMetaObject::invokeMethod(&anchor, [&processor, frame = std::move(frame)] {
+                processor(frame);
+            }, Qt::QueuedConnection);
+        });
+        ready_.release();
+        exec();
+    }
 
-protected:
     void PreDestruction() noexcept override
     {
         stopWorker();
         cancelTest();
-        Base::PreDestruction();
+        delete device_;
     }
-
-private:
-    // 本层是处理线程源：统一退出事件循环并等待在途处理结束，再清理本层工作。
-    // 正常预析构及构造失败的析构共用；收包线程由 Handle 负责关闭。
-    void stopWorker() noexcept
-    {
-        if (QThread::currentThread() == &worker_)
-            qFatal("DAQ worker cannot wait for itself");
-        worker_.quit();
-        if (!worker_.wait())
-            qFatal("DAQ worker did not finish");
-    }
-
-private:
-    // 采集卡族原样交回字节；解析由具体 Collector 在进料时负责。
-    [[nodiscard]] std::optional<QByteArray> onStream(const QByteArray &raw, const RxTime) final { return raw; }
 
 public:
-    [[nodiscard]] DeviceBase &device() noexcept final { return *this; }
+    // 末端构造失败时也必须结束线程；正常清理已在末端预析构中完成。
+    ~DAQDevice() override { if (isRunning()) stopWorker(); }
+
+    // 本族是处理线程源；仅停止并等待，不替代预析构、不清理业务状态。
+    void stopWorker() noexcept
+    {
+        if (QThread::currentThread() == this)
+            qFatal("DAQ worker cannot wait for itself");
+        if (QThread::currentThread() != thread())
+            qFatal("DAQ worker shutdown must run on its owning thread");
+        quit();
+        if (!wait())
+            qFatal("DAQ worker did not finish");
+        // 关闭后即使设备暂时仍在，后续完成帧也不能再投到已销毁的线程内锚点。
+        device().setOnConsume({});
+    }
+
+    [[nodiscard]] Core &device() noexcept final { return *device_; }
+    [[nodiscard]] const Core &device() const noexcept { return *device_; }
 
     // 保留族接口的公开入口，按具体 Collector 类型创建只读原型。
     [[nodiscard]] std::shared_ptr<const DAQCollector> collectorFor(int accumSec, DAQContext context) const final
@@ -125,20 +141,14 @@ public:
         const auto typed = std::dynamic_pointer_cast<const CollectorT>(proto);
         if (!typed)
         {
-            Q_EMIT this->logSource().logMessage(QStringLiteral("采集请求的 Collector 型号不匹配，未启动"));
+            Q_EMIT device().logSource().logMessage(QStringLiteral("采集请求的 Collector 型号不匹配，未启动"));
             return false;
         }
-        return this->start(typed, std::move(done), lock);
+        return device().start(typed, std::move(done), lock);
     }
 
     // 停机：族基的纯虚 stop 在此落地（final），实现就是机制层 Device::stop（同 GMBDevice::stop）。
-    void stop(const std::shared_ptr<const DeviceLock> &lock) final { Base::stop(lock); }
-
-protected:
-    virtual void onConsume(const std::shared_ptr<const CollectorT> &frame) const = 0;
-
-private:
-    void onCompleted(const std::shared_ptr<const CollectorT> &frame) final { Q_EMIT onConsume(frame); }
+    void stop(const std::shared_ptr<const DeviceLock> &lock) final { device().stop(lock); }
 
 public:
     // ── 采集测试（设备页的两个按钮）：只占本卡的锁，循环采集直到停止 ─────────────────────
@@ -149,7 +159,7 @@ public:
     {
         if (testCoro_ && !testCoro_->done())
         {
-            Q_EMIT this->logSource().logMessage(QStringLiteral("测试正在进行中"));
+            Q_EMIT device().logSource().logMessage(QStringLiteral("测试正在进行中"));
             return;
         }
         std::optional<QDir> saveRoot; // 空 = 不落盘
@@ -157,7 +167,7 @@ public:
         {
             if (!folder.isLocalFile() || folder.toLocalFile().isEmpty())
             {
-                Q_EMIT this->logSource().logMessage(QStringLiteral("选中的不是本机目录，未启动采集"));
+                Q_EMIT device().logSource().logMessage(QStringLiteral("选中的不是本机目录，未启动采集"));
                 return;
             }
             saveRoot = QDir(folder.toLocalFile());
@@ -165,7 +175,7 @@ public:
         // 裸 new 刻意：make_unique 走转发必索 move（DeviceCoro 不可动），prvalue 直构保证省略。
         // 锁请求交给准备模块（promise 的构造函数）：本卡只占自己这一台。
         testCoro_.reset(new DeviceCoro(
-            runTest(LockRequest{QStringLiteral("设备控制"), {*this}}, accumSec, std::move(saveRoot), std::move(sessionDir))));
+            runTest(LockRequest{QStringLiteral("设备控制"), {device()}}, accumSec, std::move(saveRoot), std::move(sessionDir))));
     }
     // 预析构及停止按钮共用；取消时设备各层仍在，等待器可安全撤单。
     void cancelTest() noexcept { testCoro_.reset(); }
@@ -179,12 +189,12 @@ private:
         const auto lock = co_await HeldLock{};
         if (!lock)
         {
-            Q_EMIT this->logSource().logMessage(QStringLiteral("设备已被占用或未连接"));
+            Q_EMIT device().logSource().logMessage(QStringLiteral("设备已被占用或未连接"));
             co_return;
         }
         while (true)
         {
-            Q_EMIT this->logSource().logMessage(QString("开始采集（累积 %1 秒）%2")
+            Q_EMIT device().logSource().logMessage(QString("开始采集（累积 %1 秒）%2")
                                  .arg(accumSec)
                                  .arg(saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(saveRoot->absolutePath())
                                                : QStringLiteral("，不落盘")));
@@ -192,18 +202,19 @@ private:
                 collectorFor(accumSec, {std::nullopt, saveRoot, sessionDir, false})};
             if (framed.empty())
             {
-                Q_EMIT this->logSource().logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));
+                Q_EMIT device().logSource().logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));
                 co_return;
             }
         }
     }
 
-    // 本层预析构先等待 worker，再取消自有测试协程，最后接续父层清理。
-    // 构造失败的线程兜底在本层析构；队列信号持有只读帧份额，以 worker 为接收上下文。
-    QThread worker_;
-    // wait 后由主线程析构处理器，不迁回线程归属；QThread 对象须比处理器晚销毁。
-    const std::unique_ptr<DAQWorker<CollectorT>> sink_;
+    static typename Core::OnStream makeOnStream()
+    {
+        return [](const QByteArray &raw, RxTime) -> std::optional<QByteArray> { return raw; };
+    }
 
-    // 预析构停止处理线程后撤测试协程；声明最末也使其先于其它族层成员销毁。
+    // QObject 兜底构造失败；正常预析构显式销毁，retiring 回调期间指针仍有效。
+    Core *const device_;
+    QSemaphore ready_; // 仅一次初始化交接，不记录采集/退出状态。
     std::unique_ptr<DeviceCoro> testCoro_;
 };

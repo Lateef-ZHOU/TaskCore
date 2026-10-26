@@ -10,6 +10,16 @@
 - 只提供设备族的标准能力；具体任务编排、任务页面、型号处理器和保存格式由应用实现。安装姿态等状态归设备实例，不归任务模块。
 - 仅 Qt Core/OpenMP；保留主线程取消、收包完成消费和线程 quit/wait 契约，不提供退出保存排空。
 
+## 组合与线程契约
+
+2026-10-26 用户定：GMB/DAQ 族改为组合持有 Device。GMBDeviceBase 继承 QObject，DAQDeviceBase 继承 QThread，只有官邸实现处理线程 run。Device 独持 onStream/onConsume 回调，删除 onCompleted 虚转发；完成帧仍在主线程先提交消费、再通知等待器。DAQWorker、各型号 QObject worker、sink_、独立 QThread 成员和 moveToThread 全部删除。
+
+每个 DAQ run 在工作线程创建局部 QObject 锚点及唯一的型号处理 lambda，排队消息只携只读 Collector 份额，不复制有状态的 lambda。风廓线环及写位置随该闭包在线程内构造、使用和销毁；闭包对官邸只发结果信号，不访问其主线程业务成员。QML 在主线程接收，跨线程 C++ 使用者也必须指定接收上下文。启动用一次 QSemaphore 交接，回调安装后才允许首帧提交，不维护运行/关闭状态位。
+
+末端析构首句仍执行内部 PreDestruction。DAQ 先 stopWorker（quit/wait，随后清空消费回调）、再取消自有测试协程、最后销毁组合 Device；GMB 直接销毁 Device。Device 析构同步停止 Handle，然后 retiring、撤运行槽、释放锁。组合对象以 QObject 父子关系兜底构造失败，正常预析构显式销毁；删除期间指针保持有效，供 retiring 的同步撤单使用。外部只使用正常析构；线程源关闭只从所属主线程调用，不直接调用继承的 QThread start/quit/terminate。
+
+族层的 device 属性借出既有 DeviceBase 机制面，无状态缓存和逐方法转发。QML 状态、名称、日志从 backend.device 读取；安装姿态、信号、型号规格与 objectName 仍归官邸。任务文件名及虚拟卡采样源标识取族对象 objectName，历史查询取族对象的 QML parent。锁、CAS、重试、取消、已完成帧保留、connectionChanged 延迟裁定和退出不排空政策均保持。makeOnStream/makeProcessor 等回调工厂不再强制类外定义。
+
 ## 独立构建和验证
 
 安装对应 Qt 开发包，然后执行（将路径替换为本机 Qt 前缀）：
@@ -21,7 +31,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Windows 在安装 MSVC 的环境运行以上命令，Qt 选择对应 MSVC 构建；Linux 使用 GCC 与 OpenMP 开发环境。
-测试逐个独立编译公开头、拒绝意外加载 GUI/QML，并运行契约检查。GitHub Actions 在 Windows/Linux 使用 Qt 6.11.2 验证；最低版本声明与最新验证版本是不同概念。
+测试逐个独立编译公开头、拒绝意外加载 GUI/QML，并运行契约检查。processing_contract 通过实际 Handle/Device 连续交付三帧，检查处理闭包状态延续、结果信号排队返回所属线程，以及关闭后不再引用线程内锚点。GitHub Actions 在 Windows/Linux 使用 Qt 6.11.2 验证；最低版本声明与最新验证版本是不同概念。
 
 ## 接入应用
 
