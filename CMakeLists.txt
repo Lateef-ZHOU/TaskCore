@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.28)
 project(LidarTaskCore LANGUAGES CXX)
 find_package(Qt6 6.8.3 REQUIRED COMPONENTS Core)
+option(TASKCORE_WITH_PCAP_FORMS "Build optional Pcap connection-form adapters" OFF)
+if(TASKCORE_WITH_PCAP_FORMS)
+    set(HANDLECORE_WITH_PCAP ON)
+endif()
 include(cmake/Dependencies.cmake)
 if(NOT TARGET Lidar::DeviceCore OR NOT TARGET Lidar::Algorithm)
     message(FATAL_ERROR "TaskCore requires Lidar::DeviceCore and Lidar::Algorithm")
@@ -28,6 +32,10 @@ if(TASKCORE_WITH_TASK_SUPPORT OR TASKCORE_WITH_QML)
 endif()
 if(TASKCORE_WITH_QML)
     add_subdirectory(optional/qml)
+endif()
+
+if(TASKCORE_WITH_PCAP_FORMS)
+    add_subdirectory(optional/pcap-forms)
 endif()
 
 # 作为依赖时不接管宿主的测试开关。

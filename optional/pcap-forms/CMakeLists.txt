@@ -1,0 +1,7 @@
+if(NOT TARGET Lidar::Pcap)
+    message(FATAL_ERROR "PcapForms requires HANDLECORE_WITH_PCAP enabled before configuring HandleCore")
+endif()
+add_library(LidarPcapForms INTERFACE)
+add_library(Lidar::PcapForms ALIAS LidarPcapForms)
+target_include_directories(LidarPcapForms INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(LidarPcapForms INTERFACE Lidar::Pcap Qt6::Core)
