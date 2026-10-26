@@ -7,8 +7,22 @@
 - Qt ≥ 6.8.3；Qt 由使用环境提供，不在仓库中打包。
 - 上游：[Algorithm](https://github.com/Lateef-ZHOU/Algorithm), [DeviceCore](https://github.com/Lateef-ZHOU/DeviceCore)。已有同名 CMake 目标时复用；否则 FetchContent 拉取固定完整提交。
 - 本仓库不依赖 LiDAR_DataACQ 源码、应用目录或设备型号；不包含第三方二进制。
-- 只提供设备族的标准能力；具体任务编排、任务页面、型号处理器和保存格式由应用实现。安装姿态等状态归设备实例，不归任务模块。
-- 仅 Qt Core/OpenMP；保留主线程取消、收包完成消费和线程 quit/wait 契约，不提供退出保存排空。
+- 核心只提供设备族的标准能力。保存格式、任务共用业务与族专用界面作为可选参考目标；三种具体编排、具体页面及型号处理仍由官邸实现。安装姿态等状态归设备实例。
+- 默认仅 Qt Core/OpenMP；保留主线程取消、收包完成消费和线程 quit/wait 契约，不提供退出保存排空。
+
+## 可选模块
+
+| 开关（默认 OFF） | 目标 | 内容 |
+|---|---|---|
+| TASKCORE_WITH_DAQ_SAVING | Lidar::DAQSaving | LiDAR 功率谱、径向风、风廓线的现有文件格式和路径；Qt Core，无界面 |
+| TASKCORE_WITH_TASK_SUPPORT | Lidar::TaskSupport | TaskBase，登记族对象、启动校验、状态和取消；自动带保存目标，无 QML |
+| TASKCORE_WITH_QML | Lidar::TaskUI / Lidar.TaskUI | 可选族控件和任务参考页面；带 TaskSupport、UICore、ChartCore，要求 Qt 6.11.2 |
+
+消费者必须在 FetchContent_MakeAvailable 前选择开关。核心目标不反向链接附加模块。界面消费者链接 LidarTaskUIplugin 并显式 `Q_IMPORT_QML_PLUGIN(LidarTaskUIPlugin)`（动态 Qt 下的静态模块也需要）；同时导入 UICore/ChartCore 插件。各模块输出目录的两级父目录用于 QML 工具 IMPORT_PATH。
+
+TaskModule 接收 `list<GMBDeviceBase>` 和 `list<DAQDeviceBase>`，不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经族基 collectorFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，retiring 同步取消并移除引用，排队收尾保留。
+
+这些目标均是可选实现，不要求任务官邸继承 TaskBase 或 TaskModule。三个具体计划和协程不在本库，官邸可以只使用核心能力自行编排。附加保存继续使用独立线程，不反向访问日志对象，不增加退出排空。
 
 ## 组合与线程契约
 
@@ -31,7 +45,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Windows 在安装 MSVC 的环境运行以上命令，Qt 选择对应 MSVC 构建；Linux 使用 GCC 与 OpenMP 开发环境。
-测试逐个独立编译公开头、拒绝意外加载 GUI/QML，并运行契约检查。processing_contract 通过实际 Handle/Device 连续交付三帧，检查处理闭包状态延续、结果信号排队返回所属线程，以及关闭后不再引用线程内锚点。GitHub Actions 在 Windows/Linux 使用 Qt 6.11.2 验证；最低版本声明与最新验证版本是不同概念。
+测试逐个独立编译公开头、拒绝意外加载 GUI/QML，并运行契约检查。processing_contract 通过实际 Handle/Device 连续交付三帧，检查处理闭包状态延续、结果信号排队返回所属线程，以及关闭后不再引用线程内锚点。GitHub Actions 在 Windows/Linux 使用 Qt 6.11.2，分别验证核心、无界面任务业务及可选 QML 组件；最低版本声明与最新验证版本是不同概念。
 
 ## 接入应用
 
@@ -48,6 +62,6 @@ target_link_libraries(my_app PRIVATE Lidar::TaskCore)
 
 ## 来源与许可
 
-从 [LiDAR_DataACQ](https://github.com/Lateef-ZHOU/LiDAR_DataACQ) 的模块分离提交 `94ad6f8` 提取；初始分仓保持运行逻辑，独立整理构建、验证与发布入口。
+从 [LiDAR_DataACQ](https://github.com/Lateef-ZHOU/LiDAR_DataACQ) 的模块分离提交 `94ad6f8` 提取；初始分仓保持运行逻辑，独立整理构建、验证与发布入口。可选保存、任务业务和界面从应用 `f20e890` 的对应实现迁入；具体任务编排仍留在应用。
 
 自有代码采用 [MIT](LICENSE)，Copyright (c) 2026 周涛 (ZHOU TAO)。第三方依赖不随本仓库改为 MIT，参见 [依赖说明](THIRD_PARTY_NOTICES.md)。

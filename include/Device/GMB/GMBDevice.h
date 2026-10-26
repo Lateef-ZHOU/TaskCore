@@ -162,6 +162,8 @@ public:
         return PanTiltModel::fromOrientation(mounting_.toOrientation().inverse() * worldTarget.toOrientation());
     }
 
+    Q_INVOKABLE virtual bool withinTravel(double pan, double tilt) const = 0;
+
     // 启动一只本族的斗（等待器在挂起成立后调）。返 false = 设备不收（空斗 / 被占 / 未连 / 正忙）。
     // **本口是协议转换，不是薄转发**：机制层的启动口按 `Device` 的模板实参说话，而编排层只认
     // 族基——两套词汇之间要有一道翻译，翻译落在族层。这是"擦到族基为止"这条选择的账面成本。

@@ -20,6 +20,7 @@ jobs:
       - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125
         with:
           version: '6.11.2'
+          modules: 'qtshadertools'
           # Qt 6.11 Windows archive layout: upstream aqtinstall PR #1000.
           aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@8c3695d4a4e1ceabf6a74dc6c79681656dc6b74b'
           extra: "${{ runner.os == 'Windows' && '--external 7z' || '' }}"
@@ -31,6 +32,19 @@ jobs:
         run: cmake --build build --config Release --parallel 2
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure --output-junit junit.xml
+      - name: Configure optional task business without GUI
+        run: cmake -S . -B build-support -DCMAKE_BUILD_TYPE=Release -DTASKCORE_WITH_TASK_SUPPORT=ON
+      - name: Build and test optional task business
+        run: |
+          cmake --build build-support --config Release --parallel 2
+          ctest --test-dir build-support -C Release --output-on-failure
+      - name: Configure optional QML reference components
+        run: cmake -S . -B build-ui -DCMAKE_BUILD_TYPE=Release -DTASKCORE_WITH_QML=ON
+      - name: Build and test optional QML reference components
+        run: |
+          cmake --build build-ui --config Release --parallel 2
+          ctest --test-dir build-ui -C Release --output-on-failure
+          cmake --build build-ui --config Release --target LidarTaskUI_qmllint
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -39,3 +53,5 @@ jobs:
             build/junit.xml
             build/Testing/Temporary/LastTest.log
             build/CMakeFiles/CMakeConfigureLog.yaml
+            build-support/Testing/Temporary/LastTest.log
+            build-ui/Testing/Temporary/LastTest.log
