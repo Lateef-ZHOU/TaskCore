@@ -10,14 +10,14 @@ ModulePage {
     required property Section planPage
     required property GMBDeviceBase gimbal
     required property DAQDeviceBase card
-    property int accum: settingsParameters.accumDefault
-    property int settle: settingsParameters.settleDefault
+    required property int accum
+    required property int settle
     readonly property int accumMin: settingsParameters.accumMin
     readonly property int accumMax: settingsParameters.accumMax
     mainMinWidth: 560
     mainMargin: 12
     sections: [planPage, run]
-    SimOnlyTaskRunSection { id: run; settings: root; plan: root.planPage }
+    SimOnlyTaskRunSection { id: run; settings: root }
     function registerDevices(task): void {
         task.addGimbal(gimbal)
         task.addCard(card)

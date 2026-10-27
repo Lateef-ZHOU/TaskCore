@@ -33,5 +33,33 @@ TaskModule {
     const QQmlListReference sections(page.get(), "sections");
     if (warned || sections.count() != 4 || !sections.at(1)
         || sections.at(3)->property("plan").value<QObject *>() != sections.at(1)) return 2;
+    QQmlComponent sim(&engine);
+    sim.setData(R"(import QtQuick
+import Lidar.UI
+import Lidar.TaskUI
+SimOnlyTaskModule {
+    gimbal: null
+    card: null
+    accum: 7
+    settle: 4
+    planPage: Section {}
+    property int starts: 0
+    property int stops: 0
+    property int argumentCount: -1
+    function start(): bool { argumentCount = arguments.length; ++starts; return true }
+    function stop(): void { argumentCount = arguments.length; ++stops }
+})", QUrl());
+    std::unique_ptr<QObject> simPage(sim.createWithInitialProperties(
+        {{"settingsParameters", TaskBase::settingsParameters()}}));
+    if (!simPage) { qCritical() << sim.errors(); return 3; }
+    // 真正触发运行分区的按钮，确认只发无参命令、不再反摸计划。
+    for (const auto &text : {QStringLiteral("开始"), QStringLiteral("停止")}) {
+        QObject *button = nullptr;
+        for (auto *child : simPage->findChildren<QObject *>())
+            if (child->property("text").toString() == text) { button = child; break; }
+        if (!button || !QMetaObject::invokeMethod(button, "clicked")) return 4;
+        if (simPage->property("argumentCount").toInt() != 0) return 5;
+    }
+    if (simPage->property("starts").toInt() != 1 || simPage->property("stops").toInt() != 1 || warned) return 6;
     return 0;
 }

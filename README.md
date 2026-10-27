@@ -77,3 +77,5 @@ target_link_libraries(my_app PRIVATE Lidar::TaskCore)
 可选 TaskUI 另提供 `SimOnlyTaskModule` 和 `SimOnlyTaskRunSection`：接收单一 GMB/DAQ 族引用，持有累积/停稳设置，排列计划与运行分区。没有设备选择、速度、保存开关或目录草稿；具体官邸在启动时固定保存到当前工作目录。它与全功能 TaskModule 并列，不强制其他任务采用，也不把具体计划/协程放入核心。
 
 FixedTask、CycleTask、SnakeTask 各提供自己的 simonly 末端页面，沿用各自既有计划和独立协程。设备退场和取消仍走原族引用接线；本次不改 C++ 核心、处理线程或保存退出策略。
+
+simonly 页面的累积时间 `accum` 和停稳时间 `settle` 为创建时必填属性，不在页面完成后补写。具体任务官邸同时要求创建时提供角度计划，页面编辑和启动共用同一份值。运行分区只调用官邸无参 `start()` / `stop()`，不认识或转交计划参数；全功能 TaskModule 的接口保持原样。

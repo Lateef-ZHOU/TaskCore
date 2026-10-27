@@ -1,4 +1,4 @@
-// 任务族业务分区：编辑官邸的时间设置，交同一个 plan 给官邸 start 组装快照。
+// 时间输入直接编辑官邸；开始按钮与自动启动共用官邸的无参 start()。
 pragma ComponentBehavior: Bound
 import QtQuick
 import Lidar.UI
@@ -8,7 +8,6 @@ import QtQuick.Layouts
 Section {
     id: root
     required property var settings
-    required property var plan
     title: qsTr("运行控制")
 
     FieldRow {
@@ -53,8 +52,7 @@ Section {
         spacing: 8
         Button {
             Layout.fillWidth: true; text: qsTr("开始")
-            enabled: !!root.plan
-            onClicked: root.settings.start(root.plan.azimuths, root.plan.elevation)
+            onClicked: root.settings.start()
         }
         Button { Layout.fillWidth: true; text: qsTr("停止"); onClicked: root.settings.stop() }
     }
