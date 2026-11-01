@@ -22,7 +22,7 @@ public:
     using Handle::Handle;
     ~TestHandle() override { stop(); }
 Q_SIGNALS:
-    void connectionChanged(bool) override;
+    void connectionChanged(HandleCore::ResourcePhase) override;
     void logMessage(const QString &) const override;
 private:
     std::shared_ptr<Transport> connOpen(const Parameters &p) override { return p.transport; }

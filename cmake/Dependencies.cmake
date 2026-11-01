@@ -3,7 +3,7 @@ include(FetchContent)
 if(NOT TARGET Lidar::HandleCore)
     FetchContent_Declare(lidar_handle_core
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/HandleCore.git
-        GIT_TAG 379401c85f0da11adde9a2f6fde8fe767fbae707)
+        GIT_TAG 113523f3a40ad2dc7c417d01326688b5bd79a51b)
     FetchContent_MakeAvailable(lidar_handle_core)
 endif()
 # 消费方已提供目标时直接复用；否则拉取经过验证的固定提交，不启用 Handle 可选模块。
@@ -16,6 +16,6 @@ endif()
 if(NOT TARGET Lidar::DeviceCore)
     FetchContent_Declare(lidar_devicecore
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/DeviceCore.git
-        GIT_TAG 5c63ec5c501d83a15daa65a41dca438ee4ff330f)
+        GIT_TAG 9f2ee2799cd24a809a5e16031418b24374d1961e)
     FetchContent_MakeAvailable(lidar_devicecore)
 endif()

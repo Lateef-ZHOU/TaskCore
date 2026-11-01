@@ -44,7 +44,7 @@ TaskModule 接收 `list<GMBDeviceBase>` 和 `list<DAQDeviceBase>`，不认识具
 
 末端析构首句仍执行内部 PreDestruction。DAQ 先 stopWorker（quit/wait，随后清空消费回调）、再取消自有测试协程、最后销毁组合 Device；GMB 直接销毁 Device。Device 析构同步停止 Handle，然后 retiring、撤运行槽、释放锁。组合对象以 QObject 父子关系兜底构造失败，正常预析构显式销毁；删除期间指针保持有效，供 retiring 的同步撤单使用。外部只使用正常析构；线程源关闭只从所属主线程调用，不直接调用继承的 QThread start/quit/terminate。
 
-族层的 device 属性借出既有 DeviceBase 机制面，无状态缓存和逐方法转发。QML 状态、名称、日志从 backend.device 读取；安装姿态、信号、型号规格与 objectName 仍归官邸。任务文件名及虚拟卡采样源标识取族对象 objectName，历史查询取族对象的 QML parent。锁、CAS、重试、取消、已完成帧保留、connectionChanged 延迟裁定和退出不排空政策均保持。makeOnStream/makeProcessor 等回调工厂不再强制类外定义。
+族层的 device 属性借出既有 DeviceBase 机制面，无状态缓存和逐方法转发。QML 名称与日志由该机制面提供，状态在资源完成阶段回读；安装姿态、信号、型号规格与 objectName 仍归官邸。任务标识与历史查询边界保持。TaskBase 不订阅设备状态判断任务结束；具体协程退出时排队调用 refreshRunState，待帧退出后回读 done 并通知任务页，retiring 撤借用仍保留。锁、CAS、重试、取消、已完成帧保留和退出不排空政策不变。
 
 ## 独立构建和验证
 
@@ -91,3 +91,5 @@ target_link_libraries(my_app PRIVATE Lidar::TaskCore)
 FixedTask、CycleTask、SnakeTask 各提供自己的 simonly 末端页面，沿用各自既有计划和独立协程。设备退场和取消仍走原族引用接线；本次不改 C++ 核心、处理线程或保存退出策略。
 
 simonly 页面的累积时间 `accum` 和停稳时间 `settle` 为创建时必填属性，不在页面完成后补写。具体任务官邸同时要求创建时提供角度计划，页面编辑和启动共用同一份值。运行分区只调用官邸无参 `start()` / `stop()`，不认识或转交计划参数；全功能 TaskModule 的接口保持原样。
+
+2026-11-02 验证：Windows 主程序 Release、生命周期及三任务等 CTest 7/7 通过；补三种任务因设备关闭而取消后主动发 runChanged 的检查，生命周期复跑通过。Linux Qt Core 6.8.3 开启 TaskSupport/保存，公开头、处理线程和 CTest 3/3 通过；未测 Linux QML。依赖固定到本轮本地提交，尚未推送，本地验证显式供入对应源目录。

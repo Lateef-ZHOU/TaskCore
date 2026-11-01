@@ -64,7 +64,6 @@ public:
             Q_EMIT deviceRemoved(gmb);
             refreshRunState();
         });
-        connect(&gmb->device(), &DeviceBase::statusChanged, this, &TaskBase::refreshRunState, Qt::QueuedConnection);
         return true;
     }
     Q_INVOKABLE bool addCard(DAQDeviceBase *card)
@@ -77,7 +76,6 @@ public:
             Q_EMIT deviceRemoved(card);
             refreshRunState();
         });
-        connect(&card->device(), &DeviceBase::statusChanged, this, &TaskBase::refreshRunState, Qt::QueuedConnection);
         return true;
     }
 
@@ -153,6 +151,12 @@ Q_SIGNALS:
     void runChanged();
 
 protected:
+    // 协程退出时排队回读 done，不借用设备状态事件推断任务是否结束。
+    void refreshRunState()
+    {
+        if (!running()) { beam_ = -1; phase_ = Phase::Idle; delivered_ = 0; }
+        Q_EMIT runChanged();
+    }
     using GmbOrders = RunAwaiter<GMBDeviceBase>::Orders;
     virtual DeviceCoro run(LockRequest, GMBDeviceBase &, Cards, QList<double>, double, int,
                           std::chrono::milliseconds, std::optional<QDir>, GMBMoveParameters) = 0;
@@ -192,12 +196,6 @@ private:
         beam_ = beam;
         phase_ = phase;
         Q_EMIT logMessage(message);
-        Q_EMIT runChanged();
-    }
-    // 放锁是协程结束的必经点。排队后再读 done，避免 final_suspend 中途误判仍运行。
-    void refreshRunState()
-    {
-        if (!running()) { beam_ = -1; phase_ = Phase::Idle; delivered_ = 0; }
         Q_EMIT runChanged();
     }
     [[nodiscard]] QString phaseText() const
