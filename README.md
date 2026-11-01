@@ -34,7 +34,7 @@ TaskModule 接收 `list<GMBDeviceBase>` 和 `list<DAQDeviceBase>`，不认识具
 - 位置与值下标一一对应，不重排，不在保存时重采样。径向风沿用六位、风廓线四位小数及已有 NaN 记法（含 NaN 时不是严格 JSON）。空数组可保存为空剖面，单点不涉及除以层数减一。
 - 检查只在接收边界进行一次，写入阶段信任数据；QVector 隐式共享或 const 整帧保活，不创建额外的高度数组。仍是 detached 保存、就地 Qt 诊断，不连接设备日志或增加退出等待。
 
-验证：启用 `TASKCORE_WITH_DAQ_SAVING=ON` 后增加 `saving_contract`，检查不等距位置、多通道不同网格、风分量转换、时间、输入销毁与 QVector 分离、非法帧拒收、单层/空剖面及均匀格式回归。2026-11-01 Windows / MSVC / Qt 6.11.2 Release、公开头 `/W4 /WX`、CTest 3/3 通过，证据 `build/saving-build.log`、`build/saving-test.log`。本轮 Algorithm 固定 `224c784117b775177a52d69fe0d61858b39ee867`，未发布时本地构建需通过 `FETCHCONTENT_SOURCE_DIR_LIDAR_ALGORITHM` 指向对应源码；未声称远端可拉取。
+验证：启用 `TASKCORE_WITH_DAQ_SAVING=ON` 后增加 `saving_contract`，检查不等距位置、多通道不同网格、风分量转换、时间、输入销毁与 QVector 分离、非法帧拒收、单层/空剖面及均匀格式回归。2026-11-01 Windows / MSVC / Qt 6.11.2 Release、公开头 `/W4 /WX`、CTest 3/3 通过，证据 `build/saving-build.log`、`build/saving-test.log`。同日发布验证已取消 Algorithm 源码覆盖，从 GitHub HTTPS 拉取固定提交 `224c784117b775177a52d69fe0d61858b39ee867`，再次完成 Release/公开头构建和 CTest 3/3；证据 `build/publish-{configure,build,test}.log`。
 
 ## 组合与线程契约
 
