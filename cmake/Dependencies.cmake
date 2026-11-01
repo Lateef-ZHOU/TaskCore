@@ -10,7 +10,7 @@ endif()
 if(NOT TARGET Lidar::Algorithm)
     FetchContent_Declare(lidar_algorithm
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/Algorithm.git
-        GIT_TAG 00244abaf8fdabb6ad6bf2d2b875af4e60522a4f)
+        GIT_TAG 224c784117b775177a52d69fe0d61858b39ee867)
     FetchContent_MakeAvailable(lidar_algorithm)
 endif()
 if(NOT TARGET Lidar::DeviceCore)

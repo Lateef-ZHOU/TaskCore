@@ -4,8 +4,10 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <numbers>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <QDateTime>
 #include <QDebug>
@@ -26,7 +28,7 @@
 //
 // 进本文件的判据是"数数族里第二个成员用不用它"：
 //   · saveSpec        —— double 列表 + 通道 tag；直接写小端 binary64 无头文件；
-//   · saveWindProfile —— 收 VerticalWindProfilePtr + sessionDir + tag，反演产物是族级算法的产物；
+//   · saveWindProfile —— 收均匀或非均匀只读整帧，High 写该帧的实际高度；
 //   · saveRadialWind  —— 收**通道名单**（每路一份 tag + ws/cnr），JSON 键由 tag 现拼。真正的型号
 //                        知识只有**通道名**，而通道名是调用点给的参数：国实卡两路（CDL/HOM），
 //                        国耀卡一路（CDL）、虚拟卡一路（SIM）。型号夹里没有落盘代码。
@@ -66,6 +68,14 @@ public:
         RadialWind::Result data; // 该路径向风速 + CNR
     };
 
+    // 非均匀剖面按同一下标对应斜距（米）及 ws/cnr；不从数量猜测间距。
+    struct NonuniformRadialChannel
+    {
+        QString tag;
+        QVector<double> ranges;
+        RadialWind::Result data;
+    };
+
     // 三条落盘：**被调用即落盘**（存不存归调用方判，见类注②）。路径串由调用方用上面
     // 三个格式化口算好——sessionDir 是目录名（不含前缀），fileStem/timeStem 是帧级串。
     // root = 落盘根目录（调用方给；三类产物各在 root 下的 Rawspec / Radialwind / Windprofile）。
@@ -74,8 +84,13 @@ public:
     // 调用方仅提交非空帧；线程独立持有只读份额，Date 取帧的到料时刻。
     static void saveWindProfile(VerticalWindProfilePtr result, QDir root, QString sessionDir,
                                 QString tag);
+    static void saveWindProfile(NonuniformVerticalWindProfilePtr result, QDir root, QString sessionDir,
+                                QString tag);
     static void saveRadialWind(QDir root, QString sessionDir, QString fileStem, QString timeStem,
                                QVector<RadialChannel> channels);
+    // 非均匀入口仅在提交时检查等长及位置有序性；拒绝整次写入，不截短或补齐。
+    static void saveRadialWind(QDir root, QString sessionDir, QString fileStem, QString timeStem,
+                               QVector<NonuniformRadialChannel> channels);
 
 private:
     [[nodiscard]] static QDateTime calendarTime(const RxTime at)
@@ -84,10 +99,22 @@ private:
     }
     static void doSaveSpec(QDir root, QString sessionDir, QString fileStem,
                            const QVector<double> spec, QString tag);
-    static void doSaveWindProfile(VerticalWindProfilePtr result, QDir root, QString sessionDir,
+    template<class Profile>
+    static void doSaveWindProfile(std::shared_ptr<const Profile> result, QDir root, QString sessionDir,
                                   QString tag);
+    template<class Channel>
     static void doSaveRadialWind(QDir root, QString sessionDir, QString fileStem, QString timeStem,
-                                 const QVector<RadialChannel> channels);
+                                 const QVector<Channel> channels);
+    template<class Positions>
+    [[nodiscard]] static bool validPositions(const Positions &positions)
+    {
+        double previous = -std::numeric_limits<double>::infinity();
+        for (const double position : positions) {
+            if (!std::isfinite(position) || position <= previous) return false;
+            previous = position;
+        }
+        return true;
+    }
 };
 
 // ============================================================
@@ -123,9 +150,20 @@ inline void AcqSaver::saveSpec(QDir root, QString sessionDir, QString fileStem,
 inline void AcqSaver::saveWindProfile(VerticalWindProfilePtr result, QDir root, QString sessionDir,
                                      QString tag)
 {
-    std::thread(&AcqSaver::doSaveWindProfile, std::move(result), std::move(root), std::move(sessionDir),
+    std::thread(&AcqSaver::doSaveWindProfile<VerticalWindProfileUnit>, std::move(result), std::move(root), std::move(sessionDir),
                 std::move(tag))
         .detach();
+}
+
+inline void AcqSaver::saveWindProfile(NonuniformVerticalWindProfilePtr result, QDir root,
+                                     QString sessionDir, QString tag)
+{
+    if (!result || result->heights.size() != result->winds.size() || !validPositions(result->heights)) {
+        qWarning().noquote() << "Cannot save nonuniform wind profile: invalid heights or unequal array lengths:" << tag;
+        return;
+    }
+    std::thread(&AcqSaver::doSaveWindProfile<NonuniformVerticalWindProfileUnit>, std::move(result),
+                std::move(root), std::move(sessionDir), std::move(tag)).detach();
 }
 
 // [独立线程] 功率谱 → <root>/Rawspec/<sessionDir>/<tag>_<fileStem>.bin
@@ -170,17 +208,33 @@ inline void AcqSaver::doSaveSpec(QDir root, QString sessionDir, QString fileStem
 inline void AcqSaver::saveRadialWind(QDir root, QString sessionDir, QString fileStem, QString timeStem,
                                      QVector<RadialChannel> channels)
 {
-    std::thread(&AcqSaver::doSaveRadialWind, std::move(root), std::move(sessionDir), std::move(fileStem),
+    std::thread(&AcqSaver::doSaveRadialWind<RadialChannel>, std::move(root), std::move(sessionDir), std::move(fileStem),
                 std::move(timeStem), std::move(channels))
         .detach();
+}
+
+inline void AcqSaver::saveRadialWind(QDir root, QString sessionDir, QString fileStem, QString timeStem,
+                                     QVector<NonuniformRadialChannel> channels)
+{
+    // const 遍历不触发 QVector 分离；整组通过后才创建线程或文件。
+    for (const auto &channel : std::as_const(channels)) {
+        if (channel.ranges.size() != channel.data.ws.size()
+            || channel.ranges.size() != channel.data.cnr.size() || !validPositions(channel.ranges)) {
+            qWarning().noquote() << "Cannot save nonuniform radial wind: invalid ranges or unequal array lengths:" << channel.tag;
+            return;
+        }
+    }
+    std::thread(&AcqSaver::doSaveRadialWind<NonuniformRadialChannel>, std::move(root), std::move(sessionDir),
+                std::move(fileStem), std::move(timeStem), std::move(channels)).detach();
 }
 
 // [独立线程] 径向风速 / CNR → <root>/Radialwind/<sessionDir>/<fileStem>.txt
 // **一帧一个文件，各路并列在同一份 JSON 里**。键名由通道名现拼：`Vr<小写tag>` / `CNR<小写tag>`
 // ——国实卡两路得 Vrcdl/CNRcdl/Vrhom/CNRhom，国耀卡一路得 Vrcdl/CNRcdl。
-// ⚠ 键名、顺序与 6 位小数是下游解析脚本认的格式，改了要同步改脚本。
+// 均匀入口保持原格式；非均匀入口每通道追加 Range<小写tag>（米），数组下标与 Vr/CNR 一致。
+template<class Channel>
 inline void AcqSaver::doSaveRadialWind(QDir root, QString sessionDir, QString fileStem, QString timeStem,
-                                      const QVector<RadialChannel> channels)
+                                      const QVector<Channel> channels)
 {
     const QDir dir(root.filePath("Radialwind/" + sessionDir));
     const QString path = dir.filePath(fileStem + ".txt");
@@ -205,11 +259,14 @@ inline void AcqSaver::doSaveRadialWind(QDir root, QString sessionDir, QString fi
         ts << "]";
     };
     ts << "{\n";
-    for (const RadialChannel &ch : channels)
+    for (const Channel &ch : channels)
     {
         const QString key = ch.tag.toLower();
         ts << "  \"Vr"  << key << "\":"; writeArray(ch.data.ws);  ts << ",\n";
         ts << "  \"CNR" << key << "\":"; writeArray(ch.data.cnr); ts << ",\n";
+        if constexpr (std::is_same_v<Channel, NonuniformRadialChannel>) {
+            ts << "  \"Range" << key << "\":"; writeArray(ch.ranges); ts << ",\n";
+        }
     }
     ts << "  \"date\":\"" << timeStem << "\"\n";
     ts << "}\n";
@@ -223,7 +280,8 @@ inline void AcqSaver::doSaveRadialWind(QDir root, QString sessionDir, QString fi
 }
 
 // [独立线程] 风廓线快照 → <root>/Windprofile/<tag>_<sessionDir>.txt（一轮一份，分通道）。
-inline void AcqSaver::doSaveWindProfile(const VerticalWindProfilePtr result, QDir root, QString sessionDir,
+template<class Profile>
+inline void AcqSaver::doSaveWindProfile(const std::shared_ptr<const Profile> result, QDir root, QString sessionDir,
                                         QString tag)
 {
     const QDir dir(root.filePath(QStringLiteral("Windprofile")));
@@ -272,7 +330,10 @@ inline void AcqSaver::doSaveWindProfile(const VerticalWindProfilePtr result, QDi
     });
     ts << ",\n";
     ts << "\"High\":";
-    writeArray([&](std::size_t i) { return result->heightAt(i); });
+    writeArray([&](std::size_t i) {
+        if constexpr (std::is_same_v<Profile, NonuniformVerticalWindProfileUnit>) return result->heights[i];
+        else return result->heightAt(i);
+    });
     ts << ",\n";
     ts << "\"Date\":\"" << calendarTime(result->at).toString("yyyy-MM-dd HH:mm:ss") << "\"\n}\n";
     ts.flush();

@@ -24,6 +24,18 @@ TaskModule 接收 `list<GMBDeviceBase>` 和 `list<DAQDeviceBase>`，不认识具
 
 这些目标均是可选实现，不要求任务官邸继承 TaskBase 或 TaskModule。三个具体计划和协程不在本库，官邸可以只使用核心能力自行编排。附加保存继续使用独立线程，不反向访问日志对象，不增加退出排空。
 
+### 非均匀位置的保存
+
+`AcqSaver` 保留已有均匀入口，新增以下重载（2026-11-01）：
+
+- `saveRadialWind(..., QVector<NonuniformRadialChannel>)`：每通道按值持有 `tag`、斜距 `ranges`（米）和 `RadialWind::Result` 的风速/CNR 两列。位置与值分数组，提交时检查三列等长、位置有限且严格递增；整组不合法直接拒绝，不截短、补齐或创建文件。旧 `RadialChannel` 格式只有数值，不能用于需要保存真实斜距的非均匀剖面。
+- `saveWindProfile(NonuniformVerticalWindProfilePtr, ...)`：接收 Algorithm 的只读整帧，提交时检查高度/向量等长及高度有效递增；随后线程只读共享帧。生产者交出只读份额后不得再通过可写别名改动它。
+- 径向风路径及 `Vr<小写tag>`、`CNR<小写tag>`、`date` 保持，非均匀文件另写 `Range<小写tag>`，例如 `Rangeadc0`；各通道可以有不同的斜距网格。风廓线仍写 `HSpeed/HDir/VSpeed/High/Date`，其中 `High` 逐项来自 `heights`，绝不按首尾位置推算等间距。均匀入口仍按起点/步进生成 `High`，现有均匀文件不变。
+- 位置与值下标一一对应，不重排，不在保存时重采样。径向风沿用六位、风廓线四位小数及已有 NaN 记法（含 NaN 时不是严格 JSON）。空数组可保存为空剖面，单点不涉及除以层数减一。
+- 检查只在接收边界进行一次，写入阶段信任数据；QVector 隐式共享或 const 整帧保活，不创建额外的高度数组。仍是 detached 保存、就地 Qt 诊断，不连接设备日志或增加退出等待。
+
+验证：启用 `TASKCORE_WITH_DAQ_SAVING=ON` 后增加 `saving_contract`，检查不等距位置、多通道不同网格、风分量转换、时间、输入销毁与 QVector 分离、非法帧拒收、单层/空剖面及均匀格式回归。2026-11-01 Windows / MSVC / Qt 6.11.2 Release、公开头 `/W4 /WX`、CTest 3/3 通过，证据 `build/saving-build.log`、`build/saving-test.log`。本轮 Algorithm 固定 `224c784117b775177a52d69fe0d61858b39ee867`，未发布时本地构建需通过 `FETCHCONTENT_SOURCE_DIR_LIDAR_ALGORITHM` 指向对应源码；未声称远端可拉取。
+
 ## 组合与线程契约
 
 2026-10-26 用户定：GMB/DAQ 族改为组合持有 Device。GMBDeviceBase 继承 QObject，DAQDeviceBase 继承 QThread，只有官邸实现处理线程 run。Device 独持 onStream/onConsume 回调，删除 onCompleted 虚转发；完成帧仍在主线程先提交消费、再通知等待器。DAQWorker、各型号 QObject worker、sink_、独立 QThread 成员和 moveToThread 全部删除。
