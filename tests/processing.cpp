@@ -44,9 +44,9 @@ private:
         return true;
     }
     RXRuling onRX(const QByteArray &raw, RxTime at, std::shared_ptr<Transport>) override
-    { return {RXRuling::Decode, raw, at}; }
+    { return {raw, RXRuling::Decode, at}; }
     TXRuling onTX(const QByteArray &raw, std::shared_ptr<Transport>) const override
-    { return {TXRuling::Encode, raw}; }
+    { return {raw, TXRuling::Encode}; }
 };
 
 class TestCollector final : public DAQCollector
@@ -119,7 +119,7 @@ int main(int argc, char **argv)
             qFatal("persistent closure or cross-thread signal delivery failed");
         received = sequence;
     });
-    if (!device.device().open({std::make_shared<Transport>()}) || !until([&] { return device.device().isOpen(); })) return 1;
+    if (!device.device().open(Parameters{std::make_shared<Transport>()}) || !until([&] { return device.device().isOpen(); })) return 1;
     for (int i = 1; i <= 3; ++i) {
         if (!device.begin(device.collectorFor(1, {}), [&](auto frame) {
             if (!frame || QThread::currentThread() != app.thread()) qFatal("wrong completion thread");
