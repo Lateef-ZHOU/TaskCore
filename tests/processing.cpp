@@ -1,3 +1,4 @@
+#include <functional>
 #include "Device/DAQ/DAQDevice.h"
 #include <atomic>
 #include <QCoreApplication>
@@ -26,7 +27,8 @@ Q_SIGNALS:
     void logMessage(const QString &) const override;
 private:
     std::shared_ptr<Transport> connOpen(const Parameters &p) override { return p.transport; }
-    bool connLoop(std::shared_ptr<Transport> c, Sink sink) override
+    bool connLoop(std::shared_ptr<Transport> c,
+        std::function<void(std::shared_ptr<Transport>, const QByteArray &, RxTime)> sink) override
     {
         for (;;) {
             c->input.acquire();

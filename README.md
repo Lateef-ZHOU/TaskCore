@@ -100,3 +100,7 @@ simonly 页面的累积时间 `accum` 和停稳时间 `settle` 为创建时必�
 
 
 2026-11-03 本机验证：Linux Qt Core 6.8.3 核心构建/公开头与测试 2/2；Windows Qt 6.11.2 生产装配、15 组 qmllint、生命周期与独立任务回归 7/7 通过。具体 Core 仍由官邸唯一持有，处理线程和收包线程的先后关闭顺序保持。依赖固定本地提交，未推送；联调使用相邻源码覆盖。
+
+### 2026-11-03 回调类型声明整理
+
+处理线程验证直接写连接循环的 std::function 类型，不再依赖 HandleCore 的 Sink 别名；生产线程与消费链未改。Linux/GCC/Qt Core 6.8.3 增量构建及 CTest 2/2 通过（virtual-upload-20261103/build-TaskCore/callback-alias-{build,test}.log）。

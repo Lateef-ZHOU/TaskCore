@@ -3,7 +3,7 @@ include(FetchContent)
 if(NOT TARGET Lidar::HandleCore)
     FetchContent_Declare(lidar_handle_core
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/HandleCore.git
-        GIT_TAG 40b7dcac817089c4f5dfbefb20c3b39b188b9f70)
+        GIT_TAG 4a2bb97d8ed1b719336039fc9bd2db3d1f73f8e9)
     FetchContent_MakeAvailable(lidar_handle_core)
 endif()
 # 消费方已提供目标时直接复用；否则拉取经过验证的固定提交，不启用 Handle 可选模块。
