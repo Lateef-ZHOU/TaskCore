@@ -127,3 +127,9 @@ GMB/DAQ 的 QML device 属性由模板层直接交出具体 Core 的 QObject 指
 设备身份直接读 DeviceBase 的 displayName / subtitle 常量成员，任务自身名称契约保持不动。
 
 本轮仅本地整理；集成验证记录见主程序 docs/maintenance/validation.md，不推送。
+
+## 2026-11-04：进料在消费端取值（用户定）
+
+GMBCollector::onFeed 接收 optional<PanTiltModel> 的 const 引用，在实际读取角度时取值。空输入由 DeviceCore 的公共 feed 拦截；到位、驻留、重试和消费语义不变。
+
+本轮仅本地整理，不推送；集成验证见主程序维护记录。

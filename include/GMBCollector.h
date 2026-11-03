@@ -60,8 +60,9 @@ private:
     // [worker] 每口先记录实测位形；圈内样本设置首次时刻并推进末次时刻，圈外样本不改两个时刻。
     // settled 统一判断首末间隔；完成后 Collector::feed 不再调用本口，实测结果也随之冻结。
     // RxTime 是可能被校时调整的墙钟；这里量等待时长，使用处理样本时的单调钟。
-    void onFeed(const PanTiltModel &sample, RxTime) override
+    void onFeed(const std::optional<PanTiltModel> &item, RxTime) override
     {
+        const auto &sample = *item;
         last_ = sample;
         if (PanTiltModel::distance(sample, target_) >= tolerance_)
             return;

@@ -63,7 +63,7 @@ public:
     int timeoutMs() const override { return 0; }
 private:
     explicit TestCollector(DAQContext c) : DAQCollector(std::move(c)) {}
-    void onFeed(const QByteArray &, RxTime at) override { frameTime_ = at; complete_ = true; }
+    void onFeed(const std::optional<QByteArray> &, RxTime at) override { frameTime_ = at; complete_ = true; }
     bool complete_ = false;
 };
 
