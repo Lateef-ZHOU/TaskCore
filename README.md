@@ -121,3 +121,9 @@ Windows 验证：通过主程序本地源码覆盖增量构建，五个网口官
 ## 2026-11-04：设备日志直接接线（用户定）
 
 GMB/DAQ 的 QML device 属性由模板层直接交出具体 Core 的 QObject 指针，不再通过 DeviceBase 取得日志源。GMB 族基只声明 mounting/setMounting 契约，唯一标定值及验锁写入在模板层，失败直接调用 Handle.logMessage；删除按字符串查找日志信号。Qt 属性、成功通知及标定行为保持。 本轮仅本地整理，未推送；Windows 集成验证记录见主程序维护操作。
+
+## 2026-11-04：设备身份与占用查询（用户定）
+
+设备身份直接读 DeviceBase 的 displayName / subtitle 常量成员，任务自身名称契约保持不动。
+
+本轮仅本地整理；集成验证记录见主程序 docs/maintenance/validation.md，不推送。

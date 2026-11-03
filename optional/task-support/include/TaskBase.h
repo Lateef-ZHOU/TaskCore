@@ -95,7 +95,7 @@ public Q_SLOTS:
         const auto parameters = GMBMoveParameters::fromQml(movement);
         if (!parameters) { Q_EMIT logMessage(QStringLiteral("云台运动参数无效，任务未启动")); return false; }
         Cards picked;
-        QStringList scope{gmb->device().displayName() + QStringLiteral(" · ") + gmb->device().subtitle()};
+        QStringList scope{gmb->device().displayName + QStringLiteral(" · ") + gmb->device().subtitle};
         for (auto *card : cards)
         {
             if (!card || std::ranges::find(cards_, card) == cards_.end()
@@ -104,7 +104,7 @@ public Q_SLOTS:
             }
             picked.emplace_back(*card);
             const auto &device = card->device();
-            scope << device.displayName() + QStringLiteral(" · ") + device.subtitle();
+            scope << device.displayName + QStringLiteral(" · ") + device.subtitle;
         }
         if (picked.empty()) { Q_EMIT logMessage(QStringLiteral("至少选一张采集卡")); return false; }
         if (settleSec < kSettleMin || settleSec > kSettleMax) {
