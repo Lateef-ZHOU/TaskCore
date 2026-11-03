@@ -24,7 +24,8 @@ class DAQDeviceBase : public QThread
 public:
     explicit DAQDeviceBase(QObject *parent = nullptr) : QThread(parent) {}
     ~DAQDeviceBase() override = default;
-    [[nodiscard]] QObject *deviceObject() noexcept { return device().logSourceObject(); }
+    // Qt 属性适配由模板层以具体 Core 类型实现，不经 DeviceBase 暴露 QObject。
+    [[nodiscard]] virtual QObject *deviceObject() noexcept = 0;
 
     // 本族的收集器基（`RunAwaiter<DAQDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
@@ -124,6 +125,7 @@ public:
         device().setOnConsume({});
     }
 
+    [[nodiscard]] QObject *deviceObject() noexcept final { return &device(); }
     [[nodiscard]] Core &device() noexcept final { return *device_; }
     [[nodiscard]] const Core &device() const noexcept { return *device_; }
 
@@ -142,7 +144,7 @@ public:
         const auto typed = std::dynamic_pointer_cast<const CollectorT>(proto);
         if (!typed)
         {
-            Q_EMIT device().logSource().logMessage(QStringLiteral("采集请求的 Collector 型号不匹配，未启动"));
+            Q_EMIT device().logMessage(QStringLiteral("采集请求的 Collector 型号不匹配，未启动"));
             return false;
         }
         return device().start(typed, std::move(done), lock);
@@ -160,7 +162,7 @@ public:
     {
         if (testCoro_ && !testCoro_->done())
         {
-            Q_EMIT device().logSource().logMessage(QStringLiteral("测试正在进行中"));
+            Q_EMIT device().logMessage(QStringLiteral("测试正在进行中"));
             return;
         }
         std::optional<QDir> saveRoot; // 空 = 不落盘
@@ -168,7 +170,7 @@ public:
         {
             if (!folder.isLocalFile() || folder.toLocalFile().isEmpty())
             {
-                Q_EMIT device().logSource().logMessage(QStringLiteral("选中的不是本机目录，未启动采集"));
+                Q_EMIT device().logMessage(QStringLiteral("选中的不是本机目录，未启动采集"));
                 return;
             }
             saveRoot = QDir(folder.toLocalFile());
@@ -190,12 +192,12 @@ private:
         const auto lock = co_await HeldLock{};
         if (!lock)
         {
-            Q_EMIT device().logSource().logMessage(QStringLiteral("设备已被占用或未连接"));
+            Q_EMIT device().logMessage(QStringLiteral("设备已被占用或未连接"));
             co_return;
         }
         while (true)
         {
-            Q_EMIT device().logSource().logMessage(QString("开始采集（累积 %1 秒）%2")
+            Q_EMIT device().logMessage(QString("开始采集（累积 %1 秒）%2")
                                  .arg(accumSec)
                                  .arg(saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(saveRoot->absolutePath())
                                                : QStringLiteral("，不落盘")));
@@ -203,7 +205,7 @@ private:
                 collectorFor(accumSec, {std::nullopt, saveRoot, sessionDir, false})};
             if (framed.empty())
             {
-                Q_EMIT device().logSource().logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));
+                Q_EMIT device().logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));
                 co_return;
             }
         }

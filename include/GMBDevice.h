@@ -35,7 +35,7 @@ struct GMBMoveParameters
     }
 };
 
-// 云台族定义标准能力并持有安装姿态；具体官邸拥有一台 Device 运行机制。
+// 云台族定义标准能力；模板层持有唯一安装姿态及具体 Device 运行机制。
 // 编排只持族引用，通过 device() 使用锁，不认识具体 Handle 或 Collector。
 class GMBDeviceBase : public QObject
 {
@@ -46,7 +46,8 @@ class GMBDeviceBase : public QObject
 public:
     explicit GMBDeviceBase(QObject *parent = nullptr) : QObject(parent) {}
     ~GMBDeviceBase() override = default;
-    [[nodiscard]] QObject *deviceObject() noexcept { return device().logSourceObject(); }
+    // Qt 属性适配由模板层以具体 Core 类型实现，不经 DeviceBase 暴露 QObject。
+    [[nodiscard]] virtual QObject *deviceObject() noexcept = 0;
 
     // 本族的收集器基（`RunAwaiter<GMBDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
@@ -91,22 +92,11 @@ public:
     // 世界朝向）。两次之间若被人改掉，去程回程用的是两份标定，风廓线里混进一束错参考系的数据，
     // 而且不响。
     // 空令牌 = "我不持锁"：云台空闲时照样写得进（没有 run 依赖它），有人持锁时一律拒。
-    [[nodiscard]] bool setMounting(const WorldModel &zeroPose, const std::shared_ptr<const DeviceLock> &lock)
-    {
-        if (!device().lockMatches(lock))
-        {
-            // 族基借用的是 QObject 日志源，直接调用现有 Handle 信号，不增设设备中继。
-            QMetaObject::invokeMethod(device().logSourceObject(), "logMessage", Qt::DirectConnection,
-                                      Q_ARG(QString, QStringLiteral("设备正被占用，安装标定未写入")));
-            return false; // 有人持锁、且不是出示者：此刻有 run 依赖这份标定
-        }
-        mounting_ = zeroPose;
-        Q_EMIT mountingChanged(mounting_); // 直接交出完整姿态，订阅者无需回读设备
-        return true;
-    }
+    [[nodiscard]] virtual bool setMounting(const WorldModel &zeroPose,
+                                          const std::shared_ptr<const DeviceLock> &lock) = 0;
 
     // 借出当前安装标定；QML 创建时读取初值，后续直接接收 mountingChanged 的完整姿态。
-    [[nodiscard]] const WorldModel &mounting() const noexcept { return mounting_; }
+    [[nodiscard]] virtual const WorldModel &mounting() const noexcept = 0;
 
     // ── 站点标定流程的默认值（标定页未做，暂无读者——用户定留着）────────────────
     // 四个测量点：水平角指令 0 / 90 / 180 / 270，隔点抬俯仰（tilt 0 / 激励 / 0 / 激励）；每点录入手机读到的
@@ -114,7 +104,7 @@ public:
     // 水平角指令同时是录入框里方位角的默认（正北架设时手机本该读到的数），高度角录入框默认 0。
     // 激励角：相邻相对转轴不共线 → 手机偏差 R_offset 可解；全 0（只掰水平）退化成只解地基 R_base。
     // 条件数随激励增大而改善但边际递减、近 90° 撞万向锁，故限 [30, 60]；偏大越稳、偏小手机越不易滑。
-    // 录入框的范围与零位默认不在这儿：范围是整圈（QML 里写死），零位默认就是 mounting_ 的出生值。
+    // 录入框的范围与零位默认不在这儿：范围是整圈（QML 里写死），零位默认由模板层的唯一标定值提供。
     static constexpr double kCalibPan[4] = {0.0, 90.0, 180.0, 270.0};
     static constexpr double kCalibElevation = 0.0;
     static constexpr double kCalibTiltExcite = 40.0;
@@ -129,7 +119,7 @@ public:
     // 世界角也走这里。
     [[nodiscard]] WorldModel worldOf(const PanTiltModel &pose) const
     {
-        return WorldModel::fromOrientation(mounting_.toOrientation() * pose.toOrientation());
+        return WorldModel::fromOrientation(mounting().toOrientation() * pose.toOrientation());
     }
 
     // 造斗：照一个**云台位形**造一只斗交出来——位形 → 收集器（它不让云台动，只造斗）。
@@ -159,7 +149,7 @@ public:
     // 不是自由量而是被钉死的**：双轴只有两个自由度，换成有朝向的载荷（相机像旋、偏振轴）就要命。
     [[nodiscard]] PanTiltModel gimbalOf(const WorldModel &worldTarget) const
     {
-        return PanTiltModel::fromOrientation(mounting_.toOrientation().inverse() * worldTarget.toOrientation());
+        return PanTiltModel::fromOrientation(mounting().toOrientation().inverse() * worldTarget.toOrientation());
     }
 
     Q_INVOKABLE virtual bool withinTravel(double pan, double tilt) const = 0;
@@ -183,9 +173,6 @@ Q_SIGNALS:
 protected:
     virtual void PreDestruction() noexcept = 0;
 
-private:
-    // 安装标定：这台云台架在哪（世界系作动量；出生态 = 水平正北）。读写全在主线程，无需同步。
-    WorldModel mounting_;
 };
 
 // 模板层完成具体 Collector 验型及收包接入；型号只解析协议、检查行程和组装命令。
@@ -204,8 +191,23 @@ public:
         static_assert(DeviceLifecycleLayer<GMBDevice, decltype(&GMBDevice::PreDestruction)>);
     }
 
+    [[nodiscard]] QObject *deviceObject() noexcept final { return &device(); }
     [[nodiscard]] Core &device() noexcept final { return *device_; }
     [[nodiscard]] const Core &device() const noexcept { return *device_; }
+
+    [[nodiscard]] const WorldModel &mounting() const noexcept final { return mounting_; }
+    [[nodiscard]] bool setMounting(const WorldModel &zeroPose,
+                                   const std::shared_ptr<const DeviceLock> &lock) final
+    {
+        if (!device().lockMatches(lock))
+        {
+            Q_EMIT device().logMessage(QStringLiteral("设备正被占用，安装标定未写入"));
+            return false;
+        }
+        mounting_ = zeroPose;
+        Q_EMIT mountingChanged(mounting_);
+        return true;
+    }
 
     // 族口落地（final：管线是族级不变量，型号无权改）。本口只有"造哪只斗"这一个决定——交给官邸的
     // makeMoveCollector（它查本台行程并组装命令），本层只将其结果上转为族基份额。
@@ -227,7 +229,7 @@ public:
         const auto parameters = GMBMoveParameters::fromQml(values);
         if (!parameters)
         {
-            Q_EMIT device().logSource().logMessage(QStringLiteral("云台运动参数无效，未下发"));
+            Q_EMIT device().logMessage(QStringLiteral("云台运动参数无效，未下发"));
             return false;
         }
         return issueGoTo(PanTiltModel(pan, tilt), *parameters);
@@ -241,7 +243,7 @@ public:
         const auto typed = std::dynamic_pointer_cast<const CollectorT>(proto);
         if (!typed)
         {
-            Q_EMIT device().logSource().logMessage(QStringLiteral("云台请求的 Collector 型号不匹配，未启动"));
+            Q_EMIT device().logMessage(QStringLiteral("云台请求的 Collector 型号不匹配，未启动"));
             return false;
         }
         return device().start(typed, std::move(done), lock);
@@ -290,4 +292,6 @@ private:
     // QObject 父子关系兜底构造失败；正常预析构先显式销毁，保证回调依赖仍在。
     // 删除期间保留指针值，关闭同步撤单仍可访问 Device；没有可继续使用的预析构阶段。
     Core *const device_;
+    // 唯一安装标定；主线程读写，族基通过 mounting() 使用。
+    WorldModel mounting_;
 };

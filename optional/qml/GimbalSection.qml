@@ -85,7 +85,7 @@ Section {
         }
         function apply() {
             if (root.device.setMounting(az.value, el.value, roll.value))
-                root.device.device.logSource.logMessage(qsTr("安装标定已设定：方位 %1°，高度 %2°，横滚 %3°")
+                root.device.device.logMessage(qsTr("安装标定已设定：方位 %1°，高度 %2°，横滚 %3°")
                     .arg(az.value.toFixed(2)).arg(el.value.toFixed(2)).arg(roll.value.toFixed(2)))
         }
         FieldStrip.Col {
@@ -148,7 +148,7 @@ Section {
         text: qsTr("前往云台角")
         onClicked: {
             if (root.device.issueGoTo(tPan.value, tTilt.value, root.settings.moveParameters()))
-                root.device.device.logSource.logMessage(qsTr("已下发：前往云台角（水平 %1°，俯仰 %2°）")
+                root.device.device.logMessage(qsTr("已下发：前往云台角（水平 %1°，俯仰 %2°）")
                     .arg(tPan.value.toFixed(2)).arg(tTilt.value.toFixed(2)))
         }
     }
@@ -177,7 +177,7 @@ Section {
         onClicked: {
             const pose = root.device.mounting.gimbalAngles(tAz.value, tEl.value)
             if (root.device.issueGoTo(pose.pan, pose.tilt, root.settings.moveParameters()))
-                root.device.device.logSource.logMessage(qsTr("已下发：前往世界角（方位 %1°，高度 %2°） → 云台（水平 %3°，俯仰 %4°）")
+                root.device.device.logMessage(qsTr("已下发：前往世界角（方位 %1°，高度 %2°） → 云台（水平 %3°，俯仰 %4°）")
                     .arg(tAz.value.toFixed(2)).arg(tEl.value.toFixed(2))
                     .arg(pose.pan.toFixed(2)).arg(pose.tilt.toFixed(2)))
         }
@@ -189,7 +189,7 @@ Section {
         text: qsTr("立即停止")
         onClicked: {
             if (root.device.issueStop())
-                root.device.device.logSource.logMessage(qsTr("已下发：停止"))
+                root.device.device.logMessage(qsTr("已下发：停止"))
         }
     }
 }
