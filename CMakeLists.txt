@@ -10,8 +10,8 @@ if(NOT TARGET Lidar::DeviceCore OR NOT TARGET Lidar::Algorithm)
     message(FATAL_ERROR "TaskCore requires Lidar::DeviceCore and Lidar::Algorithm")
 endif()
 add_library(LidarTaskCore STATIC
-    include/Device/DAQ/DAQDevice.h
-    include/Device/GMB/GMBDevice.h)
+    include/DAQDevice.h
+    include/GMBDevice.h)
 set_target_properties(LidarTaskCore PROPERTIES AUTOMOC ON)
 qt_extract_metatypes(LidarTaskCore)
 if(MSVC)

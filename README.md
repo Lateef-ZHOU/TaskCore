@@ -84,7 +84,7 @@ target_link_libraries(my_app PRIVATE Lidar::TaskCore)
 
 ## 可选网口表单适配
 
-`TASKCORE_WITH_PCAP_FORMS=ON` 提供 `Lidar::PcapForms` 与 `<Device/PcapForm.h>`，共用枚举快照、连接参数校验，不保存第二份表单草稿。`connectionParameters()` 无参，仅交网卡选项、提示及默认下标；固定线路参数由型号在连接时交给 `parseParameters`，不再通过此接口交给 QML。需要在首次配置 HandleCore 前开启 `HANDLECORE_WITH_PCAP`，原生依赖要求沿用该库。默认关闭，核心和仿真官邸无需 libpcap。
+`TASKCORE_WITH_PCAP_FORMS=ON` 提供 `Lidar::PcapForms` 与 `<PcapForm.h>`，共用枚举快照、连接参数校验，不保存第二份表单草稿。`connectionParameters()` 无参，仅交网卡选项、提示及默认下标；固定线路参数由型号在连接时交给 `parseParameters`，不再通过此接口交给 QML。需要在首次配置 HandleCore 前开启 `HANDLECORE_WITH_PCAP`，原生依赖要求沿用该库。默认关闭，核心和仿真官邸无需 libpcap。
 
 纯 QML `PcapCard` 属于可选 `Lidar.TaskUI`，由官邸传入后端、表单与固定配置；自身不链接抓包驱动。不创建新 UI 层级，不替官邸决定页面分区。PcapCard 是可选的可编辑表单参考，当前固定参数官邸不使用它；采用该组件的调用方需自行提供其表单配置，不使用仅含网卡选项的 connectionParameters 充当完整表单参数。
 
@@ -110,3 +110,10 @@ simonly 页面的累积时间 `accum` 和停稳时间 `settle` 为创建时必�
 2026-11-03 用户定：网口连接区仅保留网卡选择和连接/断开，删除 IP、端口等固定参数展示及对应 QML 参数字段；实际连接配置、校验、ARP 和收发关闭行为保持。
 
 Windows 验证：通过主程序本地源码覆盖增量构建，五个网口官邸 qmllint 目标成功；仍有 QObject 属性类型的既有静态提示。八秒离屏冒烟通过，仅既有字体提示；未进行硬件操作或 Linux 验证。证据：LiDAR_DataACQ/build/build-network-ui.log、smoke-network-ui.json。
+
+## 源码目录（2026-11-03）
+
+公开文件直接放在 `include/`，引用时使用文件名，不再携带原单仓库的业务目录前缀。CMake 目标名称、C++ 类型和 QML 模块名保持不变；使用方须同步更新头文件路径及固定依赖版本。
+可选模块仍各自独立，各模块的文件平铺在自己的 `include/` 中，不混入核心目标。
+
+目录整理验证（2026-11-03）：Windows Qt 6.11.2 / MSVC：核心及可选模块构建、公开头独立编译、CTest 4/4 通过。本轮通过本地源码覆盖验证，固定依赖同步更新到本地提交；尚未推送，不代表已验证远端拉取。

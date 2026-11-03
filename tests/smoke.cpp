@@ -1,11 +1,11 @@
 #include <chrono>
 #include <type_traits>
 #include <QCoreApplication>
-#include "Device/Base/DeviceCoro.h"
-#include "Device/DAQ/DAQDevice.h"
-#include "Device/GMB/GMBDevice.h"
-#include "Algorithm/Wind/WindProfile.h"
-#include "Algorithm/Sim/LidarForward.h"
+#include "DeviceCoro.h"
+#include "DAQDevice.h"
+#include "GMBDevice.h"
+#include "WindProfile.h"
+#include "LidarForward.h"
 static_assert(std::is_same_v<RxTime, std::chrono::system_clock::time_point>);
 static_assert(std::is_same_v<decltype(VerticalWindProfileUnit::at), RxTime>);
 static_assert(!std::is_copy_constructible_v<DeviceLock>);

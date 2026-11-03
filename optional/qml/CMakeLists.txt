@@ -4,13 +4,13 @@ include(FetchContent)
 if(NOT TARGET Lidar::UICore)
     FetchContent_Declare(lidar_uicore
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/UICore.git
-        GIT_TAG 728aaa00e9358437db9d439d6f9cbfe405aee450)
+        GIT_TAG 17ec443437bf4f3b4f5ac4df8bde2ec6707e7e66)
     FetchContent_MakeAvailable(lidar_uicore)
 endif()
 if(NOT TARGET Lidar::ChartCore)
     FetchContent_Declare(lidar_chartcore
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/ChartCore.git
-        GIT_TAG 223182769dcb51b6c591892edbe1655cf12219cd)
+        GIT_TAG c5cd5088569675e0508015820f642e32efff0e1c)
     FetchContent_MakeAvailable(lidar_chartcore)
 endif()
 set(import_paths)

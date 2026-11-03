@@ -1,10 +1,10 @@
 #pragma once
 #include <QtQml/qqmlregistration.h>
-#include "Device/Base/DeviceBase.h"
-#include "Device/GMB/GMBDevice.h"
-#include "Device/DAQ/DAQDevice.h"
-#include "UI/Chart/ChartTypes.h"
-#include "Task/TaskBase.h"
+#include "DeviceBase.h"
+#include "GMBDevice.h"
+#include "DAQDevice.h"
+#include "ChartTypes.h"
+#include "TaskBase.h"
 
 // 可选界面登记：核心及任务业务目标不依赖 Qt Qml。
 struct GMBDeviceBaseQml

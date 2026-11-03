@@ -1,5 +1,5 @@
 #include <functional>
-#include "Device/DAQ/DAQDevice.h"
+#include "DAQDevice.h"
 #include <atomic>
 #include <QCoreApplication>
 #include <QElapsedTimer>

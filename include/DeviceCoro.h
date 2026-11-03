@@ -7,7 +7,7 @@
 #include <vector>
 #include <QString>
 
-#include "Device/Base/DeviceBase.h" // DeviceBase / DeviceLock + 设备类型
+#include "DeviceBase.h" // DeviceBase / DeviceLock + 设备类型
 
 // ============================================================
 // DeviceCoro 管理协程帧和设备锁；RunAwaiter 等待单台或同族多台设备，HeldLock 只取本帧令牌。

@@ -1,4 +1,4 @@
-add_library(LidarTaskSupport STATIC include/Task/TaskBase.h)
+add_library(LidarTaskSupport STATIC include/TaskBase.h)
 set_target_properties(LidarTaskSupport PROPERTIES AUTOMOC ON)
 qt_extract_metatypes(LidarTaskSupport)
 add_library(Lidar::TaskSupport ALIAS LidarTaskSupport)

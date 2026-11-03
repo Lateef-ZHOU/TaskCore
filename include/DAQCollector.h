@@ -7,9 +7,9 @@
 #include <QDir>
 #include <QString>
 
-#include "Algorithm/Geometry/GimbalModel.h"
-#include "Device/Base/RunBase.h" // Collector 契约基类
-#include "Device/Base/RxTime.h"
+#include "GimbalModel.h"
+#include "RunBase.h" // Collector 契约基类
+#include "RxTime.h"
 
 // 一次采集的不可变消费上下文；重试照抄，完成帧自带处理与保存所需信息。
 struct DAQContext

@@ -10,10 +10,10 @@
 #include <functional>
 #include <QUrl>
 
-#include "Device/DAQ/DAQCollector.h"          // 采集帧与不可变消费上下文
-#include "Device/Base/DeviceCoro.h"           // DeviceCoro / LockRequest / HeldLock / RunAwaiter（测试采集协程）
-#include "Device/Base/DeviceBase.h" // DeviceBase / Device<H,C>
-#include "Device/Base/RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
+#include "DAQCollector.h"          // 采集帧与不可变消费上下文
+#include "DeviceCoro.h"           // DeviceCoro / LockRequest / HeldLock / RunAwaiter（测试采集协程）
+#include "DeviceBase.h" // DeviceBase / Device<H,C>
+#include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
 
 // 采集卡族接口供任务多选组合；模板实现持具体 Collector、组合 Device 和测试协程。
 // begin 是唯一的族基到型号验型边界；成功帧由主线程触发 onConsume，独立于协程是否仍等待。

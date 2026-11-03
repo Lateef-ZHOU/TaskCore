@@ -9,11 +9,11 @@
 #include <QString>
 #include <QVariantMap>
 
-#include "Algorithm/Geometry/GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
-#include "Device/Base/DeviceBase.h" // DeviceBase / Device<H,C>
-#include "Device/Base/RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
-#include "Device/Base/RxTime.h"
-#include "Device/GMB/GMBCollector.h"          // 云台族读口与型号收集器（喂位形、判到位 + 驻留）
+#include "GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
+#include "DeviceBase.h" // DeviceBase / Device<H,C>
+#include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
+#include "RxTime.h"
+#include "GMBCollector.h"          // 云台族读口与型号收集器（喂位形、判到位 + 驻留）
 
 // 一次运动的按值参数；无速度表示本型号的定位协议不携带速度。
 // QML 仅在命令/任务启动边界交一份值，协程与工厂不回读界面。

@@ -5,7 +5,7 @@
 #include <QtQml/QQmlExtensionPlugin>
 #include <QDebug>
 #include <memory>
-#include "Task/TaskBase.h"
+#include "TaskBase.h"
 Q_IMPORT_QML_PLUGIN(LidarUIPlugin)
 Q_IMPORT_QML_PLUGIN(LidarChartsPlugin)
 Q_IMPORT_QML_PLUGIN(LidarTaskUIPlugin)

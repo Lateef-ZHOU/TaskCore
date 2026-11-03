@@ -8,8 +8,8 @@
 #include <QByteArray>
 #include <QList>
 
-#include "Algorithm/Geometry/GimbalModel.h" // PanTiltModel（目标 / 实测位形；distance）
-#include "Device/Base/RunBase.h" // Collector<FeedT> 契约基类
+#include "GimbalModel.h" // PanTiltModel（目标 / 实测位形；distance）
+#include "RunBase.h" // Collector<FeedT> 契约基类
 
 // 云台族公共到位/驻留判据与位形读口；型号以 TypedGMBCollector 的标签区分。
 // 指示区不可变，收集区只由收包线程写，完成后按 const 份额交付。
