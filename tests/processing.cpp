@@ -15,12 +15,12 @@ struct Parameters
     bool operator==(const Parameters &) const = default;
 };
 
-class TestHandle final : public Handle<Parameters, Transport>
+class TestHandle : public Handle<Parameters, Transport>
 {
     Q_OBJECT
 public:
     using Handle::Handle;
-    ~TestHandle() override { stop(); }
+    ~TestHandle() override = default;
 Q_SIGNALS:
     void connectionChanged(HandleCore::ResourcePhase) override;
     void logMessage(const QString &) const override;
@@ -65,7 +65,21 @@ private:
     bool complete_ = false;
 };
 
-class TestDevice final : public DAQDevice<TestHandle, TestCollector>
+class TestCore final : public Device<TestHandle, TestCollector>
+{
+    Q_OBJECT
+public:
+    using Device::Device;
+    ~TestCore() override { PreDestruction(); }
+Q_SIGNALS:
+    void lockChanged(HandleCore::ResourcePhase) override;
+private:
+    void PreDestruction() noexcept final { Device::PreDestruction(); }
+};
+static_assert(std::derived_from<TestCore, TestHandle>);
+static_assert(!std::derived_from<DeviceBase, QObject>);
+
+class TestDevice final : public DAQDevice<TestCore>
 {
     Q_OBJECT
 public:

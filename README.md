@@ -20,7 +20,7 @@
 
 消费者必须在 FetchContent_MakeAvailable 前选择开关。核心目标不反向链接附加模块。界面消费者链接 LidarTaskUIplugin 并显式 `Q_IMPORT_QML_PLUGIN(LidarTaskUIPlugin)`（动态 Qt 下的静态模块也需要）；同时导入 UICore/ChartCore 插件。各模块输出目录的两级父目录用于 QML 工具 IMPORT_PATH。
 
-TaskModule 接收 `list<GMBDeviceBase>` 和 `list<DAQDeviceBase>`，不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经族基 collectorFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，retiring 同步取消并移除引用，排队收尾保留。
+TaskModule 接收 `list<GMBDeviceBase>` 和 `list<DAQDeviceBase>`，不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经族基 collectorFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，锁/完成链同步取消；QObject 销毁通知移除登记，排队收尾保留。
 
 这些目标均是可选实现，不要求任务官邸继承 TaskBase 或 TaskModule。三个具体计划和协程不在本库，官邸可以只使用核心能力自行编排。附加保存继续使用独立线程，不反向访问日志对象，不增加退出排空。
 
@@ -38,13 +38,17 @@ TaskModule 接收 `list<GMBDeviceBase>` 和 `list<DAQDeviceBase>`，不认识具
 
 ## 组合与线程契约
 
+2026-11-03 用户定：Handle 上传改为纯虚 `onData(const QByteArray &, RxTime)`。`Device<HandleT, CollectorT>` 同时继承具体 Handle 和纯 C++ DeviceBase，直接重写上传；删除 Handle 的上传回调参数/成员与 Device 的 handle_、makeDispatch。唯一 QObject 来自 Handle，具体 Core 末端以信号实现 lockChanged 并提供原只读属性；族层和官邸仍组合拥有 Core，onStream/onConsume 仍是原业务回调。本轮不改协议、收包线程、CAS、重试、取消或消费次序。
+
+族模板以最终 Core 为参数，并从 Core::CollectorType 约束 GMB/DAQ 的 Collector 族归属。DeviceBase 不再登记为 QML 类型；只读属性与锁信号在具体 Core 末端提供，无第二个 QObject 或信号转发。
+
 2026-10-26 用户定：GMB/DAQ 族改为组合持有 Device。GMBDeviceBase 继承 QObject，DAQDeviceBase 继承 QThread，只有官邸实现处理线程 run。Device 独持 onStream/onConsume 回调，删除 onCompleted 虚转发；完成帧仍在主线程先提交消费、再通知等待器。DAQWorker、各型号 QObject worker、sink_、独立 QThread 成员和 moveToThread 全部删除。
 
 每个 DAQ run 在工作线程创建局部 QObject 锚点及唯一的型号处理 lambda，排队消息只携只读 Collector 份额，不复制有状态的 lambda。风廓线环及写位置随该闭包在线程内构造、使用和销毁；闭包对官邸只发结果信号，不访问其主线程业务成员。QML 在主线程接收，跨线程 C++ 使用者也必须指定接收上下文。启动用一次 QSemaphore 交接，回调安装后才允许首帧提交，不维护运行/关闭状态位。
 
-末端析构首句仍执行内部 PreDestruction。DAQ 先 stopWorker（quit/wait，随后清空消费回调）、再取消自有测试协程、最后销毁组合 Device；GMB 直接销毁 Device。Device 析构同步停止 Handle，然后 retiring、撤运行槽、释放锁。组合对象以 QObject 父子关系兜底构造失败，正常预析构显式销毁；删除期间指针保持有效，供 retiring 的同步撤单使用。外部只使用正常析构；线程源关闭只从所属主线程调用，不直接调用继承的 QThread start/quit/terminate。
+末端 Core 析构首句执行 PreDestruction：同步停止 Handle，撤运行槽、释放锁，再销毁派生状态。非 final 传输类和 Device 模板不在析构中调用预析构。DAQ 仍先 quit/wait 处理线程、取消单卡协程，再销毁 Core。任务由完成回调和锁取消链结束；删除 retiring，QObject::destroyed 仅负责移除登记与虚拟卡借用，此时族对象仍存活。
 
-族层的 device 属性借出既有 DeviceBase 机制面，无状态缓存和逐方法转发。QML 名称与日志由该机制面提供，状态在资源完成阶段回读；安装姿态、信号、型号规格与 objectName 仍归官邸。任务标识与历史查询边界保持。TaskBase 不订阅设备状态判断任务结束；具体协程退出时排队调用 refreshRunState，待帧退出后回读 done 并通知任务页，retiring 撤借用仍保留。锁、CAS、重试、取消、已完成帧保留和退出不排空政策不变。
+族层的 device 属性以 QObject* 借出具体 Core 的元对象机制面，无状态缓存和逐方法转发。QML 名称与日志由该机制面提供，状态在资源完成阶段回读；安装姿态、信号、型号规格与 objectName 仍归官邸。任务标识与历史查询边界保持。TaskBase 不订阅设备状态判断任务结束；具体协程退出时排队调用 refreshRunState，待帧退出后回读 done 并通知任务页，销毁通知仅移除登记引用。锁、CAS、重试、取消、已完成帧保留和退出不排空政策不变。
 
 ## 独立构建和验证
 
@@ -93,3 +97,6 @@ FixedTask、CycleTask、SnakeTask 各提供自己的 simonly 末端页面，沿�
 simonly 页面的累积时间 `accum` 和停稳时间 `settle` 为创建时必填属性，不在页面完成后补写。具体任务官邸同时要求创建时提供角度计划，页面编辑和启动共用同一份值。运行分区只调用官邸无参 `start()` / `stop()`，不认识或转交计划参数；全功能 TaskModule 的接口保持原样。
 
 2026-11-02 验证：Windows 主程序 Release、生命周期及三任务等 CTest 7/7 通过；补三种任务因设备关闭而取消后主动发 runChanged 的检查，生命周期复跑通过。Linux Qt Core 6.8.3 开启 TaskSupport/保存，公开头、处理线程和 CTest 3/3 通过；未测 Linux QML。依赖固定到本轮本地提交，尚未推送，本地验证显式供入对应源目录。
+
+
+2026-11-03 本机验证：Linux Qt Core 6.8.3 核心构建/公开头与测试 2/2；Windows Qt 6.11.2 生产装配、15 组 qmllint、生命周期与独立任务回归 7/7 通过。具体 Core 仍由官邸唯一持有，处理线程和收包线程的先后关闭顺序保持。依赖固定本地提交，未推送；联调使用相邻源码覆盖。

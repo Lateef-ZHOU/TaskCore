@@ -58,7 +58,7 @@ public:
     {
         if (!gmb || std::ranges::find(gimbals_, gmb) != gimbals_.end()) return false;
         gimbals_.push_back(gmb);
-        connect(&gmb->device(), &DeviceBase::retiring, this, [this, gmb] {
+        connect(gmb->deviceObject(), &QObject::destroyed, this, [this, gmb] {
             cancelRun();
             std::erase(gimbals_, gmb);
             Q_EMIT deviceRemoved(gmb);
@@ -70,7 +70,7 @@ public:
     {
         if (!card || std::ranges::find(cards_, card) != cards_.end()) return false;
         cards_.push_back(card);
-        connect(&card->device(), &DeviceBase::retiring, this, [this, card] {
+        connect(card->deviceObject(), &QObject::destroyed, this, [this, card] {
             cancelRun();
             std::erase(cards_, card);
             Q_EMIT deviceRemoved(card);
@@ -226,7 +226,7 @@ private:
     [[nodiscard]] int currentBeam() const { return running() ? beam_ : -1; }
 
     static constexpr int kSettleMin = 2, kSettleMax = 600;
-    // retiring 在族对象销毁前同步移除身份；任务不拥有设备。
+    // 机制对象先同步撤单，再由 QObject::destroyed 移除身份；族对象此时仍在。
     std::vector<GMBDeviceBase *> gimbals_;
     std::vector<DAQDeviceBase *> cards_;
     int beam_ = -1, delivered_ = 0;

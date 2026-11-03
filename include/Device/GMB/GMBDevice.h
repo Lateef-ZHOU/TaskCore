@@ -40,13 +40,13 @@ struct GMBMoveParameters
 class GMBDeviceBase : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(DeviceBase *device READ deviceObject CONSTANT)
+    Q_PROPERTY(QObject *device READ deviceObject CONSTANT)
     Q_PROPERTY(WorldModel mounting READ mounting NOTIFY mountingChanged)
     Q_PROPERTY(bool slipRing READ hasSlipRing CONSTANT)
 public:
     explicit GMBDeviceBase(QObject *parent = nullptr) : QObject(parent) {}
     ~GMBDeviceBase() override = default;
-    [[nodiscard]] DeviceBase *deviceObject() noexcept { return &device(); }
+    [[nodiscard]] QObject *deviceObject() noexcept { return device().logSourceObject(); }
 
     // 本族的收集器基（`RunAwaiter<GMBDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
@@ -189,10 +189,11 @@ private:
 };
 
 // 模板层完成具体 Collector 验型及收包接入；型号只解析协议、检查行程和组装命令。
-template <HandleLike HandleT, GMBCollectorLike CollectorT>
+template <typename Core>
+    requires GMBCollectorLike<typename Core::CollectorType>
 class GMBDevice : public GMBDeviceBase
 {
-    using Core = Device<HandleT, CollectorT>;
+    using CollectorT = typename Core::CollectorType;
 protected:
     void PreDestruction() noexcept override { delete device_; }
 
@@ -287,6 +288,6 @@ private:
     [[nodiscard]] virtual bool issueStop() = 0;
 
     // QObject 父子关系兜底构造失败；正常预析构先显式销毁，保证回调依赖仍在。
-    // 删除期间保留指针值，retiring 同步撤单仍可访问 Device；没有可继续使用的预析构阶段。
+    // 删除期间保留指针值，关闭同步撤单仍可访问 Device；没有可继续使用的预析构阶段。
     Core *const device_;
 };

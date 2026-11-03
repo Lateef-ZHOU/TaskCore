@@ -305,7 +305,7 @@ struct RunOrder
 {
     using ColT = typename FamilyT::CollectorBase;
 
-    FamilyT &dev; // 借用 QML 官邸持有的后端；设备退场时先经 retiring 同步取消等待。
+    FamilyT &dev; // 借用 QML 官邸持有的后端；设备关闭前经运行结果/锁取消铃同步结束等待。
     std::shared_ptr<const ColT> collector; // 提交前为原型，提交时移空；只由完成回调填入本轮结果。
 };
 

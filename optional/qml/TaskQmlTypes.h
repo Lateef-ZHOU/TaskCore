@@ -7,14 +7,6 @@
 #include "Task/TaskBase.h"
 
 // 可选界面登记：核心及任务业务目标不依赖 Qt Qml。
-struct DeviceBaseQml
-{
-    Q_GADGET
-    QML_FOREIGN(DeviceBase)
-    QML_NAMED_ELEMENT(DeviceBase)
-    QML_UNCREATABLE("设备公共接口")
-};
-
 struct GMBDeviceBaseQml
 {
     Q_GADGET

@@ -20,11 +20,11 @@
 class DAQDeviceBase : public QThread
 {
     Q_OBJECT
-    Q_PROPERTY(DeviceBase *device READ deviceObject CONSTANT)
+    Q_PROPERTY(QObject *device READ deviceObject CONSTANT)
 public:
     explicit DAQDeviceBase(QObject *parent = nullptr) : QThread(parent) {}
     ~DAQDeviceBase() override = default;
-    [[nodiscard]] DeviceBase *deviceObject() noexcept { return &device(); }
+    [[nodiscard]] QObject *deviceObject() noexcept { return device().logSourceObject(); }
 
     // 本族的收集器基（`RunAwaiter<DAQDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
@@ -64,10 +64,11 @@ protected:
 };
 
 // 同一具体 Collector 贯穿启动、重试与消费。处理状态由官邸 run() 的局部 lambda 独持。
-template <HandleLike HandleT, DAQCollectorLike CollectorT>
+template <typename Core>
+    requires DAQCollectorLike<typename Core::CollectorType>
 class DAQDevice : public DAQDeviceBase
 {
-    using Core = Device<HandleT, CollectorT>;
+    using CollectorT = typename Core::CollectorType;
 protected:
     DAQDevice(QString name, QString subtitle, QObject *parent)
         : DAQDeviceBase(parent), device_(new Core(std::move(name), std::move(subtitle), makeOnStream(), {}, this))
@@ -213,7 +214,7 @@ private:
         return [](const QByteArray &raw, RxTime) -> std::optional<QByteArray> { return raw; };
     }
 
-    // QObject 兜底构造失败；正常预析构显式销毁，retiring 回调期间指针仍有效。
+    // QObject 兜底构造失败；正常预析构显式销毁，析构期间指针仍有效。
     Core *const device_;
     QSemaphore ready_; // 仅一次初始化交接，不记录采集/退出状态。
     std::unique_ptr<DeviceCoro> testCoro_;
