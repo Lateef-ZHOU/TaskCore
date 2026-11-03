@@ -3,23 +3,17 @@
 #include <QVariantMap>
 #include <PcapHandle.h>
 
-// QML 表单适配：四台网口设备共用枚举快照与输入校验，Handle 只接受连接参数。
+// QML 网卡选项与连接构参共用枚举快照；线路参数由型号提供，Handle 只接受连接参数。
 class PcapForm
 {
 public:
     // 选项与下标转换共用同一次枚举；表单只持名称和下标，插拔网卡后需重开程序。
-    [[nodiscard]] static QVariantMap connectionParameters(const QString &hostIPv4, const int hostPort,
-                                                          const QString &deviceIPv4, const int devicePort,
-                                                          const std::optional<QString> &deviceMAC)
+    [[nodiscard]] static QVariantMap connectionParameters()
     {
         QStringList names, tips;
         for (const auto &n : interfaces()) { names << n.friendlyName; tips << n.description; }
         return {{"networkInterfaceOptions", names}, {"networkInterfaceTips", tips},
-                {"networkInterfaceDefault", interfaces().isEmpty() ? -1 : 0},
-                {"hostIPv4Default", hostIPv4}, {"hostPortDefault", hostPort},
-                {"deviceIPv4Default", deviceIPv4}, {"devicePortDefault", devicePort},
-                {"hasDeviceMAC", deviceMAC.has_value()}, {"deviceMACDefault", deviceMAC.value_or(QString{})},
-                {"portMin", kPortMin}, {"portMax", kPortMax}};
+                {"networkInterfaceDefault", interfaces().isEmpty() ? -1 : 0}};
     }
 
     // 先验证全部输入，再构造连接快照；失败不触碰正在运行的连接或重连种子。
