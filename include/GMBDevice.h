@@ -12,7 +12,6 @@
 #include "GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
 #include "DeviceBase.h" // DeviceBase / Device<H,C>
 #include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
-#include "RxTime.h"
 #include "GMBCollector.h"          // 云台族读口与型号收集器（喂位形、判到位 + 驻留）
 
 // 一次运动的按值参数；无速度表示本型号的定位协议不携带速度。
