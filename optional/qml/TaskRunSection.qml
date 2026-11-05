@@ -75,15 +75,13 @@ Section {
         color: palette.placeholderText
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
-        Button {
-            Layout.fillWidth: true; text: qsTr("开始")
+    DoubleButtonRow {
+        firstAction: Action {
+            text: qsTr("开始")
             enabled: !!root.plan
-            onClicked: root.settings.start(root.plan.azimuths, root.plan.elevation)
+            onTriggered: root.settings.start(root.plan.azimuths, root.plan.elevation)
         }
-        Button { Layout.fillWidth: true; text: qsTr("停止"); onClicked: root.settings.stop() }
+        secondAction: Action { text: qsTr("停止"); onTriggered: root.settings.stop() }
     }
 
     Label {

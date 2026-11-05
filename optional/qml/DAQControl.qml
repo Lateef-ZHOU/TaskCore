@@ -56,14 +56,12 @@ Section {
                 value: root.acquisition.saveDir; text: root.acquisition.saveDir.toString()
                 onCommitted: function (dir) { root.acquisition.saveDir = dir } }
 
-    RowLayout {
-        Layout.fillWidth: true
+    DoubleButtonRow {
         Layout.topMargin: 4
-        spacing: 8
-        Button { Layout.fillWidth: true; text: qsTr("开始采集")
-                 onClicked: root.device.startTest(root.acquisition.accum, root.acquisition.save, root.acquisition.saveDir) }
-        Button { Layout.fillWidth: true; text: qsTr("停止采集")
-                 onClicked: {
+        firstAction: Action { text: qsTr("开始采集")
+                 onTriggered: root.device.startTest(root.acquisition.accum, root.acquisition.save, root.acquisition.saveDir) }
+        secondAction: Action { text: qsTr("停止采集")
+                 onTriggered: {
                      root.device.cancelTest()
                      root.acquisition.logMessage(qsTr("测试已停止"))
                  } }

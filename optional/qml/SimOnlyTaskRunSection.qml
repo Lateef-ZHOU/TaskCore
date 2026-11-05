@@ -47,14 +47,12 @@ Section {
         color: palette.placeholderText
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
-        Button {
-            Layout.fillWidth: true; text: qsTr("开始")
-            onClicked: root.settings.start()
+    DoubleButtonRow {
+        firstAction: Action {
+            text: qsTr("开始")
+            onTriggered: root.settings.start()
         }
-        Button { Layout.fillWidth: true; text: qsTr("停止"); onClicked: root.settings.stop() }
+        secondAction: Action { text: qsTr("停止"); onTriggered: root.settings.stop() }
     }
 
     Label {

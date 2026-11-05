@@ -61,14 +61,11 @@ Section {
                    onCommitted: function (v) { root.commit("devicePort", v, qsTr("设备端口")) } }
     }
 
-    RowLayout {
-        Layout.fillWidth: true
+    DoubleButtonRow {
         Layout.topMargin: 4
-        spacing: 8
-        Button {
-            Layout.fillWidth: true
+        firstAction: Action {
             text: qsTr("连接")
-            onClicked: {
+            onTriggered: {
                 const accepted = root.parameters.hasDeviceMAC
                     ? root.device.open(root.settings.networkInterfaceIndex, root.settings.hostIPv4, root.settings.hostPort,
                                        root.settings.deviceIPv4, root.settings.devicePort, root.settings.deviceMAC)
@@ -77,6 +74,6 @@ Section {
                 if (accepted) root.settings.logMessage(qsTr("连接请求已提交"))
             }
         }
-        Button { Layout.fillWidth: true; text: qsTr("断开"); onClicked: root.device.close() }
+        secondAction: Action { text: qsTr("断开"); onTriggered: root.device.close() }
     }
 }
