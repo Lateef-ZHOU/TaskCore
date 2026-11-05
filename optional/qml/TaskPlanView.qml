@@ -223,17 +223,9 @@ RowLayout {
             spacing: FormStyle.rowSpacing
 
             // 状态圆点属于任务业务，其名称列与普通信息行对齐。
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: FormStyle.columnSpacing
-                FormLabel {
-                    text: qsTr("状态")
-                    color: palette.placeholderText
-                    Layout.fillWidth: false
-                    Layout.minimumWidth: FormStyle.labelWidth
-                    Layout.preferredWidth: FormStyle.labelWidth
-                    Layout.maximumWidth: FormStyle.labelWidth
-                }
+            FieldRow {
+                label: qsTr("状态")
+                labelColor: palette.placeholderText
                 Label {
                     text: "●"
                     color: page.task.running ? Theme.task : palette.placeholderText
