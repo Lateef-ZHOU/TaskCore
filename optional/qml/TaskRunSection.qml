@@ -16,12 +16,14 @@ Section {
         label: qsTr("停稳等待（s）")
         IntField {
             Layout.fillWidth: true
-            minimum: root.settings.settingsParameters.settleMin; maximum: root.settings.settingsParameters.settleMax
+            minimum: root.settings.settingsParameters.settleMin
+            maximum: root.settings.settingsParameters.settleMax
             value: root.settings.settle
             onCommitted: function (v) {
-                if (v === root.settings.settle) return
-                root.settings.settle = v
-                root.settings.logMessage(qsTr("停稳等待：%1 s").arg(v))
+                if (v === root.settings.settle)
+                    return;
+                root.settings.settle = v;
+                root.settings.logMessage(qsTr("停稳等待：%1 s").arg(v));
             }
         }
     }
@@ -30,12 +32,14 @@ Section {
         label: qsTr("累积时间（s，各卡）")
         IntField {
             Layout.fillWidth: true
-            minimum: root.settings.accumMin; maximum: root.settings.accumMax
+            minimum: root.settings.accumMin
+            maximum: root.settings.accumMax
             value: root.settings.accum
             onCommitted: function (v) {
-                if (v === root.settings.accum) return
-                root.settings.accum = v
-                root.settings.logMessage(qsTr("累积时间：%1 s").arg(v))
+                if (v === root.settings.accum)
+                    return;
+                root.settings.accum = v;
+                root.settings.logMessage(qsTr("累积时间：%1 s").arg(v));
             }
         }
     }
@@ -45,9 +49,12 @@ Section {
         label: qsTr("任务水平速度（°/s）")
         RealField {
             Layout.fillWidth: true
-            minimum: root.settings.settingsParameters.speedMin; maximum: root.settings.settingsParameters.speedMax
+            minimum: root.settings.settingsParameters.speedMin
+            maximum: root.settings.settingsParameters.speedMax
             value: root.settings.panSpeed
-            onCommitted: function(v) { root.settings.panSpeed = v }
+            onCommitted: function (v) {
+                root.settings.panSpeed = v;
+            }
         }
     }
     FieldRow {
@@ -55,24 +62,19 @@ Section {
         label: qsTr("任务俯仰速度（°/s）")
         RealField {
             Layout.fillWidth: true
-            minimum: root.settings.settingsParameters.speedMin; maximum: root.settings.settingsParameters.speedMax
+            minimum: root.settings.settingsParameters.speedMin
+            maximum: root.settings.settingsParameters.speedMax
             value: root.settings.tiltSpeed
-            onCommitted: function(v) { root.settings.tiltSpeed = v }
+            onCommitted: function (v) {
+                root.settings.tiltSpeed = v;
+            }
         }
     }
-    Label {
-        Layout.fillWidth: true
+    HintText {
         text: qsTr("任务速度独立设置，仅用于支持指定定位速度的转台。")
-        wrapMode: Text.Wrap
-        Layout.preferredWidth: 1
-        color: palette.placeholderText
     }
-    Label {
-        Layout.fillWidth: true
+    HintText {
         text: qsTr("开始时使用当前设置；运行中修改设置将在下次启动时生效。")
-        wrapMode: Text.Wrap
-        Layout.preferredWidth: 1
-        color: palette.placeholderText
     }
 
     DoubleButtonRow {
@@ -81,14 +83,13 @@ Section {
             enabled: !!root.plan
             onTriggered: root.settings.start(root.plan.azimuths, root.plan.elevation)
         }
-        secondAction: Action { text: qsTr("停止"); onTriggered: root.settings.stop() }
+        secondAction: Action {
+            text: qsTr("停止")
+            onTriggered: root.settings.stop()
+        }
     }
 
-    Label {
-        Layout.fillWidth: true
+    HintText {
         text: qsTr("停止即立即停止：取消当前等待并放锁。")
-        wrapMode: Text.Wrap
-        Layout.preferredWidth: 1 // 换行文字的 implicitWidth 是「整段不折行」的宽度，会顶爆列宽
-        color: palette.placeholderText
     }
 }

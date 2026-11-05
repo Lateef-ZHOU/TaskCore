@@ -86,7 +86,7 @@ target_link_libraries(my_app PRIVATE Lidar::TaskCore)
 
 `TASKCORE_WITH_PCAP_FORMS=ON` 提供 `Lidar::PcapForms` 与 `<PcapForm.h>`，共用枚举快照、连接参数校验，不保存第二份表单草稿。`connectionParameters()` 无参，仅交网卡选项、提示及默认下标；固定线路参数由型号在连接时交给 `parseParameters`，不再通过此接口交给 QML。需要在首次配置 HandleCore 前开启 `HANDLECORE_WITH_PCAP`，原生依赖要求沿用该库。默认关闭，核心和仿真官邸无需 libpcap。
 
-纯 QML `PcapCard` 属于可选 `Lidar.TaskUI`，由官邸传入后端、表单与固定配置；自身不链接抓包驱动。不创建新 UI 层级，不替官邸决定页面分区。PcapCard 是可选的可编辑表单参考，当前固定参数官邸不使用它；采用该组件的调用方需自行提供其表单配置，不使用仅含网卡选项的 connectionParameters 充当完整表单参数。
+原可选 `PcapCard` 已无使用方并删除。普通串口/网口连接区使用 UICore 的 `ConnectionSection`，只收拢选择项和双按钮布局；枚举、选择值、设备命令及日志仍由官邸提供。`PcapForm` 的枚举、校验和构参职责保持。
 
 ## 仿真参考页面
 
@@ -135,3 +135,8 @@ GMBCollector::onFeed 接收 optional<PanTiltModel> 的 const 引用，在实际�
 本轮仅本地整理，不推送；集成验证见主程序维护记录。
 
 2026-11-05 表单统一：转台状态改用 UICore ReadoutRow/Readout，运行控制采用宽标签预设，采集控制的行列间距采用 FormStyle。保留官邸数据、定位操作和既定分组。主程序 Windows 增量构建与八秒离屏冒烟通过；固定 UICore 本地提交，本轮不推送。
+
+
+### 2026-11-05 公共视觉与连接布局
+
+说明与小标题使用 UICore HintText/Subheading；删除无调用方的 PcapCard。任务计划、启动参数与业务逻辑保持。 本轮仅本地整理，未推送；Windows 集成验证记录见主程序维护操作。

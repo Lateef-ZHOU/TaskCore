@@ -4,7 +4,7 @@ include(FetchContent)
 if(NOT TARGET Lidar::UICore)
     FetchContent_Declare(lidar_uicore
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/UICore.git
-        GIT_TAG a6969fbe10322a112b3711f75fb7960563b3ffe6)
+        GIT_TAG 7d4cea9e5037dfc873ef5af3336440eb43760af5)
     FetchContent_MakeAvailable(lidar_uicore)
 endif()
 if(NOT TARGET Lidar::ChartCore)
