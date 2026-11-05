@@ -146,3 +146,5 @@ GMBCollector::onFeed 接收 optional<PanTiltModel> 的 const 引用，在实际�
 TaskPlanView 的普通行距采用 FormStyle；运行信息用 InfoRow，拿锁范围按值列宽度换行，状态圆点仍由任务页负责。五列计划表的 Cell 复用 FormLabel 的省略和悬停规则。表格结构、当前束高亮、双区布局与运行小标题前留白不变，预览计算和任务业务未改。
 
 主程序 Windows 增量构建及八秒冒烟通过；本地固定配套 UICore，未推送。
+
+2026-11-05 输入宽度整理：DAQControl 删除累积输入的局部 preferredWidth=80，由 FieldRow 分配空间；国耀独立“下发”按钮、输入校验与发令逻辑保持。同步 UICore 本地依赖；主程序 Windows 增量构建及八秒冒烟通过，未推送。

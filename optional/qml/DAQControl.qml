@@ -26,7 +26,6 @@ Section {
             label: qsTr("累积时间（s）")
             IntField {
                 Layout.fillWidth: true
-                Layout.preferredWidth: 80
                 minimum: root.acquisition.acquisitionParameters.accumMin
                 maximum: root.acquisition.acquisitionParameters.accumMax
                 value: root.acquisition.accum
