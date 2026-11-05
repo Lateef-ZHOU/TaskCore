@@ -48,8 +48,8 @@ Section {
         columnSpacing: 10
         rowSpacing: 2
 
-        Readout { text: qsTr("云台水平") }
-        Readout { text: qsTr("云台俯仰") }
+        Readout { text: qsTr("转台水平") }
+        Readout { text: qsTr("转台俯仰") }
         Readout { text: qsTr("世界方位") }
         Readout { text: qsTr("世界高度") }
         ReadoutValue { id: pan }
@@ -120,7 +120,7 @@ Section {
     }
 
     // ── 前往云台系：两轴一起 ──
-    Label { text: qsTr("前往云台系"); font.bold: true; Layout.topMargin: 8 }
+    Label { text: qsTr("前往转台系"); font.bold: true; Layout.topMargin: 8 }
     // **C++ 侧零存储**：这两个是一次性动作的入参，按「页面重建后该不该还在 → 不该」的判据就住界面，
     // 点按钮时当实参递下去。
     // **谁持值谁回写**：committed 只是"新的合法值出现了"这条通知，它不替人改 value。
@@ -145,10 +145,10 @@ Section {
     }
     Button {
         Layout.fillWidth: true
-        text: qsTr("前往云台角")
+        text: qsTr("前往转台角")
         onClicked: {
             if (root.device.issueGoTo(tPan.value, tTilt.value, root.settings.moveParameters()))
-                root.device.device.logMessage(qsTr("已下发：前往云台角（水平 %1°，俯仰 %2°）")
+                root.device.device.logMessage(qsTr("已下发：前往转台角（水平 %1°，俯仰 %2°）")
                     .arg(tPan.value.toFixed(2)).arg(tTilt.value.toFixed(2)))
         }
     }
@@ -177,7 +177,7 @@ Section {
         onClicked: {
             const pose = root.device.mounting.gimbalAngles(tAz.value, tEl.value)
             if (root.device.issueGoTo(pose.pan, pose.tilt, root.settings.moveParameters()))
-                root.device.device.logMessage(qsTr("已下发：前往世界角（方位 %1°，高度 %2°） → 云台（水平 %3°，俯仰 %4°）")
+                root.device.device.logMessage(qsTr("已下发：前往世界角（方位 %1°，高度 %2°） → 转台（水平 %3°，俯仰 %4°）")
                     .arg(tAz.value.toFixed(2)).arg(tEl.value.toFixed(2))
                     .arg(pose.pan.toFixed(2)).arg(pose.tilt.toFixed(2)))
         }

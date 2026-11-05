@@ -35,10 +35,10 @@ RowLayout {
                 if (valid) order.push(i)
             }
         }
-        const hint = !gimbal ? qsTr("没有可选的云台")
+        const hint = !gimbal ? qsTr("没有可选的转台")
             : !valid ? qsTr("有束够不着（×）：计划无效，开始会被拒绝。")
-            : slipRing ? qsTr("数字 = 行进顺序（即输入顺序）。本云台有滑环，可一直同向转，轮末跨零续转即可。")
-            : qsTr("数字 = 行进顺序（即输入顺序）。本云台无滑环，请参照表中云台水平角人工排成单调。")
+            : slipRing ? qsTr("数字 = 行进顺序（即输入顺序）。本转台有滑环，可一直同向转，轮末跨零续转即可。")
+            : qsTr("数字 = 行进顺序（即输入顺序）。本转台无滑环，请参照表中转台水平角人工排成单调。")
         preview = { reachable: reachable, order: order, rows: rows, hint: hint, slipRing: slipRing }
     }
     onGimbalChanged: refreshPreview(gimbal ? gimbal.mounting : null)
@@ -141,8 +141,8 @@ RowLayout {
                         Cell { text: qsTr("行进"); font.bold: true }
                         Cell { text: qsTr("世界方位"); font.bold: true }
                         Cell { text: qsTr("世界高度"); font.bold: true }
-                        Cell { text: qsTr("云台水平"); font.bold: true }
-                        Cell { text: qsTr("云台俯仰"); font.bold: true }
+                        Cell { text: qsTr("转台水平"); font.bold: true }
+                        Cell { text: qsTr("转台俯仰"); font.bold: true }
                     }
                 }
 

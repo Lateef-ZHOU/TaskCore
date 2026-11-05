@@ -228,7 +228,7 @@ public:
         const auto parameters = GMBMoveParameters::fromQml(values);
         if (!parameters)
         {
-            Q_EMIT device().logMessage(QStringLiteral("云台运动参数无效，未下发"));
+            Q_EMIT device().logMessage(QStringLiteral("转台运动参数无效，未下发"));
             return false;
         }
         return issueGoTo(PanTiltModel(pan, tilt), *parameters);
@@ -242,7 +242,7 @@ public:
         const auto typed = std::dynamic_pointer_cast<const CollectorT>(proto);
         if (!typed)
         {
-            Q_EMIT device().logMessage(QStringLiteral("云台请求的 Collector 型号不匹配，未启动"));
+            Q_EMIT device().logMessage(QStringLiteral("转台请求的 Collector 型号不匹配，未启动"));
             return false;
         }
         return device().start(typed, std::move(done), lock);

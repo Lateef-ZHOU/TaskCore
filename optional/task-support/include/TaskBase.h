@@ -90,10 +90,10 @@ public Q_SLOTS:
     {
         if (running()) { Q_EMIT logMessage(QStringLiteral("任务正在进行中")); return false; }
         if (!gmb || std::ranges::find(gimbals_, gmb) == gimbals_.end()) {
-            Q_EMIT logMessage(QStringLiteral("没有可用的已登记云台")); return false;
+            Q_EMIT logMessage(QStringLiteral("没有可用的已登记转台")); return false;
         }
         const auto parameters = GMBMoveParameters::fromQml(movement);
-        if (!parameters) { Q_EMIT logMessage(QStringLiteral("云台运动参数无效，任务未启动")); return false; }
+        if (!parameters) { Q_EMIT logMessage(QStringLiteral("转台运动参数无效，任务未启动")); return false; }
         Cards picked;
         QStringList scope{gmb->device().displayName + QStringLiteral(" · ") + gmb->device().subtitle};
         for (auto *card : cards)
@@ -171,7 +171,7 @@ protected:
     {
         const auto target = collector->target();
         step(beam, Phase::Moving,
-             QString("云台 前往 (水平 %1°, 俯仰 %2°)...").arg(target.pan(), 0, 'f', 2).arg(target.tilt(), 0, 'f', 2));
+             QString("转台 前往 (水平 %1°, 俯仰 %2°)...").arg(target.pan(), 0, 'f', 2).arg(target.tilt(), 0, 'f', 2));
         return RunAwaiter<GMBDeviceBase>{lock, gmb, collector};
     }
     [[nodiscard]] RunAwaiter<DAQDeviceBase> acquireAt(const std::shared_ptr<DeviceLock> &lock,
@@ -203,7 +203,7 @@ private:
         if (!running()) return QStringLiteral("空闲");
         switch (phase_)
         {
-        case Phase::Moving: return QStringLiteral("云台前往");
+        case Phase::Moving: return QStringLiteral("转台前往");
         case Phase::Acquiring: return QStringLiteral("采集中");
         case Phase::Idle: return QStringLiteral("准备中");
         }

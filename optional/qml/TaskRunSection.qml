@@ -62,7 +62,7 @@ Section {
     }
     Label {
         Layout.fillWidth: true
-        text: qsTr("任务速度独立设置，仅用于支持指定定位速度的云台。")
+        text: qsTr("任务速度独立设置，仅用于支持指定定位速度的转台。")
         wrapMode: Text.Wrap
         Layout.preferredWidth: 1
         color: palette.placeholderText

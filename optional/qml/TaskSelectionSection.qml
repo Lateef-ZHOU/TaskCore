@@ -11,7 +11,7 @@ Section {
     title: qsTr("任务设置")
 
     // 使用设备族对象身份；列表变化不会把旧下标解释为另一台设备。
-    Label { text: qsTr("云台（单选）"); font.bold: true; Layout.topMargin: 4 }
+    Label { text: qsTr("转台（单选）"); font.bold: true; Layout.topMargin: 4 }
 
     Repeater {
         model: root.settings.gimbals
