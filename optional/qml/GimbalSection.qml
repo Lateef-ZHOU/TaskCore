@@ -27,7 +27,7 @@ Section {
 
     // 每列依次为标题、实测读数、目标草稿；仅编辑完成提交同坐标系的两轴。
     ReadoutRow {
-        Readout {
+        ReadoutField {
             id: pan
             caption: qsTr("转台水平")
             RealField {
@@ -42,7 +42,7 @@ Section {
                 }
             }
         }
-        Readout {
+        ReadoutField {
             id: tilt
             caption: qsTr("转台俯仰")
             RealField {
@@ -57,7 +57,7 @@ Section {
                 }
             }
         }
-        Readout {
+        ReadoutField {
             id: azimuth
             caption: qsTr("世界方位")
             RealField {
@@ -73,7 +73,7 @@ Section {
                 }
             }
         }
-        Readout {
+        ReadoutField {
             id: elevation
             caption: qsTr("世界高度")
             RealField {
