@@ -23,7 +23,6 @@ Section {
     PathField {
         title: qsTr("选择保存目录")
         value: root.settings.saveDir
-        text: String(root.settings.saveDir)
         onCommitted: function (dir) {
             root.settings.saveDir = dir;
         }

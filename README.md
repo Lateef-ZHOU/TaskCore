@@ -148,3 +148,8 @@ TaskPlanView 的普通行距采用 FormStyle；运行信息用 InfoRow，拿锁�
 主程序 Windows 增量构建及八秒冒烟通过；本地固定配套 UICore，未推送。
 
 2026-11-05 输入宽度整理：DAQControl 删除累积输入的局部 preferredWidth=80，由 FieldRow 分配空间；国耀独立“下发”按钮、输入校验与发令逻辑保持。同步 UICore 本地依赖；主程序 Windows 增量构建及八秒冒烟通过，未推送。
+## 保存目录显示（2026-11-05）
+
+单卡控制与任务落盘区只向 PathField 交 URL，不再把 URL 字符串绑定为显示文字；本机路径转换由 UICore 负责，业务目录值与提交行为不变。
+
+验证：2026-11-05 Windows Qt 6.11.2 / MSVC 增量构建通过；UICore CTest 3/3、ChartCore nonuniform 1/1、主程序八秒桌面冒烟及四窗装配通过。装配检查覆盖三规格、三通道的18张初始风速/CNR图的内部及分段门位悬停。未连接硬件、未推送。

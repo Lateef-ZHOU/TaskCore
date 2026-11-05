@@ -61,7 +61,6 @@ Section {
     PathField {
         title: qsTr("选择保存目录")
         value: root.acquisition.saveDir
-        text: root.acquisition.saveDir.toString()
         onCommitted: function (dir) {
             root.acquisition.saveDir = dir;
         }
