@@ -49,7 +49,7 @@ public:
     [[nodiscard]] static QVariantMap settingsParameters()
     {
         return {{"settleMin", kSettleMin}, {"settleMax", kSettleMax}, {"settleDefault", kSettleMin},
-                {"accumMin", 1}, {"accumMax", 3600}, {"accumDefault", 10},
+                {"accumMin", 1}, {"accumMax", 3600}, {"accumDefault", 1},
                 {"speedMin", 0.1}, {"speedMax", 360.0}, {"speedDefault", 10.0}, {"saveDirDefault", QUrl::fromLocalFile(QDir::currentPath())}};
     }
 
