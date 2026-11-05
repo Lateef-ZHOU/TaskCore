@@ -81,7 +81,7 @@ RowLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.horizontalStretchFactor: 3
-        spacing: 6
+        spacing: FormStyle.rowSpacing
 
         Subheading {
             text: qsTr("波束罗盘")
@@ -120,7 +120,7 @@ RowLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.horizontalStretchFactor: 2
-        spacing: 6
+        spacing: FormStyle.rowSpacing
 
         Subheading {
             text: qsTr("计划表")
@@ -218,67 +218,48 @@ RowLayout {
             Layout.topMargin: 6
         }
 
-        GridLayout {
+        ColumnLayout {
             Layout.fillWidth: true
-            columns: 2
-            columnSpacing: 12
-            rowSpacing: 4
+            spacing: FormStyle.rowSpacing
 
-            Name {
-                text: qsTr("状态")
-            }
+            // 状态圆点属于任务业务，其名称列与普通信息行对齐。
             RowLayout {
-                spacing: 6
                 Layout.fillWidth: true
-                // ● 运行中是任务色、空闲是灰
+                spacing: FormStyle.columnSpacing
+                FormLabel {
+                    text: qsTr("状态")
+                    color: palette.placeholderText
+                    Layout.fillWidth: false
+                    Layout.minimumWidth: FormStyle.labelWidth
+                    Layout.preferredWidth: FormStyle.labelWidth
+                    Layout.maximumWidth: FormStyle.labelWidth
+                }
                 Label {
                     text: "●"
                     color: page.task.running ? Theme.task : palette.placeholderText
                 }
-                Label {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
+                FormLabel {
                     text: page.task.beamText ? page.task.beamText + " · " + page.task.phaseText : page.task.phaseText
                 }
             }
-
-            Name {
-                text: qsTr("已采集")
-            }
-            Label {
-                Layout.fillWidth: true
+            InfoRow {
+                caption: qsTr("已采集")
                 text: page.task.deliveredText
             }
-
-            Name {
-                text: qsTr("拿锁范围")
-            }
-            Label {
-                Layout.fillWidth: true
+            InfoRow {
+                caption: qsTr("拿锁范围")
                 text: page.task.scopeText
-                wrapMode: Text.Wrap
-                Layout.preferredWidth: 1 // 换行文字的 implicitWidth 是「整段不折行」的宽度，会顶爆列宽
+                multiline: true
             }
-
-            Name {
-                text: qsTr("开始于")
-            }
-            Label {
-                Layout.fillWidth: true
+            InfoRow {
+                caption: qsTr("开始于")
                 text: page.task.sinceText
             }
         }
     }
 
-    component Cell: Label {
-        Layout.fillWidth: true
+    component Cell: FormLabel {
         Layout.preferredWidth: 60 // 等宽平分，别虚报（理由见 FieldStrip.qml 头注）
         horizontalAlignment: Text.AlignHCenter
-        elide: Text.ElideRight
-    }
-
-    component Name: Label {
-        color: palette.placeholderText
-        Layout.preferredWidth: 70
     }
 }

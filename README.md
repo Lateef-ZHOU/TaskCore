@@ -140,3 +140,9 @@ GMBCollector::onFeed 接收 optional<PanTiltModel> 的 const 引用，在实际�
 ### 2026-11-05 公共视觉与连接布局
 
 说明与小标题使用 UICore HintText/Subheading；删除无调用方的 PcapCard。任务计划、启动参数与业务逻辑保持。 本轮仅本地整理，未推送；Windows 集成验证记录见主程序维护操作。
+
+### 2026-11-05 任务预览文字统一
+
+TaskPlanView 的普通行距采用 FormStyle；运行信息用 InfoRow，拿锁范围按值列宽度换行，状态圆点仍由任务页负责。五列计划表的 Cell 复用 FormLabel 的省略和悬停规则。表格结构、当前束高亮、双区布局与运行小标题前留白不变，预览计算和任务业务未改。
+
+主程序 Windows 增量构建及八秒冒烟通过；本地固定配套 UICore，未推送。
