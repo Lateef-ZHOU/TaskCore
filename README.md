@@ -133,3 +133,5 @@ GMB/DAQ 的 QML device 属性由模板层直接交出具体 Core 的 QObject 指
 GMBCollector::onFeed 接收 optional<PanTiltModel> 的 const 引用，在实际读取角度时取值。空输入由 DeviceCore 的公共 feed 拦截；到位、驻留、重试和消费语义不变。
 
 本轮仅本地整理，不推送；集成验证见主程序维护记录。
+
+2026-11-05 表单统一：转台状态改用 UICore ReadoutRow/Readout，运行控制采用宽标签预设，采集控制的行列间距采用 FormStyle。保留官邸数据、定位操作和既定分组。主程序 Windows 增量构建与八秒离屏冒烟通过；固定 UICore 本地提交，本轮不推送。

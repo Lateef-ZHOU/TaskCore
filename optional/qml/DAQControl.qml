@@ -13,10 +13,10 @@ Section {
     default property alias modelContent: modelFields.data
     title: qsTr("设备控制")
 
-    ColumnLayout { id: modelFields; Layout.fillWidth: true; spacing: 8 }
+    ColumnLayout { id: modelFields; Layout.fillWidth: true; spacing: FormStyle.rowSpacing }
     RowLayout {
         Layout.fillWidth: true
-        spacing: 8
+        spacing: FormStyle.columnSpacing
         FieldRow {
             Layout.fillWidth: true
             label: qsTr("累积时间（s）")

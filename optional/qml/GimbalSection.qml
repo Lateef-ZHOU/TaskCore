@@ -25,37 +25,11 @@ Section {
         return (v === undefined || isNaN(v)) ? "—" : v.toFixed(2) + "°"
     }
 
-    // ── 实时角度：**四个读数并排一行**（用户定：右栏够宽，别占两行）──
-    // 四列等宽，每列「上名目 + 下读数」。
-    // 纯数字读数使用等宽字体，避免数值变化时字符位置抖动。
-    component Readout: Label {
-        color: palette.placeholderText
-        Layout.fillWidth: true
-        Layout.preferredWidth: 64 // 等宽平分，别虚报（理由见 FieldStrip.qml 头注）
-        elide: Text.ElideRight
-    }
-    component ReadoutValue: Label {
-        text: "—"
-        font.family: "Consolas"
-        font.pointSize: 13
-        Layout.fillWidth: true
-        Layout.preferredWidth: 64 // 同上，与名目列同宽
-    }
-
-    GridLayout {
-        Layout.fillWidth: true
-        columns: 4
-        columnSpacing: 10
-        rowSpacing: 2
-
-        Readout { text: qsTr("转台水平") }
-        Readout { text: qsTr("转台俯仰") }
-        Readout { text: qsTr("世界方位") }
-        Readout { text: qsTr("世界高度") }
-        ReadoutValue { id: pan }
-        ReadoutValue { id: tilt }
-        ReadoutValue { id: azimuth }
-        ReadoutValue { id: elevation }
+    ReadoutRow {
+        Readout { id: pan; caption: qsTr("转台水平") }
+        Readout { id: tilt; caption: qsTr("转台俯仰") }
+        Readout { id: azimuth; caption: qsTr("世界方位") }
+        Readout { id: elevation; caption: qsTr("世界高度") }
     }
 
     Connections {

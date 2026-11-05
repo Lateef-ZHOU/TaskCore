@@ -12,7 +12,7 @@ Section {
     title: qsTr("运行控制")
 
     FieldRow {
-        labelWidth: 160
+        wideLabel: true
         label: qsTr("停稳等待（s）")
         IntField {
             Layout.fillWidth: true
@@ -26,7 +26,7 @@ Section {
         }
     }
     FieldRow {
-        labelWidth: 160
+        wideLabel: true
         label: qsTr("累积时间（s，各卡）")
         IntField {
             Layout.fillWidth: true
@@ -41,7 +41,7 @@ Section {
     }
 
     FieldRow {
-        labelWidth: 160
+        wideLabel: true
         label: qsTr("任务水平速度（°/s）")
         RealField {
             Layout.fillWidth: true
@@ -51,7 +51,7 @@ Section {
         }
     }
     FieldRow {
-        labelWidth: 160
+        wideLabel: true
         label: qsTr("任务俯仰速度（°/s）")
         RealField {
             Layout.fillWidth: true
