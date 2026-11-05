@@ -1,4 +1,4 @@
-// 采集卡族公共控制；型号只补充内容和是否需要单独下发累积时间。
+// 采集卡族公共控制；型号只补充内容和是否在编辑完成时下发累积时间。
 import QtQuick
 import Lidar.UI
 import QtQuick.Controls
@@ -18,31 +18,20 @@ Section {
         Layout.fillWidth: true
         spacing: FormStyle.rowSpacing
     }
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: FormStyle.columnSpacing
-        FieldRow {
+    FieldRow {
+        label: qsTr("累积时间（s）")
+        IntField {
             Layout.fillWidth: true
-            label: qsTr("累积时间（s）")
-            IntField {
-                Layout.fillWidth: true
-                minimum: root.acquisition.acquisitionParameters.accumMin
-                maximum: root.acquisition.acquisitionParameters.accumMax
-                value: root.acquisition.accum
-                onCommitted: function (v) {
-                    if (v === root.acquisition.accum)
-                        return;
+            minimum: root.acquisition.acquisitionParameters.accumMin
+            maximum: root.acquisition.acquisitionParameters.accumMax
+            value: root.acquisition.accum
+            onCommitted: function (v) {
+                if (v !== root.acquisition.accum) {
                     root.acquisition.accum = v;
                     root.acquisition.logMessage(qsTr("累积时间（s）：%1").arg(v));
                 }
-            }
-        }
-        Button {
-            visible: root.sendParameters
-            text: qsTr("下发")
-            onClicked: {
-                if (root.device.sendParams(root.acquisition.accum))
-                    root.acquisition.logMessage(qsTr("已下发累积时间 %1 秒").arg(root.acquisition.accum));
+                if (root.sendParameters)
+                    root.device.sendParams(v);
             }
         }
     }

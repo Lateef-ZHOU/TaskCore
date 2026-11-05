@@ -1,4 +1,4 @@
-// GimbalSection —— 云台族共享的「状态与定位」内容；官邸随模板交入设备和固定行程。
+// GimbalSection —— 转台族共享的「状态与定位」内容；官邸随模板交入设备和固定行程。
 //
 // 可选参考分区：实时角度、安装标定、两种坐标系定位与停止；官邸可以自行提供其他界面。
 // 具体型号动作由官邸单独组织，不要求继承固定的设备族页面。
@@ -25,22 +25,69 @@ Section {
         return (v === undefined || isNaN(v)) ? "—" : v.toFixed(2) + "°";
     }
 
+    // 每列依次为标题、实测读数、目标草稿；仅编辑完成提交同坐标系的两轴。
     ReadoutRow {
         Readout {
             id: pan
             caption: qsTr("转台水平")
+            RealField {
+                id: tPan
+                Layout.fillWidth: true
+                minimum: root.panMin
+                maximum: root.panMax
+                value: root.panMin
+                onCommitted: function (v) {
+                    tPan.value = v;
+                    root.device.issueGoTo(tPan.value, tTilt.value, root.settings.moveParameters());
+                }
+            }
         }
         Readout {
             id: tilt
             caption: qsTr("转台俯仰")
+            RealField {
+                id: tTilt
+                Layout.fillWidth: true
+                minimum: root.tiltMin
+                maximum: root.tiltMax
+                value: root.tiltMin
+                onCommitted: function (v) {
+                    tTilt.value = v;
+                    root.device.issueGoTo(tPan.value, tTilt.value, root.settings.moveParameters());
+                }
+            }
         }
         Readout {
             id: azimuth
             caption: qsTr("世界方位")
+            RealField {
+                id: tAz
+                Layout.fillWidth: true
+                minimum: 0
+                maximum: 360
+                value: 0
+                onCommitted: function (v) {
+                    tAz.value = v;
+                    const pose = root.device.mounting.gimbalAngles(tAz.value, tEl.value);
+                    root.device.issueGoTo(pose.pan, pose.tilt, root.settings.moveParameters());
+                }
+            }
         }
         Readout {
             id: elevation
             caption: qsTr("世界高度")
+            RealField {
+                id: tEl
+                Layout.fillWidth: true
+                minimum: -180
+                maximum: 180
+                value: 0
+                onCommitted: function (v) {
+                    tEl.value = v;
+                    const pose = root.device.mounting.gimbalAngles(tAz.value, tEl.value);
+                    root.device.issueGoTo(pose.pan, pose.tilt, root.settings.moveParameters());
+                }
+            }
         }
     }
 
@@ -123,97 +170,6 @@ Section {
     }
     HintText {
         text: qsTr("改动即生效，不必另按设定。")
-    }
-
-    // ── 前往云台系：两轴一起 ──
-    Subheading {
-        text: qsTr("前往转台系")
-        Layout.topMargin: 8
-    }
-    // **C++ 侧零存储**：这两个是一次性动作的入参，按「页面重建后该不该还在 → 不该」的判据就住界面，
-    // 点按钮时当实参递下去。
-    // **谁持值谁回写**：committed 只是"新的合法值出现了"这条通知，它不替人改 value。
-    // 初值走 value 绑定而不是 Component.onCompleted —— 后者在实例上再写一份会**覆盖**
-    // ValueField 自带的那份（同一个附加属性、同一个处理槽）；绑定在首次提交时被赋值打断，
-    // 那正是"此后归界面自己管"的意思。
-    FieldStrip {
-        FieldStrip.Col {
-            label: qsTr("水平角（°）")
-            RealField {
-                id: tPan
-                Layout.fillWidth: true
-                minimum: root.panMin
-                maximum: root.panMax
-                value: root.panMin
-                onCommitted: function (v) {
-                    tPan.value = v;
-                }
-            }
-        }
-        FieldStrip.Col {
-            label: qsTr("俯仰角（°）")
-            RealField {
-                id: tTilt
-                Layout.fillWidth: true
-                minimum: root.tiltMin
-                maximum: root.tiltMax
-                value: root.tiltMin
-                onCommitted: function (v) {
-                    tTilt.value = v;
-                }
-            }
-        }
-    }
-    Button {
-        Layout.fillWidth: true
-        text: qsTr("前往转台角")
-        onClicked: {
-            if (root.device.issueGoTo(tPan.value, tTilt.value, root.settings.moveParameters()))
-                root.device.device.logMessage(qsTr("已下发：前往转台角（水平 %1°，俯仰 %2°）").arg(tPan.value.toFixed(2)).arg(tTilt.value.toFixed(2)));
-        }
-    }
-
-    // ── 前往世界系：经族口 gimbalOf 减安装标定 + 逆运动学；两个角都收整圈，上下限写死，初值水平正北 ──
-    Subheading {
-        text: qsTr("前往世界系")
-        Layout.topMargin: 8
-    }
-    FieldStrip {
-        FieldStrip.Col {
-            label: qsTr("世界方位（°）")
-            RealField {
-                id: tAz
-                Layout.fillWidth: true
-                minimum: 0
-                maximum: 360
-                value: 0
-                onCommitted: function (v) {
-                    tAz.value = v;
-                }
-            }
-        }
-        FieldStrip.Col {
-            label: qsTr("世界高度（°）")
-            RealField {
-                id: tEl
-                Layout.fillWidth: true
-                minimum: -180
-                maximum: 180
-                value: 0
-                onCommitted: function (v) {
-                    tEl.value = v;
-                }
-            }
-        }
-    }
-    Button {
-        Layout.fillWidth: true
-        text: qsTr("前往世界角")
-        onClicked: {
-            const pose = root.device.mounting.gimbalAngles(tAz.value, tEl.value);
-            if (root.device.issueGoTo(pose.pan, pose.tilt, root.settings.moveParameters()))
-                root.device.device.logMessage(qsTr("已下发：前往世界角（方位 %1°，高度 %2°） → 转台（水平 %3°，俯仰 %4°）").arg(tAz.value.toFixed(2)).arg(tEl.value.toFixed(2)).arg(pose.pan.toFixed(2)).arg(pose.tilt.toFixed(2)));
-        }
     }
 
     Button {
