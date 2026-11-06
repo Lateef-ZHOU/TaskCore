@@ -10,7 +10,7 @@ endif()
 if(NOT TARGET Lidar::ChartCore)
     FetchContent_Declare(lidar_chartcore
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/ChartCore.git
-        GIT_TAG c5cd5088569675e0508015820f642e32efff0e1c)
+        GIT_TAG d69806723bfb77e362601edbeb918e3a69e34777)
     FetchContent_MakeAvailable(lidar_chartcore)
 endif()
 set(import_paths)
