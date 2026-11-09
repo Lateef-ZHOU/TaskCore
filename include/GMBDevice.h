@@ -34,19 +34,15 @@ struct GMBMoveParameters
     }
 };
 
-// 云台族定义标准能力；模板层持有唯一安装姿态及具体 Device 运行机制。
-// 编排只持族引用，通过 device() 使用锁，不认识具体 Handle 或 Collector。
-class GMBDeviceBase : public QObject
+// 云台族定义标准能力；纯 C++ 旁支，不继承 QObject（唯一 QObject 来自末端继承的 Handle）。
+// 模板层同时继承具体 Device 与本类，持有唯一安装姿态；编排只持族引用，通过 device() 使用锁，
+// 不认识具体 Handle 或 Collector。Qt 属性、信号和 QML 入口由末端官邸声明。
+class GMBDeviceBase
 {
-    Q_OBJECT
-    Q_PROPERTY(QObject *device READ deviceObject CONSTANT)
-    Q_PROPERTY(WorldModel mounting READ mounting NOTIFY mountingChanged)
-    Q_PROPERTY(bool slipRing READ hasSlipRing CONSTANT)
 public:
-    explicit GMBDeviceBase(QObject *parent = nullptr) : QObject(parent) {}
-    ~GMBDeviceBase() override = default;
-    // Qt 属性适配由模板层以具体 Core 类型实现，不经 DeviceBase 暴露 QObject。
-    [[nodiscard]] virtual QObject *deviceObject() noexcept = 0;
+    GMBDeviceBase() = default;
+    Q_DISABLE_COPY_MOVE(GMBDeviceBase)
+    virtual ~GMBDeviceBase() = default;
 
     // 本族的收集器基（`RunAwaiter<GMBDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
@@ -68,7 +64,7 @@ public:
     static constexpr std::chrono::milliseconds kPcapReadTimeout{20};
     static constexpr int kPcapKernelBufferBytes = 1024 * 1024;
 
-    // 借出本族持有的机制对象，用于锁与状态读取。
+    // 同一对象的机制面：模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
     // ── 这台云台的方位轴上有没有滑环（铭辰有、视强没有）───────────────
@@ -151,7 +147,8 @@ public:
         return PanTiltModel::fromOrientation(mounting().toOrientation().inverse() * worldTarget.toOrientation());
     }
 
-    Q_INVOKABLE virtual bool withinTravel(double pan, double tilt) const = 0;
+    // 预览用的型号行程判据；末端以 Q_INVOKABLE 覆写供 QML 调用。
+    [[nodiscard]] virtual bool withinTravel(double pan, double tilt) const = 0;
 
     // 启动一只本族的斗（等待器在挂起成立后调）。返 false = 设备不收（空斗 / 被占 / 未连 / 正忙）。
     // **本口是协议转换，不是薄转发**：机制层的启动口按 `Device` 的模板实参说话，而编排层只认
@@ -161,50 +158,43 @@ public:
                                      const std::shared_ptr<const DeviceLock> &lock) = 0;
 
     // 停机 / 撤单（等待器析构时对未结的单调）。**与 begin 同一笔账**：编排层只认族基，而停机的实现住机制层
-    // Device<>——族基组合持有机制对象，故本族声明停机虚口，由族模板层转到机制层。
+    // Device<>——族基不认识机制层，故本族声明停机虚口，由同时继承两者的模板层转到 Device::stop。
     // 可反复调用（幂等）：对交付 / 取消 / 拒收回滚三条出路一视同仁。
     virtual void stop(const std::shared_ptr<const DeviceLock> &lock) = 0;
 
-Q_SIGNALS:
-    void mountingChanged(const WorldModel &mounting);
-    void anglesReady(RxTime at, double pan, double tilt, double azimuth, double elevation);
-
-protected:
-    virtual void PreDestruction() noexcept = 0;
-
+    // 通知契约：末端在 Q_SIGNALS 中覆写，由 moc 提供实现；均在主线程发出。
+    virtual void mountingChanged(const WorldModel &mounting) = 0;
+    virtual void anglesReady(RxTime at, double pan, double tilt, double azimuth, double elevation) = 0;
 };
 
-// 模板层完成具体 Collector 验型及收包接入；型号只解析协议、检查行程和组装命令。
-template <typename Core>
-    requires GMBCollectorLike<typename Core::CollectorType>
-class GMBDevice : public GMBDeviceBase
+// 模板层继承具体 Device 与族基，完成具体 Collector 验型及收包接入；型号只解析协议、检查行程和组装命令。
+// 本层没有需要单独清理的线程源，不声明预析构；末端析构首句调用 Device 的预析构链。
+template <HandleLike HandleT, GMBCollectorLike CollectorT>
+class GMBDevice : public Device<HandleT, CollectorT>, public GMBDeviceBase
 {
-    using CollectorT = typename Core::CollectorType;
+    using DeviceT = Device<HandleT, CollectorT>;
 protected:
-    void PreDestruction() noexcept override { delete device_; }
+    GMBDevice(QString name, QString subtitle, QObject *parent)
+        : DeviceT(std::move(name), std::move(subtitle), makeOnStream(this), {}, parent) {}
 
 public:
-    GMBDevice(QString name, QString subtitle, QObject *parent = nullptr)
-        : GMBDeviceBase(parent), device_(new Core(std::move(name), std::move(subtitle), makeOnStream(this), {}, this))
-    {
-        static_assert(DeviceLifecycleLayer<GMBDevice, decltype(&GMBDevice::PreDestruction)>);
-    }
+    ~GMBDevice() override = default;
 
-    [[nodiscard]] QObject *deviceObject() noexcept final { return &device(); }
-    [[nodiscard]] Core &device() noexcept final { return *device_; }
-    [[nodiscard]] const Core &device() const noexcept { return *device_; }
+    // 协变返回自身的机制层基类：族引用只见 DeviceBase，持具体类型者可用完整 Device 接口。
+    [[nodiscard]] DeviceT &device() noexcept final { return *this; }
+    [[nodiscard]] const DeviceT &device() const noexcept { return *this; }
 
     [[nodiscard]] const WorldModel &mounting() const noexcept final { return mounting_; }
     [[nodiscard]] bool setMounting(const WorldModel &zeroPose,
                                    const std::shared_ptr<const DeviceLock> &lock) final
     {
-        if (!device().lockMatches(lock))
+        if (!this->lockMatches(lock))
         {
-            Q_EMIT device().logMessage(QStringLiteral("设备正被占用，安装标定未写入"));
+            Q_EMIT this->logMessage(QStringLiteral("设备正被占用，安装标定未写入"));
             return false;
         }
         mounting_ = zeroPose;
-        Q_EMIT mountingChanged(mounting_);
+        Q_EMIT this->mountingChanged(mounting_);
         return true;
     }
 
@@ -228,7 +218,7 @@ public:
         const auto parameters = GMBMoveParameters::fromQml(values);
         if (!parameters)
         {
-            Q_EMIT device().logMessage(QStringLiteral("转台运动参数无效，未下发"));
+            Q_EMIT this->logMessage(QStringLiteral("转台运动参数无效，未下发"));
             return false;
         }
         return issueGoTo(PanTiltModel(pan, tilt), *parameters);
@@ -242,19 +232,20 @@ public:
         const auto typed = std::dynamic_pointer_cast<const CollectorT>(proto);
         if (!typed)
         {
-            Q_EMIT device().logMessage(QStringLiteral("转台请求的 Collector 型号不匹配，未启动"));
+            Q_EMIT this->logMessage(QStringLiteral("转台请求的 Collector 型号不匹配，未启动"));
             return false;
         }
-        return device().start(typed, std::move(done), lock);
+        return DeviceT::start(typed, std::move(done), lock);
     }
 
     // 停机：族基的纯虚 stop 在此落地（final），实现就是机制层 Device::stop（它不是虚的，停机虚口只在族基）。
-    void stop(const std::shared_ptr<const DeviceLock> &lock) final { device().stop(lock); }
+    void stop(const std::shared_ptr<const DeviceLock> &lock) final { DeviceT::stop(lock); }
 
 private:
 
-    // Device 独持此回调。解析在收包线程；安装姿态只在主线程读取和换算。
-    static typename Core::OnStream makeOnStream(GMBDevice *self)
+    // Device 独持此回调；构造时只记下 this，收包开始前不会调用。
+    // 解析在收包线程；安装姿态只在主线程读取和换算。
+    static typename DeviceT::OnStream makeOnStream(GMBDevice *self)
     {
         return [self](const QByteArray &raw, const RxTime at) -> std::optional<PanTiltModel> {
             const auto pose = self->decodeStream(raw);
@@ -288,9 +279,6 @@ private:
     [[nodiscard]] virtual bool issueGoTo(const PanTiltModel &target, const GMBMoveParameters &parameters) = 0;
     [[nodiscard]] virtual bool issueStop() = 0;
 
-    // QObject 父子关系兜底构造失败；正常预析构先显式销毁，保证回调依赖仍在。
-    // 删除期间保留指针值，关闭同步撤单仍可访问 Device；没有可继续使用的预析构阶段。
-    Core *const device_;
     // 唯一安装标定；主线程读写，族基通过 mounting() 使用。
     WorldModel mounting_;
 };

@@ -23,7 +23,7 @@ Section {
             autoExclusive: false
             required property var modelData
             Layout.fillWidth: true
-            text: modelData ? modelData.device.displayName + " · " + modelData.device.subtitle : ""
+            text: modelData ? modelData.displayName + " · " + modelData.subtitle : ""
             onSelectedChanged: checked = selected
             Component.onCompleted: checked = selected
             onClicked: {

@@ -123,7 +123,7 @@ Section {
         }
         function apply() {
             if (root.device.setMounting(az.value, el.value, roll.value))
-                root.device.device.logMessage(qsTr("安装标定已设定：方位 %1°，高度 %2°，横滚 %3°").arg(az.value.toFixed(2)).arg(el.value.toFixed(2)).arg(roll.value.toFixed(2)));
+                root.device.logMessage(qsTr("安装标定已设定：方位 %1°，高度 %2°，横滚 %3°").arg(az.value.toFixed(2)).arg(el.value.toFixed(2)).arg(roll.value.toFixed(2)));
         }
         FieldStrip.Col {
             label: qsTr("零位方位角（°）")
@@ -178,7 +178,7 @@ Section {
         text: qsTr("立即停止")
         onClicked: {
             if (root.device.issueStop())
-                root.device.device.logMessage(qsTr("已下发：停止"));
+                root.device.logMessage(qsTr("已下发：停止"));
         }
     }
 }

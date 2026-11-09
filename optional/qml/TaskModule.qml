@@ -11,9 +11,10 @@ ModulePage {
     mainMinWidth: 560
     mainMargin: 12
 
-    required property list<GMBDeviceBase> gimbals
+    // 云台族基不是 QObject，名单直接持有云台设备对象；登记时由 C++ 验族。
+    required property list<QtObject> gimbals
     required property list<DAQDeviceBase> cards
-    property GMBDeviceBase gimbal: gimbals.length ? gimbals[0] : null
+    property QtObject gimbal: gimbals.length ? gimbals[0] : null
     property list<DAQDeviceBase> pickedCards: []
     property int accum: settingsParameters.accumDefault
     property int settle: settingsParameters.settleDefault

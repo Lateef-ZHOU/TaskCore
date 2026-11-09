@@ -8,7 +8,7 @@ ModulePage {
     readonly property string kind: "task"
     required property var settingsParameters
     required property Section planPage
-    required property GMBDeviceBase gimbal
+    required property QtObject gimbal // 云台设备本身；族基不是 QObject，登记时由 C++ 验族
     required property DAQDeviceBase card
     required property int accum
     required property int settle

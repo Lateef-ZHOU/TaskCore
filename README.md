@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-09 用户定：GMBDeviceBase 改为纯 C++ 旁支，不继承 QObject；`GMBDevice<HandleT, CollectorT>` 同时继承 `Device<HandleT, CollectorT>` 与族基，`device()` 协变返回自身的 Device 基类，族基保留纯虚 `device()` 供编排取 DeviceBase。mountingChanged/anglesReady 改为纯虚契约，由末端以 Q_SIGNALS 覆写；删除 `device` Q_PROPERTY、`deviceObject()` 与 GMBDeviceBase 的 QML 登记。TaskBase 的 addGimbal/start 接收 QObject* 并交叉转换验族，非云台拒收；TaskModule/SimOnlyTaskModule 的云台类型改为 QtObject。DAQ 族本轮不变。task_ui_smoke 改为触发按钮实际绑定的 Action（原先只发 clicked，Action 不执行，测试此前已失败）。验证：Windows 全选项独立构建零警告、CTest 4/4。
+
 协程与等待器、GMB/DAQ 设备族能力、族 Collector 和 DAQ 处理线程契约。Windows / Linux，C++20，CMake ≥ 3.28。
 
 ## 边界与依赖
@@ -20,7 +22,7 @@
 
 消费者必须在 FetchContent_MakeAvailable 前选择开关。核心目标不反向链接附加模块。界面消费者链接 LidarTaskUIplugin 并显式 `Q_IMPORT_QML_PLUGIN(LidarTaskUIPlugin)`（动态 Qt 下的静态模块也需要）；同时导入 UICore/ChartCore 插件。各模块输出目录的两级父目录用于 QML 工具 IMPORT_PATH。
 
-TaskModule 接收 `list<GMBDeviceBase>` 和 `list<DAQDeviceBase>`，不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经族基 collectorFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，锁/完成链同步取消；QObject 销毁通知移除登记，排队收尾保留。
+TaskModule 接收 `list<QtObject>`（云台设备本身）和 `list<DAQDeviceBase>`，不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经族基 collectorFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，锁/完成链同步取消；QObject 销毁通知移除登记，排队收尾保留。
 
 这些目标均是可选实现，不要求任务官邸继承 TaskBase 或 TaskModule。三个具体计划和协程不在本库，官邸可以只使用核心能力自行编排。附加保存继续使用独立线程，不反向访问日志对象，不增加退出排空。
 

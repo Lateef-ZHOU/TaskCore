@@ -54,14 +54,17 @@ public:
     }
 
     // 任务只登记族对象身份；运行参数由任务官邸按次提交。
-    Q_INVOKABLE bool addGimbal(GMBDeviceBase *gmb)
+    // 云台族基不是 QObject：QML 交入设备对象本身，在此交叉转换验族，非云台拒收。
+    Q_INVOKABLE bool addGimbal(QObject *object)
     {
+        auto *gmb = dynamic_cast<GMBDeviceBase *>(object);
         if (!gmb || std::ranges::find(gimbals_, gmb) != gimbals_.end()) return false;
         gimbals_.push_back(gmb);
-        connect(gmb->deviceObject(), &QObject::destroyed, this, [this, gmb] {
+        // destroyed 时族基子对象已析构，此处只比较指针；运行借用已由设备预析构的锁铃收回。
+        connect(object, &QObject::destroyed, this, [this, gmb, object] {
             cancelRun();
             std::erase(gimbals_, gmb);
-            Q_EMIT deviceRemoved(gmb);
+            Q_EMIT deviceRemoved(object);
             refreshRunState();
         });
         return true;
@@ -84,11 +87,12 @@ public:
     [[nodiscard]] QDateTime startedAt() const { return startedAt_; }
 
 public Q_SLOTS:
-    bool start(GMBDeviceBase *gmb, const QList<DAQDeviceBase *> &cards, QList<double> worldAzimuths,
+    bool start(QObject *gimbal, const QList<DAQDeviceBase *> &cards, QList<double> worldAzimuths,
                const double worldElevation, const int accumSec, const int settleSec,
                const bool save, const QUrl &folder, const QVariantMap &movement)
     {
         if (running()) { Q_EMIT logMessage(QStringLiteral("任务正在进行中")); return false; }
+        auto *gmb = dynamic_cast<GMBDeviceBase *>(gimbal);
         if (!gmb || std::ranges::find(gimbals_, gmb) == gimbals_.end()) {
             Q_EMIT logMessage(QStringLiteral("没有可用的已登记转台")); return false;
         }
@@ -226,7 +230,8 @@ private:
     [[nodiscard]] int currentBeam() const { return running() ? beam_ : -1; }
 
     static constexpr int kSettleMin = 2, kSettleMax = 600;
-    // 机制对象先同步撤单，再由 QObject::destroyed 移除身份；族对象此时仍在。
+    // 机制对象先同步撤单，再由 QObject::destroyed 移除身份。DAQ 族对象此时仍在；
+    // 云台族基与设备是同一对象，destroyed 时已析构，登记表只作指针比较。
     std::vector<GMBDeviceBase *> gimbals_;
     std::vector<DAQDeviceBase *> cards_;
     int beam_ = -1, delivered_ = 0;

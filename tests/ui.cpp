@@ -57,7 +57,10 @@ SimOnlyTaskModule {
         QObject *button = nullptr;
         for (auto *child : simPage->findChildren<QObject *>())
             if (child->property("text").toString() == text) { button = child; break; }
-        if (!button || !QMetaObject::invokeMethod(button, "clicked")) return 4;
+        // 双按钮行由 Action 提交；只发 clicked 信号不会触发 Action，须触发按钮实际绑定的动作。
+        if (!button) return 4;
+        auto *action = button->property("action").value<QObject *>();
+        if (!(action ? QMetaObject::invokeMethod(action, "trigger") : QMetaObject::invokeMethod(button, "clicked"))) return 4;
         if (simPage->property("argumentCount").toInt() != 0) return 5;
     }
     if (simPage->property("starts").toInt() != 1 || simPage->property("stops").toInt() != 1 || warned) return 6;
