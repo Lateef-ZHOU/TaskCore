@@ -177,8 +177,7 @@ public:
             Q_EMIT this->logMessage(QStringLiteral("转台运动参数无效，未下发"));
             return false;
         }
-        const auto parameters = paramsFor(PanTiltModel(pan, tilt), {}, *speeds);
-        return parameters && issueGoTo(*parameters);
+        return issueGoTo(paramsFor(PanTiltModel(pan, tilt), {}, *speeds));
     }
 
     // 按参数直接造出本型号的具体 Collector 交 Device：无原型、无验型、启动时不 makeSelf。
@@ -224,10 +223,10 @@ private:
     // 世界角换算由调用方经 gimbalOf 做完。begin 是公开入口，型号仍以 paramsFor 同一判据复核，不合即返空、拒收。
     [[nodiscard]] virtual std::shared_ptr<CollectorT> makeMoveCollector(const GMBMoveParameters &parameters) const = 0;
 
-    // 手动直发接收已经 paramsFor 规范化的运动参数（目标位形与速度），不造 Collector、不等到位；
+    // 手动直发原样接收 paramsFor 的结果（空 = 型号已拒绝并记录原因），不造 Collector、不等到位；
     // 失败由发现原因的层记录并返回 false，成功只返 true，由 QML 最终调用处记日志。
     // QML 通过官邸的同名 Qt 入口调用；世界角先用安装姿态值换算，不把文案传入设备。
-    [[nodiscard]] virtual bool issueGoTo(const GMBMoveParameters &parameters) = 0;
+    [[nodiscard]] virtual bool issueGoTo(const std::optional<GMBMoveParameters> &parameters) = 0;
     [[nodiscard]] virtual bool issueStop() = 0;
 
     // 唯一安装标定；主线程读写，族基通过 mounting() 使用。
