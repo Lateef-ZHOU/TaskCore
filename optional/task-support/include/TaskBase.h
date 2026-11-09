@@ -57,13 +57,12 @@ public:
     // 云台族基不是 QObject：QML 交入设备对象本身，在此交叉转换验族，非云台拒收。
     Q_INVOKABLE bool addGimbal(QObject *object)
     {
-        auto *gmb = dynamic_cast<GMBDeviceBase *>(object);
-        if (!gmb || std::ranges::find(gimbals_, gmb) != gimbals_.end()) return false;
-        gimbals_.push_back(gmb);
+        if (!dynamic_cast<GMBDeviceBase *>(object) || std::ranges::find(gimbals_, object) != gimbals_.end()) return false;
+        gimbals_.push_back(object);
         // destroyed 时族基子对象已析构，此处只比较指针；运行借用已由设备预析构的锁铃收回。
-        connect(object, &QObject::destroyed, this, [this, gmb, object] {
+        connect(object, &QObject::destroyed, this, [this, object] {
             cancelRun();
-            std::erase(gimbals_, gmb);
+            std::erase(gimbals_, object);
             Q_EMIT deviceRemoved(object);
             refreshRunState();
         });
@@ -72,13 +71,12 @@ public:
     // 采集卡族基同样不是 QObject：QML 交入设备对象本身，在此交叉转换验族，非采集卡拒收。
     Q_INVOKABLE bool addCard(QObject *object)
     {
-        auto *card = dynamic_cast<DAQDeviceBase *>(object);
-        if (!card || std::ranges::find(cards_, card) != cards_.end()) return false;
-        cards_.push_back(card);
+        if (!dynamic_cast<DAQDeviceBase *>(object) || std::ranges::find(cards_, object) != cards_.end()) return false;
+        cards_.push_back(object);
         // destroyed 时族基子对象已析构，此处只比较指针；运行借用已由设备预析构的锁铃收回。
-        connect(object, &QObject::destroyed, this, [this, card, object] {
+        connect(object, &QObject::destroyed, this, [this, object] {
             cancelRun();
-            std::erase(cards_, card);
+            std::erase(cards_, object);
             Q_EMIT deviceRemoved(object);
             refreshRunState();
         });
@@ -95,8 +93,9 @@ public Q_SLOTS:
                const bool save, const QUrl &folder, const QVariantMap &movement)
     {
         if (running()) { Q_EMIT logMessage(QStringLiteral("任务正在进行中")); return false; }
-        auto *gmb = dynamic_cast<GMBDeviceBase *>(gimbal);
-        if (!gmb || std::ranges::find(gimbals_, gmb) == gimbals_.end()) {
+        // 先按身份查登记，只对已登记的活对象交叉转换：调用方可能交来已退场设备的旧指针。
+        auto *gmb = std::ranges::find(gimbals_, gimbal) != gimbals_.end() ? dynamic_cast<GMBDeviceBase *>(gimbal) : nullptr;
+        if (!gmb) {
             Q_EMIT logMessage(QStringLiteral("没有可用的已登记转台")); return false;
         }
         // 停稳与速度在启动时固定；协程逐束以目标位形和它们经官邸 paramsFor 构造运动参数。
@@ -106,8 +105,8 @@ public Q_SLOTS:
         QStringList scope{gmb->device().displayName + QStringLiteral(" · ") + gmb->device().subtitle};
         for (auto *object : cards)
         {
-            auto *card = dynamic_cast<DAQDeviceBase *>(object);
-            if (!card || std::ranges::find(cards_, card) == cards_.end()
+            auto *card = std::ranges::find(cards_, object) != cards_.end() ? dynamic_cast<DAQDeviceBase *>(object) : nullptr;
+            if (!card
                 || std::ranges::any_of(picked, [card](const auto &entry) { return &entry.get() == card; })) {
                 Q_EMIT logMessage(QStringLiteral("采集卡未登记或重复选择，任务未启动")); return false;
             }
@@ -238,10 +237,10 @@ private:
     [[nodiscard]] int currentBeam() const { return running() ? beam_ : -1; }
 
     static constexpr int kSettleMin = 2, kSettleMax = 600;
-    // 机制对象先同步撤单，再由 QObject::destroyed 移除身份。两族族基与设备是同一对象，
-    // destroyed 时已析构，登记表只作指针比较。
-    std::vector<GMBDeviceBase *> gimbals_;
-    std::vector<DAQDeviceBase *> cards_;
+    // 登记表只存设备的 QObject 身份：机制对象先同步撤单，再由 QObject::destroyed 移除身份；
+    // 两族族基与设备是同一对象，destroyed 时族基已析构，登记表只作指针比较、不解引用。
+    std::vector<QObject *> gimbals_;
+    std::vector<QObject *> cards_;
     int beam_ = -1, delivered_ = 0;
     Phase phase_ = Phase::Idle;
     QString scopeText_;
