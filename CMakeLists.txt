@@ -10,6 +10,7 @@ if(NOT TARGET Lidar::DeviceCore OR NOT TARGET Lidar::Algorithm)
     message(FATAL_ERROR "TaskCore requires Lidar::DeviceCore and Lidar::Algorithm")
 endif()
 add_library(LidarTaskCore STATIC
+    include/AcqSaver.h
     include/DAQDevice.h
     include/GMBDevice.h)
 set_target_properties(LidarTaskCore PROPERTIES AUTOMOC ON)
@@ -19,14 +20,10 @@ if(MSVC)
 endif()
 add_library(Lidar::TaskCore ALIAS LidarTaskCore)
 target_include_directories(LidarTaskCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(LidarTaskCore PUBLIC Lidar::DeviceCore Lidar::Algorithm)
+target_link_libraries(LidarTaskCore PUBLIC Lidar::DeviceCore Lidar::Algorithm Boost::circular_buffer)
 
-option(TASKCORE_WITH_DAQ_SAVING "Build the optional LiDAR DAQ file-format helpers" OFF)
 option(TASKCORE_WITH_TASK_SUPPORT "Build the optional acquisition-task business base" OFF)
 option(TASKCORE_WITH_QML "Build optional family controls and task reference pages" OFF)
-if(TASKCORE_WITH_DAQ_SAVING OR TASKCORE_WITH_TASK_SUPPORT OR TASKCORE_WITH_QML)
-    add_subdirectory(optional/daq-saving)
-endif()
 if(TASKCORE_WITH_TASK_SUPPORT OR TASKCORE_WITH_QML)
     add_subdirectory(optional/task-support)
 endif()

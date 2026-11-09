@@ -2,13 +2,11 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
-#include <initializer_list>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QList>
 #include <QTemporaryDir>
 #include <QThread>
 
@@ -37,96 +35,89 @@ QJsonObject readCompleted(const QString &path)
     return {};
 }
 
-void arrayEquals(const QJsonObject &json, const char *key, std::initializer_list<double> expected)
+// 两路：A 已标定（零风速参考在频带内），B 未标定（风速 NaN）。
+class SavedFrame final : public DAQCollector
 {
-    const auto values = json.value(QLatin1String(key)).toArray();
-    check(values.size() == static_cast<qsizetype>(expected.size()), key);
-    qsizetype index = 0;
-    for (const auto value : expected) check(std::abs(values[index++].toDouble() - value) < 1e-6, key);
-}
+public:
+    static std::shared_ptr<const SavedFrame> createPrototype(int seconds, DAQContext context)
+    { return std::shared_ptr<const SavedFrame>(new SavedFrame(seconds, std::move(context))); }
+    std::shared_ptr<SavedFrame> makeSelf() const { return std::shared_ptr<SavedFrame>(new SavedFrame(accumSec(), context())); }
+    QList<QByteArray> buildStart() const override { return {}; }
+    int timeoutMs() const override { return 0; }
+private:
+    SavedFrame(int seconds, DAQContext context)
+        : DAQCollector(std::move(context), seconds, {channel("A", 1.5), channel("B", 99.0)}) {}
+    static DAQChannel channel(const char *name, double zero)
+    {
+        DAQChannel c;
+        c.name = QString::fromLatin1(name);
+        c.rows = 2;
+        c.columns = 4;
+        c.rangeM = {0, 15};
+        c.freqMHz = {0, 1, 2, 3};
+        c.zeroWindMHz = zero;
+        c.metersPerSecondPerMHz = 0.775;
+        return c;
+    }
+    void onFeed(const std::optional<QByteArray> &, RxTime at) override
+    {
+        for (auto &c : *this)
+            c.spectrum = {1, 2, 9, 2, 1, 3, 8, 3};
+        frameTime_ = at;
+        complete();
+    }
+};
+static_assert(DAQCollectorLike<SavedFrame>);
 }
 
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    QTemporaryDir temporary;
-    check(temporary.isValid(), "temporary output directory");
-    const QDir root(temporary.path());
-    const QString session = QStringLiteral("session");
-    const auto at = std::chrono::system_clock::time_point(std::chrono::seconds(100000));
+    QTemporaryDir temp;
+    check(temp.isValid(), "temporary directory unavailable");
+    const QDir root(temp.path());
+    const auto at = std::chrono::system_clock::now();
 
-    // 旧聚合调用仍可直接使用，且不凭空补充均匀距离数据。
-    AcqSaver::saveRadialWind(root, session, "uniform", "frame-time", {{"CDL", {{1, 2}, {3, 4}}}});
-    const auto uniform = readCompleted(root.filePath("Radialwind/session/uniform.txt"));
-    arrayEquals(uniform, "Vrcdl", {1, 2});
-    arrayEquals(uniform, "CNRcdl", {3, 4});
-    check(uniform.size() == 3 && uniform["date"] == "frame-time", "uniform radial format unchanged");
+    // 无朝向帧：朝向写 null，未标定通道的风速写 null，CNR 照常。
+    auto frame = SavedFrame::createPrototype(3, {std::nullopt, root, QStringLiteral("session"), false})->makeSelf();
+    check(frame->feed(QByteArray("x"), at), "frame did not complete");
+    AcqSaver::saveFrame(frame, QStringLiteral("Card"));
+    const auto saved = readCompleted(root.filePath("session/" + AcqSaver::fileStem(at) + ".json"));
+    const auto info = saved.value("frame").toObject();
+    check(info.value("session").toString() == "session" && info.value("frameTime").toString() == AcqSaver::timeStem(at)
+          && info.value("azimuthDeg").isNull() && info.value("elevationDeg").isNull()
+          && !info.value("sync").toBool() && info.value("accumSec").toInt() == 3 && info.value("card").toString() == "Card",
+          "frame information differs");
+    const auto channels = saved.value("channels").toArray();
+    check(channels.size() == 2, "channel count differs");
+    const auto a = channels[0].toObject(), b = channels[1].toObject();
+    check(a.value("name").toString() == "A" && b.value("name").toString() == "B", "channel order or names differ");
+    check(a.value("rangeM").toArray().size() == 2 && a.value("freqMHz").toArray().size() == 4
+          && a.value("zeroWindMHz").toDouble() == 1.5, "channel axes differ");
+    const auto spectrum = a.value("spectrum").toArray();
+    check(spectrum.size() == 2 && spectrum[0].toArray().size() == 4 && spectrum[1].toArray()[2].toDouble() == 8,
+          "spectrum rows differ");
+    check(a.value("radialWind").toArray().size() == 2 && !a.value("radialWind").toArray()[0].isNull(), "calibrated wind missing");
+    check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "uncalibrated wind not null");
 
-    {
-        QVector<AcqSaver::NonuniformRadialChannel> channels{
-            {"ADC0", {12.5, 25, 61.75}, {{1, 2, 3}, {-10, -11, -12}}},
-            {"ADC1", {3, 80}, {{4, 5}, {6, 7}}}
-        };
-        AcqSaver::saveRadialWind(root, session, "irregular", "source-time", channels);
-        // 调用方覆盖和销毁输入，线程仍应持有原份额；各通道可用不同网格。
-        channels[0].ranges[0] = 999;
-        channels[0].data.ws[0] = 999;
-    }
-    const auto radial = readCompleted(root.filePath("Radialwind/session/irregular.txt"));
-    arrayEquals(radial, "Rangeadc0", {12.5, 25, 61.75});
-    arrayEquals(radial, "Vradc0", {1, 2, 3});
-    arrayEquals(radial, "CNRadc0", {-10, -11, -12});
-    arrayEquals(radial, "Rangeadc1", {3, 80});
-    arrayEquals(radial, "Vradc1", {4, 5});
-    arrayEquals(radial, "CNRadc1", {6, 7});
-    check(radial["date"] == "source-time", "radial timestamp preserved");
+    // 风廓线：东风 5 m/s、上升 0.5 m/s → 来向 90°。
+    auto unit = std::make_shared<NonuniformVerticalWindProfileUnit>();
+    unit->at = at;
+    unit->heights = {10, 20};
+    unit->winds = {LinAlg::Vec3(-5, 0, 0.5), LinAlg::Vec3(0, -3, 0)};
+    AcqSaver::saveWindProfiles(frame, {{QStringLiteral("A"), unit}});
+    const auto profile = readCompleted(root.filePath("session/profile_" + AcqSaver::fileStem(at) + ".json"));
+    const auto first = profile.value("channels").toArray()[0].toObject();
+    check(profile.value("frame").toObject().value("session").toString() == "session"
+          && first.value("name").toString() == "A" && first.value("heightM").toArray().size() == 2, "profile layout differs");
+    check(std::abs(first.value("horizontalDirectionDeg").toArray()[0].toDouble() - 90.0) < 1e-3
+          && std::abs(first.value("horizontalSpeed").toArray()[0].toDouble() - 5.0) < 1e-3
+          && std::abs(first.value("verticalSpeed").toArray()[0].toDouble() - 0.5) < 1e-3
+          && std::abs(first.value("horizontalDirectionDeg").toArray()[1].toDouble() - 0.0) < 1e-3,
+          "profile direction or speeds differ");
 
-    {
-        auto frame = std::make_shared<NonuniformVerticalWindProfileUnit>();
-        frame->at = at;
-        frame->heights = {50.5, 80, 220.25};
-        frame->winds = {{3, 4, 1}, {0, -2, -3}, {-4, 0, 2}};
-        AcqSaver::saveWindProfile(NonuniformVerticalWindProfilePtr(std::move(frame)), root, session, "ADC0");
-    }
-    const auto profile = readCompleted(root.filePath("Windprofile/ADC0_session.txt"));
-    arrayEquals(profile, "High", {50.5, 80, 220.25});
-    arrayEquals(profile, "HSpeed", {5, 2, 4});
-    arrayEquals(profile, "VSpeed", {1, -3, 2});
-    arrayEquals(profile, "HDir", {216.8699, 0, 90});
-    const auto expectedTime = QDateTime::fromSecsSinceEpoch(100000).toString("yyyy-MM-dd HH:mm:ss");
-    check(profile["Date"] == expectedTime, "profile uses acquisition time");
-
-    AcqSaver::saveWindProfile(std::make_shared<const VerticalWindProfileUnit>(
-        VerticalWindProfileUnit{at, 50, 30, {{1, 0, 0}, {2, 0, 0}, {3, 0, 0}}}), root, session, "SIM");
-    arrayEquals(readCompleted(root.filePath("Windprofile/SIM_session.txt")), "High", {50, 80, 110});
-
-    // 不等长、重复、逆序、非有限位置在入口拒绝，不能覆盖已有合法文件。
-    for (const auto &ranges : QList<QVector<double>>{{1, 2}, {1, 1, 2}, {2, 1, 3},
-            {1, std::numeric_limits<double>::quiet_NaN(), 3}, {1, 2, std::numeric_limits<double>::infinity()}}) {
-        AcqSaver::saveRadialWind(root, session, "irregular", "invalid",
-            QVector<AcqSaver::NonuniformRadialChannel>{{"ADC0", ranges, {{1, 2, 3}, {4, 5, 6}}}});
-        auto frame = std::make_shared<NonuniformVerticalWindProfileUnit>();
-        frame->at = at;
-        frame->heights.assign(ranges.cbegin(), ranges.cend());
-        frame->winds = {{1, 0, 0}, {2, 0, 0}, {3, 0, 0}};
-        AcqSaver::saveWindProfile(NonuniformVerticalWindProfilePtr(std::move(frame)), root, session, "ADC0");
-    }
-    AcqSaver::saveWindProfile(NonuniformVerticalWindProfilePtr{}, root, session, "ADC0");
-    AcqSaver::saveRadialWind(root, session, "invalid", "invalid",
-        QVector<AcqSaver::NonuniformRadialChannel>{{"ok", {1}, {{2}, {3}}}, {"bad", {1}, {{2}, {}}}});
-    check(!QFile::exists(root.filePath("Radialwind/session/invalid.txt")), "whole group rejected before file creation");
-    check(readCompleted(root.filePath("Radialwind/session/irregular.txt")) == radial, "bad radial cannot overwrite");
-    check(readCompleted(root.filePath("Windprofile/ADC0_session.txt")) == profile, "bad profile cannot overwrite");
-
-    // 单层无需除以 N-1；空数组也保持等长，不制造虚假坐标。
-    AcqSaver::saveWindProfile(std::make_shared<const NonuniformVerticalWindProfileUnit>(
-        NonuniformVerticalWindProfileUnit{at, {99}, {{1, 2, 3}}}), root, session, "single");
-    arrayEquals(readCompleted(root.filePath("Windprofile/single_session.txt")), "High", {99});
-    AcqSaver::saveRadialWind(root, session, "empty", "empty",
-        QVector<AcqSaver::NonuniformRadialChannel>{{"ADC0", {}, {{}, {}}}});
-    const auto empty = readCompleted(root.filePath("Radialwind/session/empty.txt"));
-    arrayEquals(empty, "Rangeadc0", {});
-    arrayEquals(empty, "Vradc0", {});
-    arrayEquals(empty, "CNRadc0", {});
-    std::cout << checks << " saving checks passed\n";
+    // 不落盘：saveRoot 为空时入口直接返回。
+    AcqSaver::saveFrame(SavedFrame::createPrototype(1, {})->makeSelf(), QStringLiteral("Card"));
+    std::cout << "saving checks passed: " << checks << '\n';
+    return 0;
 }

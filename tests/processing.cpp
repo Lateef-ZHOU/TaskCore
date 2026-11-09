@@ -1,6 +1,7 @@
+#include <atomic>
+#include <cmath>
 #include <functional>
 #include "DAQDevice.h"
-#include <atomic>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QSemaphore>
@@ -51,54 +52,65 @@ private:
     { return {raw, TXRuling::Encode}; }
 };
 
+// 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。
 class TestCollector final : public DAQCollector
 {
 public:
-    static std::shared_ptr<const TestCollector> createPrototype(int, DAQContext c)
-    { return std::shared_ptr<const TestCollector>(new TestCollector(std::move(c))); }
+    static std::shared_ptr<const TestCollector> createPrototype(int seconds, DAQContext c)
+    { return std::shared_ptr<const TestCollector>(new TestCollector(seconds, std::move(c))); }
     std::shared_ptr<TestCollector> makeSelf() const
-    { return std::shared_ptr<TestCollector>(new TestCollector(context())); }
-    bool settled() const override { return complete_; }
+    { return std::shared_ptr<TestCollector>(new TestCollector(accumSec(), context())); }
     QList<QByteArray> buildStart() const override { return {"start"}; }
     int timeoutMs() const override { return 0; }
+    [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
-    explicit TestCollector(DAQContext c) : DAQCollector(std::move(c)) {}
-    void onFeed(const std::optional<QByteArray> &, RxTime at) override { frameTime_ = at; complete_ = true; }
-    bool complete_ = false;
+    TestCollector(int seconds, DAQContext c) : DAQCollector(std::move(c), seconds, {channel()}) {}
+    static DAQChannel channel()
+    {
+        DAQChannel c;
+        c.name = QStringLiteral("T");
+        c.rows = 2;
+        c.columns = 8;
+        c.rangeM = {100, 130};
+        c.freqMHz = {0, 1, 2, 3, 4, 5, 6, 7};
+        c.zeroWindMHz = 3.5;
+        c.metersPerSecondPerMHz = 1.0;
+        return c;
+    }
+    void onFeed(const std::optional<QByteArray> &, RxTime at) override
+    {
+        auto &c = front();
+        c.spectrum.clear();
+        for (int row = 0; row < c.rows; ++row)
+            for (int column = 0; column < c.columns; ++column)
+                c.spectrum.append(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
+        frameTime_ = at;
+        processedOn_ = QThread::currentThread();
+        complete();
+    }
+    QThread *processedOn_ = nullptr;
 };
 
-class TestCore final : public Device<TestHandle, TestCollector>
+class TestDevice final : public DAQDevice<TestHandle, TestCollector>
 {
     Q_OBJECT
 public:
-    using Device::Device;
-    ~TestCore() override { PreDestruction(); }
-Q_SIGNALS:
-    void lockChanged(HandleCore::ResourcePhase) override;
-private:
-    void PreDestruction() noexcept final { Device::PreDestruction(); }
-};
-static_assert(std::derived_from<TestCore, TestHandle>);
-static_assert(!std::derived_from<DeviceBase, QObject>);
-
-class TestDevice final : public DAQDevice<TestCore>
-{
-    Q_OBJECT
-public:
-    TestDevice() : DAQDevice("test", {}, nullptr) { startProcessing(); }
+    TestDevice() : DAQDevice("test", {}, nullptr) {}
     ~TestDevice() override { PreDestruction(); }
 Q_SIGNALS:
-    void processed(int sequence, bool onWorker);
+    void lockChanged(HandleCore::ResourcePhase) override;
+    void spectrumReady(int channel, const QVector<double> &values) override;
+    void radialReady(int channel, const QVector<double> &ranges, const QVector<double> &speeds,
+                     const QVector<double> &cnr, bool calibrated) override;
+    void profileReady(int channel, NonuniformVerticalWindProfilePtr profile) override;
 private:
-    void run() override
+    void PreDestruction() noexcept final
     {
-        consumeFrames([this, sequence = 0](const std::shared_ptr<const TestCollector> &frame) mutable {
-            if (!frame || !frame->settled()) qFatal("invalid completed frame");
-            Q_EMIT processed(++sequence, QThread::currentThread() == this);
-        });
+        static_assert(FinalDevice<TestDevice, decltype(&TestDevice::PreDestruction)>);
+        DAQDevice::PreDestruction();
     }
-    void PreDestruction() noexcept final { DAQDevice::PreDestruction(); }
 };
+static_assert(!std::derived_from<DAQDeviceBase, QObject> && std::derived_from<TestDevice, TestHandle>);
 
 template<class Predicate> bool until(Predicate predicate)
 {
@@ -115,23 +127,34 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     TestDevice device;
-    int received = 0, completed = 0;
-    QObject::connect(&device, &TestDevice::processed, &app, [&](int sequence, bool onWorker) {
-        if (!onWorker || QThread::currentThread() != app.thread() || sequence != received + 1)
-            qFatal("persistent closure or cross-thread signal delivery failed");
-        received = sequence;
+    int spectra = 0, radials = 0, profiles = 0, completed = 0;
+    QObject::connect(&device, &TestDevice::spectrumReady, &app, [&](int channel, const QVector<double> &values) {
+        if (channel != 0 || values.size() != 16 || QThread::currentThread() != app.thread()) qFatal("spectrum signal differs");
+        ++spectra;
     });
-    if (!device.device().open(Parameters{std::make_shared<Transport>()}) || !until([&] { return device.device().isOpen(); })) return 1;
-    for (int i = 1; i <= 3; ++i) {
-        if (!device.begin(device.collectorFor(1, {}), [&](auto frame) {
-            if (!frame || QThread::currentThread() != app.thread()) qFatal("wrong completion thread");
+    QObject::connect(&device, &TestDevice::radialReady, &app,
+                     [&](int channel, const QVector<double> &ranges, const QVector<double> &speeds, const QVector<double> &cnr, bool calibrated) {
+        if (channel != 0 || ranges.size() != 2 || speeds.size() != 2 || cnr.size() != 2 || !calibrated
+            || std::abs(speeds[0] - 0.5) > 0.05)
+            qFatal("standard radial processing differs");
+        ++radials;
+    });
+    QObject::connect(&device, &TestDevice::profileReady, &app, [&](int channel, NonuniformVerticalWindProfilePtr profile) {
+        if (channel != 0 || !profile || profile->heights.empty()) qFatal("wind profile differs");
+        ++profiles;
+    });
+    if (!device.open(Parameters{std::make_shared<Transport>()}) || !until([&] { return device.isOpen(); })) return 1;
+    // 四个方位各一帧，第四帧带同步位：前三帧不反演，第四帧对满环反演一次。
+    for (int i = 0; i < 4; ++i) {
+        const DAQContext context{WorldModel(i * 90.0, 60.0), std::nullopt, QStringLiteral("s"), i == 3};
+        if (!device.begin(device.collectorFor(1, context), [&](auto frame) {
+            const auto typed = std::dynamic_pointer_cast<const TestCollector>(frame);
+            if (!typed || !typed->settled() || typed->processedOn() == app.thread() || QThread::currentThread() != app.thread())
+                qFatal("frame was not processed on the receive thread before completion");
             ++completed;
-        }, {}) || !until([&] { return completed == i && received == i; })) return 2;
+        }, {}) || !until([&] { return completed == i + 1 && radials == i + 1; })) return 2;
+        if (profiles != (i == 3 ? 1 : 0)) return 3;
     }
-    device.stopWorker();
-    // 已关闭的线程不再消费，也不再引用原锚点；机制完成仍可安全交付。
-    if (!device.begin(device.collectorFor(1, {}), [&](auto frame) { if (frame) ++completed; }, {})
-        || !until([&] { return completed == 4; }) || received != 3) return 3;
-    return 0;
+    return spectra == 4 ? 0 : 4;
 }
 #include "processing.moc"

@@ -43,7 +43,7 @@ Section {
         delegate: BoolField {
             required property var modelData
             Layout.fillWidth: true
-            text: modelData ? modelData.device.displayName + " · " + modelData.device.subtitle : ""
+            text: modelData ? modelData.displayName + " · " + modelData.subtitle : ""
             value: root.settings.pickedCards.includes(modelData)
             onCommitted: function (selected) {
                 const others = root.settings.pickedCards.filter(card => card !== modelData);

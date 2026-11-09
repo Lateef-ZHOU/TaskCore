@@ -9,7 +9,7 @@ ModulePage {
     required property var settingsParameters
     required property Section planPage
     required property QtObject gimbal // 云台设备本身；族基不是 QObject，登记时由 C++ 验族
-    required property DAQDeviceBase card
+    required property QtObject card // 采集卡设备本身；族基不是 QObject，登记时由 C++ 验族
     required property int accum
     required property int settle
     readonly property int accumMin: settingsParameters.accumMin

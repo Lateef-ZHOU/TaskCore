@@ -7,14 +7,7 @@
 #include "TaskBase.h"
 
 // 可选界面登记：核心及任务业务目标不依赖 Qt Qml。
-// 云台族基不是 QObject，不登记 QML 类型；页面以 QtObject 持有云台设备本身。
-struct DAQDeviceBaseQml
-{
-    Q_GADGET
-    QML_FOREIGN(DAQDeviceBase)
-    QML_NAMED_ELEMENT(DAQDeviceBase)
-    QML_UNCREATABLE("设备族公共接口")
-};
+// 两族族基都不是 QObject，不登记 QML 类型；页面以 QtObject 持有设备本身。
 
 struct TaskBaseQml
 {

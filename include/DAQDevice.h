@@ -1,31 +1,32 @@
 #pragma once
+#include <array>
 #include <chrono>
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
+#include <boost/circular_buffer.hpp>
 #include <QDir>
 #include <QString>
-#include <QThread>
-#include <QSemaphore>
-#include <functional>
 #include <QUrl>
+#include <QVector>
 
-#include "DAQCollector.h"          // 采集帧与不可变消费上下文
+#include "AcqSaver.h"             // 采集卡族唯一落盘入口
+#include "DAQCollector.h"          // 通道数组与不可变消费上下文
 #include "DeviceCoro.h"           // DeviceCoro / LockRequest / HeldLock / RunAwaiter（测试采集协程）
 #include "DeviceBase.h" // DeviceBase / Device<H,C>
 #include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
+#include "WindProfile.h"          // 四束反演（标准方法）
 
-// 采集卡族接口供任务多选组合；模板实现持具体 Collector、组合 Device 和测试协程。
-// begin 是唯一的族基到型号验型边界；成功帧由主线程触发 onConsume，独立于协程是否仍等待。
-class DAQDeviceBase : public QThread
+// 采集卡族定义标准能力；纯 C++ 旁支，不继承 QObject（唯一 QObject 来自末端继承的 Handle）。
+// 模板层同时继承具体 Device 与本类；编排只持族引用，通过 device() 使用锁，不认识具体 Handle 或 Collector。
+// 没有处理线程：Collector 在收包线程收齐末包时完成标准处理，完成帧在主线程显示、落盘并参与风廓线反演。
+class DAQDeviceBase
 {
-    Q_OBJECT
-    Q_PROPERTY(QObject *device READ deviceObject CONSTANT)
 public:
-    explicit DAQDeviceBase(QObject *parent = nullptr) : QThread(parent) {}
-    ~DAQDeviceBase() override = default;
-    // Qt 属性适配由模板层以具体 Core 类型实现，不经 DeviceBase 暴露 QObject。
-    [[nodiscard]] virtual QObject *deviceObject() noexcept = 0;
+    DAQDeviceBase() = default;
+    Q_DISABLE_COPY_MOVE(DAQDeviceBase)
+    virtual ~DAQDeviceBase() = default;
 
     // 本族的收集器基（`RunAwaiter<DAQDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
@@ -41,12 +42,13 @@ public:
     //   · **100 ms 唤醒**：成批交付正合适，本族的时间戳按帧算、不按包算，批量无害。
     //     （实际上多半是 mintocopy 先到——16 KB 在线速下瞬间攒满，这个数很少真用上。）
     //   · **4 MB 缓冲**：十帧以上的余量。**真约束是爆发**：一帧线速打出，硬下限是一帧。
+    //     收末包后的处理占住收包线程期间，迟到包同样由它兜住（下一次 START 要等本帧完成）。
     //
     // 100 ms 是长期实跑过的值，缓冲比当时的 1 MB 更宽——用户据此认为本族无需再验。
     static constexpr std::chrono::milliseconds kPcapReadTimeout{100};
     static constexpr int kPcapKernelBufferBytes = 4 * 1024 * 1024;
 
-    // 借出组合持有的机制对象；编排通过它验锁和读取状态。
+    // 同一对象的机制面：模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
     // 只按传入的采集参数与消费上下文创建原型，不改变设备或发送命令。
@@ -61,80 +63,44 @@ public:
     // 停机 / 撤单：与 begin 同一笔账，形制逐条对仗 GMBDeviceBase::stop（见那边）。
     virtual void stop(const std::shared_ptr<const DeviceLock> &lock) = 0;
 
-protected:
-    virtual void PreDestruction() noexcept = 0;
-    void run() override = 0;
+    // 通知契约：末端在 Q_SIGNALS 中覆写，由 moc 提供实现；均在主线程按通道下标发出。
+    virtual void spectrumReady(int channel, const QVector<double> &values) = 0;
+    virtual void radialReady(int channel, const QVector<double> &ranges, const QVector<double> &speeds,
+                             const QVector<double> &cnr, bool calibrated) = 0;
+    virtual void profileReady(int channel, NonuniformVerticalWindProfilePtr profile) = 0;
 };
 
-// 同一具体 Collector 贯穿启动、重试与消费。处理状态由官邸 run() 的局部 lambda 独持。
-template <typename Core>
-    requires DAQCollectorLike<typename Core::CollectorType>
-class DAQDevice : public DAQDeviceBase
+// 模板层继承具体 Device 与族基：验型、主线程消费（显示、落盘、四束环与风廓线）及单卡测试协程。
+// 型号只给通道规格并按协议整理功率谱，不写处理或落盘代码。
+template <HandleLike HandleT, DAQCollectorLike CollectorT>
+class DAQDevice : public Device<HandleT, CollectorT>, public DAQDeviceBase
 {
-    using CollectorT = typename Core::CollectorType;
+    using DeviceT = Device<HandleT, CollectorT>;
 protected:
     DAQDevice(QString name, QString subtitle, QObject *parent)
-        : DAQDeviceBase(parent), device_(new Core(std::move(name), std::move(subtitle), makeOnStream(), {}, this))
+        : DeviceT(std::move(name), std::move(subtitle), makeOnStream(), makeOnConsume(this), parent)
     {
         static_assert(DeviceLifecycleLayer<DAQDevice, decltype(&DAQDevice::PreDestruction)>);
     }
 
-    // 末端构造完成配置后调用一次；只等待线程内锚点和消费回调就绪，不泵主线程事件。
-    void startProcessing()
-    {
-        QThread::start();
-        ready_.acquire();
-    }
-
-    // 官邸 run() 创建处理 lambda 后交入。锚点和唯一处理闭包都在本线程构造、执行、销毁。
-    // 回调只排队帧份额，不复制处理闭包，因此风廓线环会跨帧延续。
-    template<class Processor>
-        requires std::invocable<Processor &, const std::shared_ptr<const CollectorT> &>
-    void consumeFrames(Processor processor)
-    {
-        QObject anchor;
-        device().setOnConsume([&anchor, &processor](std::shared_ptr<const CollectorT> frame) {
-            QMetaObject::invokeMethod(&anchor, [&processor, frame = std::move(frame)] {
-                processor(frame);
-            }, Qt::QueuedConnection);
-        });
-        ready_.release();
-        exec();
-    }
-
+    // 本层的访问源是测试协程：它借用设备锁和等待器，先于 Device 层撤销。
     void PreDestruction() noexcept override
     {
-        stopWorker();
         cancelTest();
-        delete device_;
+        DeviceT::PreDestruction();
     }
 
 public:
-    // 末端构造失败时也必须结束线程；正常清理已在末端预析构中完成。
-    ~DAQDevice() override { if (isRunning()) stopWorker(); }
+    ~DAQDevice() override = default;
 
-    // 本族是处理线程源；仅停止并等待，不替代预析构、不清理业务状态。
-    void stopWorker() noexcept
-    {
-        if (QThread::currentThread() == this)
-            qFatal("DAQ worker cannot wait for itself");
-        if (QThread::currentThread() != thread())
-            qFatal("DAQ worker shutdown must run on its owning thread");
-        quit();
-        if (!wait())
-            qFatal("DAQ worker did not finish");
-        // 关闭后即使设备暂时仍在，后续完成帧也不能再投到已销毁的线程内锚点。
-        device().setOnConsume({});
-    }
-
-    [[nodiscard]] QObject *deviceObject() noexcept final { return &device(); }
-    [[nodiscard]] Core &device() noexcept final { return *device_; }
-    [[nodiscard]] const Core &device() const noexcept { return *device_; }
+    // 返回自身的 DeviceBase 基类。不用协变返回 DeviceT&：MSVC 对结构体非类型模板实参（CDL5 规格）
+    // 与协变返回的组合报 C2062；持具体类型者直接在设备对象上使用完整 Device 接口。
+    [[nodiscard]] DeviceBase &device() noexcept final { return *this; }
 
     // 保留族接口的公开入口，按具体 Collector 类型创建只读原型。
     [[nodiscard]] std::shared_ptr<const DAQCollector> collectorFor(int accumSec, DAQContext context) const final
     {
-        // 静态工厂只造本型号轻量原型；begin 内 makeSelf 另建可写收集区。
+        // 静态工厂只造本型号原型；Device 启动时 makeSelf 另建可写收集区。
         return CollectorT::createPrototype(accumSec, std::move(context)); // 具体份额隐式上行成族份额
     }
 
@@ -146,16 +112,15 @@ public:
         const auto typed = std::dynamic_pointer_cast<const CollectorT>(proto);
         if (!typed)
         {
-            Q_EMIT device().logMessage(QStringLiteral("采集请求的 Collector 型号不匹配，未启动"));
+            Q_EMIT this->logMessage(QStringLiteral("采集请求的 Collector 型号不匹配，未启动"));
             return false;
         }
-        return device().start(typed, std::move(done), lock);
+        return DeviceT::start(typed, std::move(done), lock);
     }
 
     // 停机：族基的纯虚 stop 在此落地（final），实现就是机制层 Device::stop（同 GMBDevice::stop）。
-    void stop(const std::shared_ptr<const DeviceLock> &lock) final { device().stop(lock); }
+    void stop(const std::shared_ptr<const DeviceLock> &lock) final { DeviceT::stop(lock); }
 
-public:
     // ── 采集测试（设备页的两个按钮）：只占本卡的锁，循环采集直到停止 ─────────────────────
     // 没有云台：朝向传空、同步位恒假，触发不了风廓线反演。同一时刻只跑一个测试；与编排的互斥由设备锁
     // 天然保证，UI 不做门控。
@@ -164,7 +129,7 @@ public:
     {
         if (testCoro_ && !testCoro_->done())
         {
-            Q_EMIT device().logMessage(QStringLiteral("测试正在进行中"));
+            Q_EMIT this->logMessage(QStringLiteral("测试正在进行中"));
             return;
         }
         std::optional<QDir> saveRoot; // 空 = 不落盘
@@ -172,7 +137,7 @@ public:
         {
             if (!folder.isLocalFile() || folder.toLocalFile().isEmpty())
             {
-                Q_EMIT device().logMessage(QStringLiteral("选中的不是本机目录，未启动采集"));
+                Q_EMIT this->logMessage(QStringLiteral("选中的不是本机目录，未启动采集"));
                 return;
             }
             saveRoot = QDir(folder.toLocalFile());
@@ -180,26 +145,26 @@ public:
         // 裸 new 刻意：make_unique 走转发必索 move（DeviceCoro 不可动），prvalue 直构保证省略。
         // 锁请求交给准备模块（promise 的构造函数）：本卡只占自己这一台。
         testCoro_.reset(new DeviceCoro(
-            runTest(LockRequest{QStringLiteral("设备控制"), {device()}}, accumSec, std::move(saveRoot), std::move(sessionDir))));
+            runTest(LockRequest{QStringLiteral("设备控制"), {*this}}, accumSec, std::move(saveRoot), std::move(sessionDir))));
     }
     // 预析构及停止按钮共用；取消时设备各层仍在，等待器可安全撤单。
     void cancelTest() noexcept { testCoro_.reset(); }
 
 private:
     // 测试采集协程：取令牌 → 每轮 collectorFor 造原型，交等待器经 begin 启动；
-    // 完成帧由设备自行提交处理器；启动时固定带 "Test" 后缀的会话目录名，各轮共用。
+    // 完成帧由设备自行消费；启动时固定带 "Test" 后缀的会话目录名，各轮共用。
     DeviceCoro runTest(LockRequest, const int accumSec, const std::optional<QDir> saveRoot, const QString sessionDir)
     {
         // 试锁已由**准备模块**（promise 的构造函数）在本行之前做完；这里只取那枚令牌——begin 要出示它。
         const auto lock = co_await HeldLock{};
         if (!lock)
         {
-            Q_EMIT device().logMessage(QStringLiteral("设备已被占用或未连接"));
+            Q_EMIT this->logMessage(QStringLiteral("设备已被占用或未连接"));
             co_return;
         }
         while (true)
         {
-            Q_EMIT device().logMessage(QString("开始采集（累积 %1 秒）%2")
+            Q_EMIT this->logMessage(QString("开始采集（累积 %1 秒）%2")
                                  .arg(accumSec)
                                  .arg(saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(saveRoot->absolutePath())
                                                : QStringLiteral("，不落盘")));
@@ -207,19 +172,65 @@ private:
                 collectorFor(accumSec, {std::nullopt, saveRoot, sessionDir, false})};
             if (framed.empty())
             {
-                Q_EMIT device().logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));
+                Q_EMIT this->logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));
                 co_return;
             }
         }
     }
 
-    static typename Core::OnStream makeOnStream()
+    static typename DeviceT::OnStream makeOnStream()
     {
         return [](const QByteArray &raw, RxTime) -> std::optional<QByteArray> { return raw; };
     }
 
-    // QObject 兜底构造失败；正常预析构显式销毁，析构期间指针仍有效。
-    Core *const device_;
-    QSemaphore ready_; // 仅一次初始化交接，不记录采集/退出状态。
+    // Device 独持此回调；构造时只记下 this，完成帧到达前不会调用。
+    static typename DeviceT::OnConsume makeOnConsume(DAQDevice *self)
+    {
+        return [self](std::shared_ptr<const CollectorT> frame) { self->consume(std::move(frame)); };
+    }
+
+    // [主] 完成帧：按通道发功率谱与径向风、整帧落盘，进四束环；同步位为真时逐通道反演风廓线。
+    // 一组四束须是同一通道、同一距离轴且均已换算风速；任一束朝向未知则不反演。
+    void consume(std::shared_ptr<const CollectorT> frame)
+    {
+        const auto &context = frame->context();
+        for (std::size_t i = 0; i < frame->size(); ++i)
+        {
+            const auto &channel = (*frame)[i];
+            Q_EMIT this->spectrumReady(int(i), channel.spectrum);
+            if (!channel.cnr.isEmpty())
+                Q_EMIT this->radialReady(int(i), channel.rangeM, channel.radialWind, channel.cnr, channel.calibrated());
+        }
+        if (context.saveRoot)
+            AcqSaver::saveFrame(frame, this->objectName());
+        beams_.push_back(frame);
+        if (!context.sync || !beams_.full())
+            return;
+        std::vector<AcqSaver::ProfileChannel> profiles;
+        for (std::size_t i = 0; i < frame->size(); ++i)
+        {
+            const auto &channel = (*frame)[i];
+            std::array<WindProfile::Input, WindProfile::kBeams> inputs;
+            bool usable = true;
+            for (std::size_t beam = 0; beam < inputs.size(); ++beam)
+            {
+                const auto &past = (*beams_[beam])[i];
+                usable = usable && past.calibrated() && !past.cnr.isEmpty() && past.rangeM == channel.rangeM;
+                inputs[beam] = {beams_[beam]->context().pose, past.radialWind};
+            }
+            if (!usable)
+                continue;
+            auto profile = WindProfile::Calc(inputs, channel.rangeM, frame->frameTime());
+            if (!profile)
+                continue;
+            Q_EMIT this->profileReady(int(i), profile);
+            profiles.push_back({channel.name, std::move(profile)});
+        }
+        if (context.saveRoot)
+            AcqSaver::saveWindProfiles(frame, std::move(profiles));
+    }
+
+    // 最近四束完成帧（主线程独写），满后新帧覆盖最旧一帧。
+    boost::circular_buffer<std::shared_ptr<const CollectorT>> beams_{WindProfile::kBeams};
     std::unique_ptr<DeviceCoro> testCoro_;
 };

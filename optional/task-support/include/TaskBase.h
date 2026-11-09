@@ -69,14 +69,17 @@ public:
         });
         return true;
     }
-    Q_INVOKABLE bool addCard(DAQDeviceBase *card)
+    // 采集卡族基同样不是 QObject：QML 交入设备对象本身，在此交叉转换验族，非采集卡拒收。
+    Q_INVOKABLE bool addCard(QObject *object)
     {
+        auto *card = dynamic_cast<DAQDeviceBase *>(object);
         if (!card || std::ranges::find(cards_, card) != cards_.end()) return false;
         cards_.push_back(card);
-        connect(card->deviceObject(), &QObject::destroyed, this, [this, card] {
+        // destroyed 时族基子对象已析构，此处只比较指针；运行借用已由设备预析构的锁铃收回。
+        connect(object, &QObject::destroyed, this, [this, card, object] {
             cancelRun();
             std::erase(cards_, card);
-            Q_EMIT deviceRemoved(card);
+            Q_EMIT deviceRemoved(object);
             refreshRunState();
         });
         return true;
@@ -87,7 +90,7 @@ public:
     [[nodiscard]] QDateTime startedAt() const { return startedAt_; }
 
 public Q_SLOTS:
-    bool start(QObject *gimbal, const QList<DAQDeviceBase *> &cards, QList<double> worldAzimuths,
+    bool start(QObject *gimbal, const QList<QObject *> &cards, QList<double> worldAzimuths,
                const double worldElevation, const int accumSec, const int settleSec,
                const bool save, const QUrl &folder, const QVariantMap &movement)
     {
@@ -101,8 +104,9 @@ public Q_SLOTS:
         if (!speeds) { Q_EMIT logMessage(QStringLiteral("转台运动参数无效，任务未启动")); return false; }
         Cards picked;
         QStringList scope{gmb->device().displayName + QStringLiteral(" · ") + gmb->device().subtitle};
-        for (auto *card : cards)
+        for (auto *object : cards)
         {
+            auto *card = dynamic_cast<DAQDeviceBase *>(object);
             if (!card || std::ranges::find(cards_, card) == cards_.end()
                 || std::ranges::any_of(picked, [card](const auto &entry) { return &entry.get() == card; })) {
                 Q_EMIT logMessage(QStringLiteral("采集卡未登记或重复选择，任务未启动")); return false;
@@ -190,9 +194,10 @@ protected:
         const auto measured = moved[0].result->measured();
         const auto world = measured ? std::optional{gmb.worldOf(*measured)} : std::nullopt;
         RunAwaiter<DAQDeviceBase>::Orders orders;
+        // 族基不是 QObject：会话目录的 ASCII 标识取同一对象上的 objectName（交叉转换必然成功）。
         for (DAQDeviceBase &card : cards)
             orders.push_back({card, card.collectorFor(accumSec, {world, saveRoot,
-                AcqSaver::sessionDir(sessionTime, card.objectName()), sync})});
+                AcqSaver::sessionDir(sessionTime, dynamic_cast<const QObject &>(card).objectName()), sync})});
         return RunAwaiter<DAQDeviceBase>{lock, std::move(orders)};
     }
 
@@ -233,8 +238,8 @@ private:
     [[nodiscard]] int currentBeam() const { return running() ? beam_ : -1; }
 
     static constexpr int kSettleMin = 2, kSettleMax = 600;
-    // 机制对象先同步撤单，再由 QObject::destroyed 移除身份。DAQ 族对象此时仍在；
-    // 云台族基与设备是同一对象，destroyed 时已析构，登记表只作指针比较。
+    // 机制对象先同步撤单，再由 QObject::destroyed 移除身份。两族族基与设备是同一对象，
+    // destroyed 时已析构，登记表只作指针比较。
     std::vector<GMBDeviceBase *> gimbals_;
     std::vector<DAQDeviceBase *> cards_;
     int beam_ = -1, delivered_ = 0;

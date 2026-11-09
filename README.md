@@ -1,10 +1,12 @@
 # TaskCore
 
+2026-11-09 用户定（DAQ 族第一步）：删除 DAQ 处理线程，DAQDeviceBase 改为纯 C++ 旁支，`DAQDevice<HandleT, CollectorT>` 同时继承 Device 与族基（device() 返回 DeviceBase&，不用协变以避开 MSVC 对结构体模板实参的 C2062）。DAQChannel（名称、门数 × 频点数、每门距离、每频点频率、零风速参考、频移→风速系数及谱/风/CNR 数据）放在 DAQCollector 之前，DAQCollector 直接继承 std::vector<DAQChannel>；型号收齐末包调用 complete()，在收包线程按通道串行做标准处理后才判齐。主线程消费：按通道发 spectrumReady/radialReady/profileReady，Boost circular_buffer 保存最近 4 帧，同步位为真时逐通道反演风廓线。AcqSaver 并入核心（删除 TASKCORE_WITH_DAQ_SAVING 与 Lidar::DAQSaving），只保留 saveFrame/saveWindProfiles 两个入口：每帧一个 JSON、风廓线同构 JSON，英文键、6 位有效数字、缺测 null。TaskBase 的 addCard/start 收 QObject* 交叉转换验族，任务 QML 采集卡类型改为 QtObject。请求仍是只读原型（第二步见主程序待办）。
+
 2026-11-09 用户定（云台瘦身）：删除 GMB 的 collectorFor 与原型路径。`GMBMoveParameters` 移入 GMBCollector.h，含目标位形、停稳与可选速度；官邸 `paramsFor(target, hold, speeds)` 做型号校验与量化（取代原 collectorFor 的预验职责），族口 `begin(const GMBMoveParameters&, done, lock)` 由型号 makeMoveCollector 直接造出完整可写的具体 Collector 交 Device，不再 dynamic_cast，启动不再 makeSelf。RunOrder 拆为 request 与 result 两槽，析构只对结果为空的项撤单，不再询问 settled；取代 10-25“提交时把原型移出账本”的裁定。TaskBase 启动时只解析速度表（speedsFromQml），协程逐束以目标、停稳、速度这些原始量调用 paramsFor 构造参数。DAQ 仍走只读原型，族基声明 Request 别名，改造见主程序待办。
 
 2026-11-09 用户定：GMBDeviceBase 改为纯 C++ 旁支，不继承 QObject；`GMBDevice<HandleT, CollectorT>` 同时继承 `Device<HandleT, CollectorT>` 与族基，`device()` 协变返回自身的 Device 基类，族基保留纯虚 `device()` 供编排取 DeviceBase。mountingChanged/anglesReady 改为纯虚契约，由末端以 Q_SIGNALS 覆写；删除 `device` Q_PROPERTY、`deviceObject()` 与 GMBDeviceBase 的 QML 登记。TaskBase 的 addGimbal/start 接收 QObject* 并交叉转换验族，非云台拒收；TaskModule/SimOnlyTaskModule 的云台类型改为 QtObject。DAQ 族本轮不变。task_ui_smoke 改为触发按钮实际绑定的 Action（原先只发 clicked，Action 不执行，测试此前已失败）。验证：Windows 全选项独立构建零警告、CTest 4/4。
 
-协程与等待器、GMB/DAQ 设备族能力、族 Collector 和 DAQ 处理线程契约。Windows / Linux，C++20，CMake ≥ 3.28。
+协程与等待器、GMB/DAQ 设备族能力、族 Collector、DAQ 通道标准处理与统一落盘。Windows / Linux，C++20，CMake ≥ 3.28。
 
 ## 边界与依赖
 
@@ -18,7 +20,6 @@
 
 | 开关（默认 OFF） | 目标 | 内容 |
 |---|---|---|
-| TASKCORE_WITH_DAQ_SAVING | Lidar::DAQSaving | LiDAR 功率谱、径向风、风廓线的现有文件格式和路径；Qt Core，无界面 |
 | TASKCORE_WITH_TASK_SUPPORT | Lidar::TaskSupport | TaskBase，登记族对象、启动校验、状态和取消；自动带保存目标，无 QML |
 | TASKCORE_WITH_QML | Lidar::TaskUI / Lidar.TaskUI | 可选族控件和任务参考页面；带 TaskSupport、UICore、ChartCore，要求 Qt 6.11.2 |
 
@@ -38,7 +39,7 @@ TaskModule 接收 `list<QtObject>`（云台设备本身）和 `list<DAQDeviceBas
 - 位置与值下标一一对应，不重排，不在保存时重采样。径向风沿用六位、风廓线四位小数及已有 NaN 记法（含 NaN 时不是严格 JSON）。空数组可保存为空剖面，单点不涉及除以层数减一。
 - 检查只在接收边界进行一次，写入阶段信任数据；QVector 隐式共享或 const 整帧保活，不创建额外的高度数组。仍是 detached 保存、就地 Qt 诊断，不连接设备日志或增加退出等待。
 
-验证：启用 `TASKCORE_WITH_DAQ_SAVING=ON` 后增加 `saving_contract`，检查不等距位置、多通道不同网格、风分量转换、时间、输入销毁与 QVector 分离、非法帧拒收、单层/空剖面及均匀格式回归。2026-11-01 Windows / MSVC / Qt 6.11.2 Release、公开头 `/W4 /WX`、CTest 3/3 通过，证据 `build/saving-build.log`、`build/saving-test.log`。同日发布验证已取消 Algorithm 源码覆盖，从 GitHub HTTPS 拉取固定提交 `224c784117b775177a52d69fe0d61858b39ee867`，再次完成 Release/公开头构建和 CTest 3/3；证据 `build/publish-{configure,build,test}.log`。
+验证：`saving_contract` 检查帧 JSON 与风廓线 JSON 的字段、通道顺序、null 缺测和风向换算；`processing_contract` 检查收包线程完成标准处理、主线程按通道发信号与四束反演。
 
 ## 组合与线程契约
 
