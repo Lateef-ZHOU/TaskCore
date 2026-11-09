@@ -300,19 +300,21 @@ private:
 };
 
 // 请求与结果按设备配对；DAQ 成功帧已由设备先行消费，等待器只汇总成败。
+// 请求与结果分槽：请求始终保留为提交时的原始参数，结果只由完成回调填入本轮成品。
 template <typename FamilyT>
 struct RunOrder
 {
     using ColT = typename FamilyT::CollectorBase;
 
     FamilyT &dev; // 借用 QML 官邸持有的后端；设备关闭前经运行结果/锁取消铃同步结束等待。
-    std::shared_ptr<const ColT> collector; // 提交前为原型，提交时移空；只由完成回调填入本轮结果。
+    typename FamilyT::Request request; // 交族口 begin 的请求（GMB：运动参数；DAQ：只读原型）。
+    std::shared_ptr<const ColT> result{}; // 空 = 尚未完成；只由完成回调填入。
 };
 
 
 // ============================================================
 // RunAwaiter<FamilyT> — 一批 run 的等待器：**下单 + 攒账 + 判齐 + 撤单**四件都在这儿。
-//   if ((co_await RunAwaiter{lock, gmb, gmb.collectorFor(g, hold, movement)}).empty()) co_return; // 单台
+//   if ((co_await RunAwaiter{lock, gmb, *gmb.paramsFor(draft)}).empty()) co_return; // 单台
 //   const auto r = co_await RunAwaiter<DAQDeviceBase>(lock, std::move(orders));         // 多卡同采 join（名单运行期拼好）
 //
 // **按族模板化**：`FamilyT` 是族基（GMBDeviceBase / DAQDeviceBase），账本元素型由
@@ -320,8 +322,7 @@ struct RunOrder
 // 可存的类型，故单据是**数据**（设备引用 + 斗份额），"启动"就是族口 `begin` 的一次虚调用。
 // 混族同批不可能——那是这笔交易付出去的东西，而它零客户。
 //
-// orders_ 保留设备对应关系；提交时移出原型，等待期间只保存本轮回调交付的结果。
-// 输入原型即使已完成，也不能充当新请求的结果。成功结果仍复制到基类结果槽。
+// orders_ 保留设备对应关系与原始请求；结果槽只保存本轮回调交付的成品。成功结果仍复制到基类结果槽。
 // 回调弱持账本，不捕获等待器 this；运行中的局部强份额可活过等待器，续体仍只能恢复一次。
 // ============================================================
 template <typename FamilyT>
@@ -336,11 +337,11 @@ public:
     using Base = AwaiterBase<Orders>;
     using typename Base::Resumer;
 
-    // 单台（最常见）：括号形，收设备引用 + 一只斗。
-    RunAwaiter(std::shared_ptr<DeviceLock> lock, FamilyT &dev, std::shared_ptr<const ColT> proto)
+    // 单台（最常见）：括号形，收设备引用 + 本族请求。
+    RunAwaiter(std::shared_ptr<DeviceLock> lock, FamilyT &dev, typename FamilyT::Request request)
         : Base(std::move(lock))
     {
-        orders_->emplace_back(dev, std::move(proto));
+        orders_->push_back(Order{dev, std::move(request)});
     }
 
     // 名单形（多卡任务：卡数开始时才知道）：同族任意型号任意台数（型号已擦到
@@ -350,13 +351,12 @@ public:
     {
     }
 
-    // 提交过但尚无结果的项为空，沿原锁撤单；Device 自身负责幂等、验锁和防重入。
-    // 部分拒收时后续项可能仍是未提交原型，未完成项同样走既有撤单路径，不另存启动标记。
+    // 尚无结果的项（未提交、被拒收或未完成）沿原锁撤单；Device 自身负责幂等、验锁和防重入，不另存启动标记。
     // 停机走族口 `dev.stop(...)`（族基自己有停机口，不必经 `device()` 绕一手）。
     ~RunAwaiter()
     {
         for (const Order &o : *orders_)
-            if (!o.collector || !o.collector->settled()) // 空原型被拒收也须走验锁撤单，不能解引用。
+            if (!o.result)
                 // `this->` 是必须的：本类是模板，非依赖名查不到依赖基类 AwaiterBase 的成员。
                 o.dev.stop(this->lock_); // 令牌由本器出示（构造时收下，见 AwaiterBase）
     }
@@ -366,12 +366,12 @@ public:
     // 这里复制的是设备引用和 Collector 份额，不复制采集数据；分层与该次复制暂时保持。
 
 private:
-    // 提交时已移空原型，排队回调只填本轮成功成品；非空即完成，不再询问 Collector 的判齐逻辑。
+    // 结果槽只由排队回调填入本轮成功成品；非空即完成，不再询问 Collector 的判齐逻辑。
     // 空名单由 onSuspend 拒绝，不会进入完成回调。
     [[nodiscard]] static bool allCompleted(const Orders &orders) noexcept
     {
         return std::ranges::all_of(orders, [](const Order &o)
-                                   { return bool(o.collector); });
+                                   { return bool(o.result); });
     }
 
     // 逐单启动，全部接收才挂起；任一拒收则析构撤销未完成请求，已完成帧仍由设备消费。
@@ -384,7 +384,7 @@ private:
             // begin 拒收直接返回 false；成功接收后的完成通知必须按上方契约排队交付。
             // 一单失败即恢复空结果；全部完成则交出账本，不另存完成计数。
             if (!(*orders_)[i].dev.begin(
-                    std::exchange((*orders_)[i].collector, {}), // 临时份额保活到 begin 返回，账本先移空。
+                    (*orders_)[i].request, // 请求留在账本；begin 不同步完成，回调只写结果槽。
                     [resume, ledger = std::weak_ptr<Orders>(orders_), i](std::shared_ptr<const ColT> c)
                     {
                         const auto orders = ledger.lock();
@@ -395,7 +395,7 @@ private:
                             resume({}); // ① 空份额 = 本单没成 ⇒ 整批没成，不必等齐
                             return;
                         }
-                        (*orders)[i].collector = std::move(c); // ② 只填入本轮已交付的成品
+                        (*orders)[i].result = std::move(c); // ② 只填入本轮已交付的成品
                         if (allCompleted(*orders))         // ③ 本轮结果是否到齐
                             resume(*orders); // ④ 齐了：整本提交 + 恢复（此后每单的斗都是成品）
                         // resume 可能同步销毁等待器；下方不再访问等待器或账本内容。
@@ -410,8 +410,7 @@ private:
     const std::shared_ptr<Orders> orders_ = std::make_shared<Orders>();
 };
 
-// CTAD：`RunAwaiter{lock, gmb, gmb.collectorFor(t, hold, movement)}` 由第**二**实参定族（第三实参是非推导语境）。
+// CTAD：`RunAwaiter{lock, gmb, parameters}` 由第**二**实参定族（第三实参是非推导语境）。
 // 名单形（`RunAwaiter<DAQDeviceBase>(lock, orders)`）须显式写族——从 vector<Order> 推不出族。
 template <typename FamilyT>
-RunAwaiter(std::shared_ptr<DeviceLock>, FamilyT &,
-           std::shared_ptr<const typename FamilyT::CollectorBase>) -> RunAwaiter<FamilyT>;
+RunAwaiter(std::shared_ptr<DeviceLock>, FamilyT &, typename FamilyT::Request) -> RunAwaiter<FamilyT>;

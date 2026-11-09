@@ -8,8 +8,36 @@
 #include <QByteArray>
 #include <QList>
 
+#include <cmath>
+#include <QVariantMap>
+
 #include "GimbalModel.h" // PanTiltModel（目标 / 实测位形；distance）
 #include "RunBase.h" // Collector<FeedT> 契约基类
+
+// 一次运动请求的按值参数：云台位形目标、停稳等待及可选两轴速度（无速度表示本型号定位协议不携带速度）。
+// 协程按束保存它并交族口 begin，由模板层据此造出本次 Collector；官邸 paramsFor 负责型号校验与量化。
+// QML 仅在命令/任务启动边界交一份值，协程与工厂不回读界面。
+struct GMBMoveParameters
+{
+    struct Speeds { double pan; double tilt; }; // °/s，两轴必须成组提供
+    PanTiltModel target;
+    std::chrono::milliseconds hold{0};
+    std::optional<Speeds> speeds;
+
+    // QML 只交速度表；空表 = 不带速度，非空必须恰为两轴有限值。
+    [[nodiscard]] static std::optional<GMBMoveParameters> fromQml(PanTiltModel target, std::chrono::milliseconds hold,
+                                                                  const QVariantMap &values)
+    {
+        if (values.isEmpty()) return GMBMoveParameters{std::move(target), hold, std::nullopt};
+        if (values.size() != 2 || !values.contains("panSpeed") || !values.contains("tiltSpeed"))
+            return std::nullopt;
+        bool panOk = false, tiltOk = false;
+        const double pan = values.value("panSpeed").toDouble(&panOk);
+        const double tilt = values.value("tiltSpeed").toDouble(&tiltOk);
+        if (!panOk || !tiltOk || !std::isfinite(pan) || !std::isfinite(tilt)) return std::nullopt;
+        return GMBMoveParameters{std::move(target), hold, Speeds{pan, tilt}};
+    }
+};
 
 // 云台族公共到位/驻留判据与位形读口；型号以 TypedGMBCollector 的标签区分。
 // 指示区不可变，收集区只由收包线程写，完成后按 const 份额交付。
@@ -92,15 +120,16 @@ template <typename Model>
 class TypedGMBCollector final : public GMBCollector
 {
 public:
-    [[nodiscard]] static std::shared_ptr<const TypedGMBCollector> createPrototype(
+    // 族模板层按运动参数直接造出完整、可写的本次 Collector，独占交给 Device。
+    [[nodiscard]] static std::shared_ptr<TypedGMBCollector> create(
         PanTiltModel target, double tolerance, std::chrono::milliseconds hold,
         QList<QByteArray> start, QList<QByteArray> stop, int timeoutMs)
     {
-        return std::shared_ptr<const TypedGMBCollector>(new const TypedGMBCollector(
+        return std::shared_ptr<TypedGMBCollector>(new TypedGMBCollector(
             std::move(target), tolerance, hold, std::move(start), std::move(stop), timeoutMs));
     }
 
-    // 云台收集区是内嵌的到位观测，不需谱数组；每次创建独立初始观测。
+    // 看门狗重试用：按不可变配置另造初始观测的新斗；云台收集区是内嵌观测，不需谱数组。
     [[nodiscard]] std::shared_ptr<TypedGMBCollector> makeSelf() const
     {
         return std::shared_ptr<TypedGMBCollector>(new TypedGMBCollector(target_, tolerance_, hold_, start_, stop_, timeoutMs_));

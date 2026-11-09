@@ -30,6 +30,8 @@ public:
     // 本族的收集器基（`RunAwaiter<DAQDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
     using CollectorBase = DAQCollector;
+    // 等待器账本的请求槽：本族暂仍提交只读原型，由 begin 验型、Device 启动时 makeSelf（改造见待办）。
+    using Request = std::shared_ptr<const DAQCollector>;
 
     // ── pcap 读取政策：**族级常量** ────────
     // 住族基而不是型号宪法：这两个数由**本族的流量形状**决定——帧是成批爆发的，

@@ -96,8 +96,9 @@ public Q_SLOTS:
         if (!gmb || std::ranges::find(gimbals_, gmb) == gimbals_.end()) {
             Q_EMIT logMessage(QStringLiteral("没有可用的已登记转台")); return false;
         }
-        const auto parameters = GMBMoveParameters::fromQml(movement);
-        if (!parameters) { Q_EMIT logMessage(QStringLiteral("转台运动参数无效，任务未启动")); return false; }
+        // 运动草稿：停稳与速度在启动时固定；目标位形由协程逐束填入，再交官邸 paramsFor 校验。
+        const auto motion = GMBMoveParameters::fromQml({}, std::chrono::seconds(settleSec), movement);
+        if (!motion) { Q_EMIT logMessage(QStringLiteral("转台运动参数无效，任务未启动")); return false; }
         Cards picked;
         QStringList scope{gmb->device().displayName + QStringLiteral(" · ") + gmb->device().subtitle};
         for (auto *card : cards)
@@ -135,7 +136,7 @@ public Q_SLOTS:
         // DeviceCoro 不可移动，同类型 prvalue 直接构造；不能用 make_unique 转发。
         starting_ = true;
         coro_.reset(new DeviceCoro(run(std::move(request), *gmb, std::move(picked), std::move(worldAzimuths),
-                                      worldElevation, accumSec, std::chrono::seconds(settleSec), std::move(saveRoot), *parameters)));
+                                      worldElevation, accumSec, *motion, std::move(saveRoot))));
         starting_ = false;
         const bool acquired = coro_->locked();
         refreshRunState();
@@ -162,8 +163,9 @@ protected:
         Q_EMIT runChanged();
     }
     using GmbOrders = RunAwaiter<GMBDeviceBase>::Orders;
+    // motion 为启动时固定的运动草稿（停稳与速度）；协程逐束填入目标位形并经 paramsFor 校验。
     virtual DeviceCoro run(LockRequest, GMBDeviceBase &, Cards, QList<double>, double, int,
-                          std::chrono::milliseconds, std::optional<QDir>, GMBMoveParameters) = 0;
+                          GMBMoveParameters motion, std::optional<QDir>) = 0;
 
     // 不发业务状态通知，不调用虚函数；末端析构在自己的成员拆除前调用。
     void cancelRun() noexcept { coro_.reset(); }
@@ -171,12 +173,12 @@ protected:
     void completeBeam() noexcept { ++delivered_; }
     // 只构造等待器，共用本帧的锁/取消入口；co_await 和失败出口在每个具体协程内。
     [[nodiscard]] RunAwaiter<GMBDeviceBase> moveTo(const std::shared_ptr<DeviceLock> &lock,
-        GMBDeviceBase &gmb, const std::shared_ptr<const GMBCollector> &collector, const int beam)
+        GMBDeviceBase &gmb, const GMBMoveParameters &parameters, const int beam)
     {
-        const auto target = collector->target();
+        const auto &target = parameters.target;
         step(beam, Phase::Moving,
              QString("转台 前往 (水平 %1°, 俯仰 %2°)...").arg(target.pan(), 0, 'f', 2).arg(target.tilt(), 0, 'f', 2));
-        return RunAwaiter<GMBDeviceBase>{lock, gmb, collector};
+        return RunAwaiter<GMBDeviceBase>{lock, gmb, parameters};
     }
     [[nodiscard]] RunAwaiter<DAQDeviceBase> acquireAt(const std::shared_ptr<DeviceLock> &lock,
         GMBDeviceBase &gmb, const Cards &cards, const GmbOrders &moved, const int beam, const int accumSec,
@@ -184,7 +186,7 @@ protected:
     {
         step(beam, Phase::Acquiring, QString("%1 张卡同时采集%2...").arg(static_cast<int>(cards.size()))
              .arg(saveRoot ? QStringLiteral("（落盘）") : QStringLiteral("（不落盘）")));
-        const auto measured = moved[0].collector->measured();
+        const auto measured = moved[0].result->measured();
         const auto world = measured ? std::optional{gmb.worldOf(*measured)} : std::nullopt;
         RunAwaiter<DAQDeviceBase>::Orders orders;
         for (DAQDeviceBase &card : cards)

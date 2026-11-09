@@ -12,27 +12,7 @@
 #include "GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
 #include "DeviceBase.h" // DeviceBase / Device<H,C>
 #include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
-#include "GMBCollector.h"          // 云台族读口与型号收集器（喂位形、判到位 + 驻留）
-
-// 一次运动的按值参数；无速度表示本型号的定位协议不携带速度。
-// QML 仅在命令/任务启动边界交一份值，协程与工厂不回读界面。
-struct GMBMoveParameters
-{
-    struct Speeds { double pan; double tilt; }; // °/s，两轴必须成组提供
-    std::optional<Speeds> speeds;
-
-    [[nodiscard]] static std::optional<GMBMoveParameters> fromQml(const QVariantMap &values)
-    {
-        if (values.isEmpty()) return GMBMoveParameters{};
-        if (values.size() != 2 || !values.contains("panSpeed") || !values.contains("tiltSpeed"))
-            return std::nullopt;
-        bool panOk = false, tiltOk = false;
-        const double pan = values.value("panSpeed").toDouble(&panOk);
-        const double tilt = values.value("tiltSpeed").toDouble(&tiltOk);
-        if (!panOk || !tiltOk || !std::isfinite(pan) || !std::isfinite(tilt)) return std::nullopt;
-        return GMBMoveParameters{Speeds{pan, tilt}};
-    }
-};
+#include "GMBCollector.h"          // 云台族读口、运动参数与型号收集器（喂位形、判到位 + 驻留）
 
 // 云台族定义标准能力；纯 C++ 旁支，不继承 QObject（唯一 QObject 来自末端继承的 Handle）。
 // 模板层同时继承具体 Device 与本类，持有唯一安装姿态；编排只持族引用，通过 device() 使用锁，
@@ -47,6 +27,8 @@ public:
     // 本族的收集器基（`RunAwaiter<GMBDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
     using CollectorBase = GMBCollector;
+    // 等待器账本的请求槽：协程按束保存运动参数，族口 begin 据此造 Collector。
+    using Request = GMBMoveParameters;
 
     // ── pcap 读取政策：**族级常量** ──────────────────────────────
     // 住族基而不是型号宪法：这两个数由**本族的流量形状**决定，不由型号决定——任何一台
@@ -117,22 +99,10 @@ public:
         return WorldModel::fromOrientation(mounting().toOrientation() * pose.toOrientation());
     }
 
-    // 造斗：照一个**云台位形**造一只斗交出来——位形 → 收集器（它不让云台动，只造斗）。
-    // 调用面 `co_await RunAwaiter{lock, gmb, gmb.collectorFor(位形, hold, parameters)}`。反方向（收集器 → 位形）是
-    // 收集器自己的读口 `target()`（命令位形）/ `measured()`（实测位形）——转换所需的信息全在斗里，
-    // 不在设备上另开一口。
-    // **收位形**：世界角 → 位形归族基 gimbalOf，调用方先换，再造斗。
-    // **越出本台行程就返空份额**：官邸造斗（makeMoveCollector）时查，`begin` 随即拒收 → 等待器整批
-    // 判败 → 协程报失败。任务协程在设备发令前逐个造斗，任一为空即拒绝启动；
-    // QML 的计划表只做角度换算和行程预览，不调用本工厂。
-    // 本次运动参数由启动者交入；工厂不读取界面设置、不修改设备。
-    // 返族基份额而非具体型：族基是非模板的，具体型在此必须擦掉——**擦到族基为止**，编排层的
-    // 账本遂族级有型（等待器直接交回一支 `shared_ptr<const GMBCollector>` 的名单）。
-    // hold 对应任务页的“停稳等待”，下限为 GMBCollector::kMinHold。首次进圈后中途出圈不重置计时，
-    // 完成仍要求收到新的圈内回报，且与首次进圈的单调钟间隔达到 hold；型号不另加驻留常量。
-    [[nodiscard]] virtual std::shared_ptr<const GMBCollector> collectorFor(const PanTiltModel &target,
-                                                                         const std::chrono::milliseconds hold,
-                                                                         const GMBMoveParameters &parameters) const = 0;
+    // 运动参数的型号校验与量化（取代原 collectorFor）：交入草稿（目标位形、停稳、速度），越出本台行程或
+    // 速度不合本型号协议时返回空；成功则返回本次要提交的规范化参数，不造 Collector、不发令、不写日志以外的状态。
+    // 任务协程在发令前对全部波束调用它，任一为空即拒绝启动；世界角 → 位形的换算由调用方经 gimbalOf 先做完。
+    [[nodiscard]] virtual std::optional<GMBMoveParameters> paramsFor(const GMBMoveParameters &draft) const = 0;
 
     // 世界角 → 云台位形（反解）：R_云台 = R_安装⁻¹ · R_世界(目标)，再由 `PanTiltModel::fromOrientation`
     // 解出。`worldOf` 的去程，**不造斗**（设备页的"前往世界角"只要位形、直发即可，不需要结果）。
@@ -150,10 +120,9 @@ public:
     // 预览用的型号行程判据；末端以 Q_INVOKABLE 覆写供 QML 调用。
     [[nodiscard]] virtual bool withinTravel(double pan, double tilt) const = 0;
 
-    // 启动一只本族的斗（等待器在挂起成立后调）。返 false = 设备不收（空斗 / 被占 / 未连 / 正忙）。
-    // **本口是协议转换，不是薄转发**：机制层的启动口按 `Device` 的模板实参说话，而编排层只认
-    // 族基——两套词汇之间要有一道翻译，翻译落在族层。这是"擦到族基为止"这条选择的账面成本。
-    [[nodiscard]] virtual bool begin(const std::shared_ptr<const GMBCollector> &proto,
+    // 按运动参数启动一次到位（等待器在挂起成立后调）。模板层据参数直接造出本型号的具体 Collector 交 Device，
+    // 不经原型、验型或 makeSelf。返 false = 设备不收（参数不合本型号 / 被占 / 未连）。
+    [[nodiscard]] virtual bool begin(const GMBMoveParameters &parameters,
                                      DoneFn<GMBCollector> done,
                                      const std::shared_ptr<const DeviceLock> &lock) = 0;
 
@@ -198,44 +167,28 @@ public:
         return true;
     }
 
-    // 族口落地（final：管线是族级不变量，型号无权改）。本口只有"造哪只斗"这一个决定——交给官邸的
-    // makeMoveCollector（它查本台行程并组装命令），本层只将其结果上转为族基份额。
-    // **皮与可变点分开**：makeMoveCollector 是型号的私有可变点（NVI），本口是族基上的公开契约，
-    // 型号已交出只读原型；本口仅擦到族类型，不泄露可写份额。
-    // **公开而非私有**：它在族基上就是公开契约，拿具体官邸引用的调用点同样有资格调——覆写降级成
-    // 私有会让访问检查按静态类型把它们挡在门外。NVI 的私有是给**可变点**留的，不是给族口留的。
-    // 本口不碰几何：世界角 → 位形的换算与安装标定整个在族基 gimbalOf。
-    [[nodiscard]] std::shared_ptr<const GMBCollector> collectorFor(const PanTiltModel &target,
-                                                                   const std::chrono::milliseconds hold,
-                                                                   const GMBMoveParameters &parameters) const final
-    {
-        return this->makeMoveCollector(target, hold, parameters);
-    }
-
-    // 模板层完成 QML 值到强类型的边界转换；末端仅提供同名 Qt 槽。
+    // 模板层完成 QML 值到强类型的边界转换；末端仅提供同名 Qt 槽。手动直发不等到位，停稳等待不用。
     bool issueGoTo(const double pan, const double tilt, const QVariantMap &values)
     {
-        const auto parameters = GMBMoveParameters::fromQml(values);
+        const auto parameters = GMBMoveParameters::fromQml(PanTiltModel(pan, tilt), {}, values);
         if (!parameters)
         {
             Q_EMIT this->logMessage(QStringLiteral("转台运动参数无效，未下发"));
             return false;
         }
-        return issueGoTo(PanTiltModel(pan, tilt), *parameters);
+        return issueGoTo(*parameters);
     }
 
-    // 族请求在入口核对型号，内部启动/重试均持具体 Collector。
-    [[nodiscard]] bool begin(const std::shared_ptr<const GMBCollector> &proto,
+    // 按参数直接造出本型号的具体 Collector 交 Device：无原型、无验型、启动时不 makeSelf。
+    // 型号造斗时复用 paramsFor 的判据；参数不合本型号即拒收，拒绝原因由型号记录。
+    [[nodiscard]] bool begin(const GMBMoveParameters &parameters,
                              DoneFn<GMBCollector> done,
                              const std::shared_ptr<const DeviceLock> &lock) final
     {
-        const auto typed = std::dynamic_pointer_cast<const CollectorT>(proto);
-        if (!typed)
-        {
-            Q_EMIT this->logMessage(QStringLiteral("转台请求的 Collector 型号不匹配，未启动"));
+        auto collector = this->makeMoveCollector(parameters);
+        if (!collector)
             return false;
-        }
-        return DeviceT::start(typed, std::move(done), lock);
+        return DeviceT::start(std::move(collector), std::move(done), lock);
     }
 
     // 停机：族基的纯虚 stop 在此落地（final），实现就是机制层 Device::stop（它不是虚的，停机虚口只在族基）。
@@ -264,19 +217,15 @@ private:
     // **非 const**：型号要攒另一根轴（sqaf 的 Pelco 应答经、纬分帧），MCZT 还要记报警状态。
     [[nodiscard]] virtual std::optional<PanTiltModel> decodeStream(const QByteArray &) = 0;
 
-    // 本层另一个可变点：照本次位形、驻留时长和运动参数造 Collector。
-    // 私有虚 = NVI 可变点（派生只实现、不调用）。返回具体型号收集器：官邸把启动 / 停机指令、容差、
-    // 驻留时长（调用方交的 hold，斗里有下限）、时限交给 GMBCollector。
-    // 注意形参是**云台位形**不是世界朝向——换算那一步由调用方经族基 gimbalOf 做完。越出本台行程返空份额，
-    // 而后 `begin` 拒收 → 等待器整批判败 → 协程报失败，是响的。
-    [[nodiscard]] virtual std::shared_ptr<const CollectorT> makeMoveCollector(const PanTiltModel &target,
-                                                                           const std::chrono::milliseconds hold,
-                                                                           const GMBMoveParameters &parameters) const = 0;
+    // 本层另一个可变点（NVI，派生只实现、不调用）：照本次运动参数造出完整、可写的具体 Collector，
+    // 把启动 / 停机指令、容差、驻留时长（斗里有下限）、时限交给 GMBCollector。形参的目标是**云台位形**，
+    // 世界角换算由调用方经 gimbalOf 做完。参数不合本型号（与 paramsFor 同一判据）返空，begin 随即拒收。
+    [[nodiscard]] virtual std::shared_ptr<CollectorT> makeMoveCollector(const GMBMoveParameters &parameters) const = 0;
 
-    // 手动直发接收云台位形和本次运动参数，不造 Collector、不等到位；
+    // 手动直发接收本次运动参数（目标位形与速度），不造 Collector、不等到位；
     // 失败由发现原因的层记录并返回 false，成功只返 true，由 QML 最终调用处记日志。
     // QML 通过官邸的同名 Qt 入口调用；世界角先用安装姿态值换算，不把文案传入设备。
-    [[nodiscard]] virtual bool issueGoTo(const PanTiltModel &target, const GMBMoveParameters &parameters) = 0;
+    [[nodiscard]] virtual bool issueGoTo(const GMBMoveParameters &parameters) = 0;
     [[nodiscard]] virtual bool issueStop() = 0;
 
     // 唯一安装标定；主线程读写，族基通过 mounting() 使用。
