@@ -99,7 +99,7 @@ public:
         return WorldModel::fromOrientation(mounting().toOrientation() * pose.toOrientation());
     }
 
-    // 由原始量构造本型号的运动参数（取代原 collectorFor）：目标云台位形、停稳等待、可选两轴速度。
+    // 由原始量构造本型号的运动参数：目标云台位形、停稳等待、可选两轴速度。
     // 越出本台行程或速度不合本型号协议时返回空并记录原因；成功返回规范化（量化/去速度）的参数，
     // 不造 Collector、不发令。任务协程发令前对全部波束调用，任一为空即拒绝启动；世界角先经 gimbalOf 换算。
     [[nodiscard]] virtual std::optional<GMBMoveParameters> paramsFor(const PanTiltModel &target,

@@ -31,8 +31,8 @@ public:
     // 本族的收集器基（`RunAwaiter<DAQDeviceBase>` 由此取账本的元素型——族基是非模板类，
     // 故这条别名就是等待器"存得下"的全部依据）。
     using CollectorBase = DAQCollector;
-    // 等待器账本的请求槽：本族暂仍提交只读原型，由 begin 验型、Device 启动时 makeSelf（改造见待办）。
-    using Request = std::shared_ptr<const DAQCollector>;
+    // 等待器账本的请求槽：协程按卡保存采集参数，族口 begin 据此造 Collector。
+    using Request = DAQParameters;
 
     // ── pcap 读取政策：**族级常量** ────────
     // 住族基而不是型号宪法：这两个数由**本族的流量形状**决定——帧是成批爆发的，
@@ -51,12 +51,9 @@ public:
     // 同一对象的机制面：模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
-    // 只按传入的采集参数与消费上下文创建原型，不改变设备或发送命令。
-    [[nodiscard]] virtual std::shared_ptr<const DAQCollector> collectorFor(int accumSec, DAQContext context) const = 0;
-
-    // 启动一只本族的斗（等待器在挂起成立后调）。返 false = 设备不收。形制与 GMBDeviceBase
-    // 逐条对仗，理由见那边。
-    [[nodiscard]] virtual bool begin(const std::shared_ptr<const DAQCollector> &proto,
+    // 按采集参数启动一次采集（等待器在挂起成立后调）。模板层据参数直接造出本型号的具体 Collector 交 Device，
+    // 不经原型、验型或启动时 makeSelf。返 false = 设备不收（被占 / 未连）。形制与 GMBDeviceBase 逐条对仗。
+    [[nodiscard]] virtual bool begin(const DAQParameters &parameters,
                                      DoneFn<DAQCollector> done,
                                      const std::shared_ptr<const DeviceLock> &lock) = 0;
 
@@ -70,7 +67,7 @@ public:
     virtual void profileReady(int channel, NonuniformVerticalWindProfilePtr profile) = 0;
 };
 
-// 模板层继承具体 Device 与族基：验型、主线程消费（显示、落盘、四束环与风廓线）及单卡测试协程。
+// 模板层继承具体 Device 与族基：按参数造斗、主线程消费（显示、落盘、四束环与风廓线）及单卡测试协程。
 // 型号只给通道规格并按协议整理功率谱，不写处理或落盘代码。
 template <HandleLike HandleT, DAQCollectorLike CollectorT>
 class DAQDevice : public Device<HandleT, CollectorT>, public DAQDeviceBase
@@ -97,25 +94,12 @@ public:
     // 与协变返回的组合报 C2062；持具体类型者直接在设备对象上使用完整 Device 接口。
     [[nodiscard]] DeviceBase &device() noexcept final { return *this; }
 
-    // 保留族接口的公开入口，按具体 Collector 类型创建只读原型。
-    [[nodiscard]] std::shared_ptr<const DAQCollector> collectorFor(int accumSec, DAQContext context) const final
-    {
-        // 静态工厂只造本型号原型；Device 启动时 makeSelf 另建可写收集区。
-        return CollectorT::createPrototype(accumSec, std::move(context)); // 具体份额隐式上行成族份额
-    }
-
-    // 外部族请求只在此验型；拒收发生在装运行槽、发送命令之前。
-    [[nodiscard]] bool begin(const std::shared_ptr<const DAQCollector> &proto,
+    // 按参数经型号静态工厂直接造出完整的具体 Collector 交 Device：无原型、无验型、启动时不 makeSelf。
+    [[nodiscard]] bool begin(const DAQParameters &parameters,
                              DoneFn<DAQCollector> done,
                              const std::shared_ptr<const DeviceLock> &lock) final
     {
-        const auto typed = std::dynamic_pointer_cast<const CollectorT>(proto);
-        if (!typed)
-        {
-            Q_EMIT this->logMessage(QStringLiteral("采集请求的 Collector 型号不匹配，未启动"));
-            return false;
-        }
-        return DeviceT::start(typed, std::move(done), lock);
+        return DeviceT::start(CollectorT::create(parameters), std::move(done), lock);
     }
 
     // 停机：族基的纯虚 stop 在此落地（final），实现就是机制层 Device::stop（同 GMBDevice::stop）。
@@ -151,7 +135,7 @@ public:
     void cancelTest() noexcept { testCoro_.reset(); }
 
 private:
-    // 测试采集协程：取令牌 → 每轮 collectorFor 造原型，交等待器经 begin 启动；
+    // 测试采集协程：取令牌 → 每轮交等待器一份采集参数，经 begin 启动；
     // 完成帧由设备自行消费；启动时固定带 "Test" 后缀的会话目录名，各轮共用。
     DeviceCoro runTest(LockRequest, const int accumSec, const std::optional<QDir> saveRoot, const QString sessionDir)
     {
@@ -169,7 +153,7 @@ private:
                                  .arg(saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(saveRoot->absolutePath())
                                                : QStringLiteral("，不落盘")));
             const auto framed = co_await RunAwaiter<DAQDeviceBase>{lock, *this,
-                collectorFor(accumSec, {std::nullopt, saveRoot, sessionDir, false})};
+                DAQParameters{accumSec, {std::nullopt, saveRoot, sessionDir, false}}};
             if (framed.empty())
             {
                 Q_EMIT this->logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));

@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-09 用户定（DAQ 第二步）：DAQ 请求改为按值参数 `DAQParameters{accumSec, context}`，删除 collectorFor、只读原型与 begin 中的验型；`DAQCollectorLike` 改为要求静态 `create(const DAQParameters&)` 交出完整可写自身，begin 直接 `create` 后交 Device。DAQDeviceBase::Request = DAQParameters。
+
 2026-11-09 用户定（DAQ 族第一步）：删除 DAQ 处理线程，DAQDeviceBase 改为纯 C++ 旁支，`DAQDevice<HandleT, CollectorT>` 同时继承 Device 与族基（device() 返回 DeviceBase&，不用协变以避开 MSVC 对结构体模板实参的 C2062）。DAQChannel（名称、门数 × 频点数、每门距离、每频点频率、零风速参考、频移→风速系数及谱/风/CNR 数据）放在 DAQCollector 之前，DAQCollector 直接继承 std::vector<DAQChannel>；型号收齐末包调用 complete()，在收包线程按通道串行做标准处理后才判齐。主线程消费：按通道发 spectrumReady/radialReady/profileReady，Boost circular_buffer 保存最近 4 帧，同步位为真时逐通道反演风廓线。AcqSaver 并入核心（删除 TASKCORE_WITH_DAQ_SAVING 与 Lidar::DAQSaving），只保留 saveFrame/saveWindProfiles 两个入口：每帧一个 JSON、风廓线同构 JSON，英文键、6 位有效数字、缺测 null。TaskBase 的 addCard/start 收 QObject* 交叉转换验族，任务 QML 采集卡类型改为 QtObject。请求仍是只读原型（第二步见主程序待办）。
 
 2026-11-09 用户定（云台瘦身）：删除 GMB 的 collectorFor 与原型路径。`GMBMoveParameters` 移入 GMBCollector.h，含目标位形、停稳与可选速度；官邸 `paramsFor(target, hold, speeds)` 做型号校验与量化（取代原 collectorFor 的预验职责），族口 `begin(const GMBMoveParameters&, done, lock)` 由型号 makeMoveCollector 直接造出完整可写的具体 Collector 交 Device，不再 dynamic_cast，启动不再 makeSelf。RunOrder 拆为 request 与 result 两槽，析构只对结果为空的项撤单，不再询问 settled；取代 10-25“提交时把原型移出账本”的裁定。TaskBase 启动时只解析速度表（speedsFromQml），协程逐束以目标、停稳、速度这些原始量调用 paramsFor 构造参数。DAQ 仍走只读原型，族基声明 Request 别名，改造见主程序待办。
@@ -25,7 +27,7 @@
 
 消费者必须在 FetchContent_MakeAvailable 前选择开关。核心目标不反向链接附加模块。界面消费者链接 LidarTaskUIplugin 并显式 `Q_IMPORT_QML_PLUGIN(LidarTaskUIPlugin)`（动态 Qt 下的静态模块也需要）；同时导入 UICore/ChartCore 插件。各模块输出目录的两级父目录用于 QML 工具 IMPORT_PATH。
 
-TaskModule 接收 `list<QtObject>`（云台设备本身）和 `list<DAQDeviceBase>`，不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经族基 collectorFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，锁/完成链同步取消；QObject 销毁通知移除登记，排队收尾保留。
+TaskModule 接收两个 `list<QtObject>`（云台与采集卡设备本身），不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经族基 collectorFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，锁/完成链同步取消；QObject 销毁通知移除登记，排队收尾保留。
 
 这些目标均是可选实现，不要求任务官邸继承 TaskBase 或 TaskModule。三个具体计划和协程不在本库，官邸可以只使用核心能力自行编排。附加保存继续使用独立线程，不反向访问日志对象，不增加退出排空。
 

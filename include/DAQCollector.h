@@ -23,6 +23,14 @@ struct DAQContext
     bool sync = false;
 };
 
+// 一次采集请求的按值参数：累积时间与消费上下文。协程按卡保存它并交族口 begin，
+// 由模板层经型号静态工厂造出本次 Collector；累积时间超出型号范围时由型号钳制。
+struct DAQParameters
+{
+    int accumSec = 0;
+    DAQContext context;
+};
+
 // 一个通道：型号给出规格（名称、门与频点的物理坐标、零风速参考、频移→风速系数），收集期间整理功率谱，
 // 收齐后按标准方法算径向风与 CNR。显示、反演与落盘只认这些字段，不认识官邸。
 struct DAQChannel
@@ -98,9 +106,9 @@ private:
     bool processed_ = false;
 };
 
-// 具体类型须属于本族、沿用 feed；静态工厂交只读自身，makeSelf 交可写自身。
+// 具体类型须属于本族、沿用 feed；静态工厂按请求参数交出完整、可写的自身（已备齐收集区），makeSelf 供重试。
 template <typename C>
 concept DAQCollectorLike = std::derived_from<C, DAQCollector> && CollectorLike<C>
-    && requires(int accumSec, DAQContext context) {
-        { C::createPrototype(accumSec, std::move(context)) } -> std::same_as<std::shared_ptr<const C>>;
+    && requires(const DAQParameters &parameters) {
+        { C::create(parameters) } -> std::same_as<std::shared_ptr<C>>;
     };

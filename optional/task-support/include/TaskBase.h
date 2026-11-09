@@ -196,8 +196,8 @@ protected:
         RunAwaiter<DAQDeviceBase>::Orders orders;
         // 族基不是 QObject：会话目录的 ASCII 标识取同一对象上的 objectName（交叉转换必然成功）。
         for (DAQDeviceBase &card : cards)
-            orders.push_back({card, card.collectorFor(accumSec, {world, saveRoot,
-                AcqSaver::sessionDir(sessionTime, dynamic_cast<const QObject &>(card).objectName()), sync})});
+            orders.push_back({card, DAQParameters{accumSec, {world, saveRoot,
+                AcqSaver::sessionDir(sessionTime, dynamic_cast<const QObject &>(card).objectName()), sync}}});
         return RunAwaiter<DAQDeviceBase>{lock, std::move(orders)};
     }
 

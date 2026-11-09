@@ -56,10 +56,9 @@ private:
 class TestCollector final : public DAQCollector
 {
 public:
-    static std::shared_ptr<const TestCollector> createPrototype(int seconds, DAQContext c)
-    { return std::shared_ptr<const TestCollector>(new TestCollector(seconds, std::move(c))); }
-    std::shared_ptr<TestCollector> makeSelf() const
-    { return std::shared_ptr<TestCollector>(new TestCollector(accumSec(), context())); }
+    static std::shared_ptr<TestCollector> create(const DAQParameters &p)
+    { return std::shared_ptr<TestCollector>(new TestCollector(p.accumSec, p.context)); }
+    std::shared_ptr<TestCollector> makeSelf() const { return create({accumSec(), context()}); }
     QList<QByteArray> buildStart() const override { return {"start"}; }
     int timeoutMs() const override { return 0; }
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
@@ -147,7 +146,7 @@ int main(int argc, char **argv)
     // 四个方位各一帧，第四帧带同步位：前三帧不反演，第四帧对满环反演一次。
     for (int i = 0; i < 4; ++i) {
         const DAQContext context{WorldModel(i * 90.0, 60.0), std::nullopt, QStringLiteral("s"), i == 3};
-        if (!device.begin(device.collectorFor(1, context), [&](auto frame) {
+        if (!device.begin(DAQParameters{1, context}, [&](auto frame) {
             const auto typed = std::dynamic_pointer_cast<const TestCollector>(frame);
             if (!typed || !typed->settled() || typed->processedOn() == app.thread() || QThread::currentThread() != app.thread())
                 qFatal("frame was not processed on the receive thread before completion");

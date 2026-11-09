@@ -73,7 +73,7 @@ public:
     // 换成世界朝向。**空 = 还没收到过采样**。
     [[nodiscard]] std::optional<PanTiltModel> measured() const { return last_; }
 
-    // 本次 run **被命令去的**位形——`collectorFor` 的反方向（收集器 → 位形）。每只斗都有目标
+    // 本次 run **被命令去的**位形——运动参数目标的回读（收集器 → 位形）。每只斗都有目标
     // （扇扫 / 循环 / 方向键不造斗），故不是 optional。
     [[nodiscard]] PanTiltModel target() const { return target_; }
 
