@@ -1,6 +1,6 @@
 # TaskCore
 
-2026-11-09 用户定（云台瘦身）：删除 GMB 的 collectorFor 与原型路径。`GMBMoveParameters` 移入 GMBCollector.h，含目标位形、停稳与可选速度；官邸 `paramsFor(draft)` 做型号校验与量化（取代原 collectorFor 的预验职责），族口 `begin(const GMBMoveParameters&, done, lock)` 由型号 makeMoveCollector 直接造出完整可写的具体 Collector 交 Device，不再 dynamic_cast，启动不再 makeSelf。RunOrder 拆为 request 与 result 两槽，析构只对结果为空的项撤单，不再询问 settled；取代 10-25“提交时把原型移出账本”的裁定。TaskBase 启动时把停稳与速度固定为运动草稿，协程逐束填目标后经 paramsFor 预验。DAQ 仍走只读原型，族基声明 Request 别名，改造见主程序待办。
+2026-11-09 用户定（云台瘦身）：删除 GMB 的 collectorFor 与原型路径。`GMBMoveParameters` 移入 GMBCollector.h，含目标位形、停稳与可选速度；官邸 `paramsFor(target, hold, speeds)` 做型号校验与量化（取代原 collectorFor 的预验职责），族口 `begin(const GMBMoveParameters&, done, lock)` 由型号 makeMoveCollector 直接造出完整可写的具体 Collector 交 Device，不再 dynamic_cast，启动不再 makeSelf。RunOrder 拆为 request 与 result 两槽，析构只对结果为空的项撤单，不再询问 settled；取代 10-25“提交时把原型移出账本”的裁定。TaskBase 启动时只解析速度表（speedsFromQml），协程逐束以目标、停稳、速度这些原始量调用 paramsFor 构造参数。DAQ 仍走只读原型，族基声明 Request 别名，改造见主程序待办。
 
 2026-11-09 用户定：GMBDeviceBase 改为纯 C++ 旁支，不继承 QObject；`GMBDevice<HandleT, CollectorT>` 同时继承 `Device<HandleT, CollectorT>` 与族基，`device()` 协变返回自身的 Device 基类，族基保留纯虚 `device()` 供编排取 DeviceBase。mountingChanged/anglesReady 改为纯虚契约，由末端以 Q_SIGNALS 覆写；删除 `device` Q_PROPERTY、`deviceObject()` 与 GMBDeviceBase 的 QML 登记。TaskBase 的 addGimbal/start 接收 QObject* 并交叉转换验族，非云台拒收；TaskModule/SimOnlyTaskModule 的云台类型改为 QtObject。DAQ 族本轮不变。task_ui_smoke 改为触发按钮实际绑定的 Action（原先只发 clicked，Action 不执行，测试此前已失败）。验证：Windows 全选项独立构建零警告、CTest 4/4。
 

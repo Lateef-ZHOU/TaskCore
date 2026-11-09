@@ -314,7 +314,7 @@ struct RunOrder
 
 // ============================================================
 // RunAwaiter<FamilyT> — 一批 run 的等待器：**下单 + 攒账 + 判齐 + 撤单**四件都在这儿。
-//   if ((co_await RunAwaiter{lock, gmb, *gmb.paramsFor(draft)}).empty()) co_return; // 单台
+//   if ((co_await RunAwaiter{lock, gmb, *gmb.paramsFor(target, hold, speeds)}).empty()) co_return; // 单台
 //   const auto r = co_await RunAwaiter<DAQDeviceBase>(lock, std::move(orders));         // 多卡同采 join（名单运行期拼好）
 //
 // **按族模板化**：`FamilyT` 是族基（GMBDeviceBase / DAQDeviceBase），账本元素型由

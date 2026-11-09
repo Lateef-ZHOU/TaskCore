@@ -99,10 +99,11 @@ public:
         return WorldModel::fromOrientation(mounting().toOrientation() * pose.toOrientation());
     }
 
-    // 运动参数的型号校验与量化（取代原 collectorFor）：交入草稿（目标位形、停稳、速度），越出本台行程或
-    // 速度不合本型号协议时返回空；成功则返回本次要提交的规范化参数，不造 Collector、不发令、不写日志以外的状态。
-    // 任务协程在发令前对全部波束调用它，任一为空即拒绝启动；世界角 → 位形的换算由调用方经 gimbalOf 先做完。
-    [[nodiscard]] virtual std::optional<GMBMoveParameters> paramsFor(const GMBMoveParameters &draft) const = 0;
+    // 由原始量构造本型号的运动参数（取代原 collectorFor）：目标云台位形、停稳等待、可选两轴速度。
+    // 越出本台行程或速度不合本型号协议时返回空并记录原因；成功返回规范化（量化/去速度）的参数，
+    // 不造 Collector、不发令。任务协程发令前对全部波束调用，任一为空即拒绝启动；世界角先经 gimbalOf 换算。
+    [[nodiscard]] virtual std::optional<GMBMoveParameters> paramsFor(const PanTiltModel &target,
+        std::chrono::milliseconds hold, const std::optional<GMBMoveParameters::Speeds> &speeds) const = 0;
 
     // 世界角 → 云台位形（反解）：R_云台 = R_安装⁻¹ · R_世界(目标)，再由 `PanTiltModel::fromOrientation`
     // 解出。`worldOf` 的去程，**不造斗**（设备页的"前往世界角"只要位形、直发即可，不需要结果）。
@@ -170,13 +171,14 @@ public:
     // 模板层完成 QML 值到强类型的边界转换；末端仅提供同名 Qt 槽。手动直发不等到位，停稳等待不用。
     bool issueGoTo(const double pan, const double tilt, const QVariantMap &values)
     {
-        const auto parameters = GMBMoveParameters::fromQml(PanTiltModel(pan, tilt), {}, values);
-        if (!parameters)
+        const auto speeds = GMBMoveParameters::speedsFromQml(values);
+        if (!speeds)
         {
             Q_EMIT this->logMessage(QStringLiteral("转台运动参数无效，未下发"));
             return false;
         }
-        return issueGoTo(*parameters);
+        const auto parameters = paramsFor(PanTiltModel(pan, tilt), {}, *speeds);
+        return parameters && issueGoTo(*parameters);
     }
 
     // 按参数直接造出本型号的具体 Collector 交 Device：无原型、无验型、启动时不 makeSelf。
@@ -219,10 +221,10 @@ private:
 
     // 本层另一个可变点（NVI，派生只实现、不调用）：照本次运动参数造出完整、可写的具体 Collector，
     // 把启动 / 停机指令、容差、驻留时长（斗里有下限）、时限交给 GMBCollector。形参的目标是**云台位形**，
-    // 世界角换算由调用方经 gimbalOf 做完。参数不合本型号（与 paramsFor 同一判据）返空，begin 随即拒收。
+    // 世界角换算由调用方经 gimbalOf 做完。begin 是公开入口，型号仍以 paramsFor 同一判据复核，不合即返空、拒收。
     [[nodiscard]] virtual std::shared_ptr<CollectorT> makeMoveCollector(const GMBMoveParameters &parameters) const = 0;
 
-    // 手动直发接收本次运动参数（目标位形与速度），不造 Collector、不等到位；
+    // 手动直发接收已经 paramsFor 规范化的运动参数（目标位形与速度），不造 Collector、不等到位；
     // 失败由发现原因的层记录并返回 false，成功只返 true，由 QML 最终调用处记日志。
     // QML 通过官邸的同名 Qt 入口调用；世界角先用安装姿态值换算，不把文案传入设备。
     [[nodiscard]] virtual bool issueGoTo(const GMBMoveParameters &parameters) = 0;

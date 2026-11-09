@@ -24,18 +24,18 @@ struct GMBMoveParameters
     std::chrono::milliseconds hold{0};
     std::optional<Speeds> speeds;
 
-    // QML 只交速度表；空表 = 不带速度，非空必须恰为两轴有限值。
-    [[nodiscard]] static std::optional<GMBMoveParameters> fromQml(PanTiltModel target, std::chrono::milliseconds hold,
-                                                                  const QVariantMap &values)
+    // QML 边界只解析速度表：外层空 = 表无效；内层空 = 空表，即不带速度；非空表须恰为两轴有限值。
+    // 参数本身由官邸 paramsFor 用目标、停稳和速度这些原始量构造。
+    [[nodiscard]] static std::optional<std::optional<Speeds>> speedsFromQml(const QVariantMap &values)
     {
-        if (values.isEmpty()) return GMBMoveParameters{std::move(target), hold, std::nullopt};
+        if (values.isEmpty()) return std::optional<Speeds>{};
         if (values.size() != 2 || !values.contains("panSpeed") || !values.contains("tiltSpeed"))
             return std::nullopt;
         bool panOk = false, tiltOk = false;
         const double pan = values.value("panSpeed").toDouble(&panOk);
         const double tilt = values.value("tiltSpeed").toDouble(&tiltOk);
         if (!panOk || !tiltOk || !std::isfinite(pan) || !std::isfinite(tilt)) return std::nullopt;
-        return GMBMoveParameters{std::move(target), hold, Speeds{pan, tilt}};
+        return std::optional<Speeds>{Speeds{pan, tilt}};
     }
 };
 
