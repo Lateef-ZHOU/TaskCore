@@ -1,15 +1,14 @@
 #pragma once
-#include <algorithm>
 #include <concepts>
-#include <limits>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
 #include <QByteArray>
+#include <QByteArrayView>
 #include <QDir>
 #include <QString>
-#include <QVector>
 
 #include "GimbalModel.h"
 #include "LinearArray.h"
@@ -28,41 +27,34 @@ struct DAQParameters
     bool sync = false;
 };
 
-// 一个通道：型号给出规格（名称、功率谱网格与两条物理轴、零风速参考），收集期间往 spectrum 里整理功率谱，
-// 收齐后按标准方法算径向风与 CNR。显示、反演与落盘只认这些字段，不认识官邸。
+// 一个通道：型号解析出完整功率谱后构造，构造即按标准方法算出径向风与 CNR；存在即已处理。
+// 显示、反演与落盘只认这些字段，不认识官邸；交付后经 const 收集器只读。
 struct DAQChannel
 {
+    // 功率谱：行 = 距离门（行轴为斜距 m），列 = 频点（列轴为频率 MHz）。
+    // 逐门高斯拟合出峰位与 CNR，峰位按频率轴与零风速参考换算为径向风速；wavelengthM 决定频移→风速系数 λ/2。
+    DAQChannel(QString name, LinearArray2D<double> spectrum, const double zeroWindMHz, const double wavelengthM)
+        : DAQChannel(std::move(name), RadialWind::Calc(spectrum, RadialWind::metersPerSecondPerMHz(wavelengthM), zeroWindMHz),
+                     std::move(spectrum), zeroWindMHz) {}
+
     QString name;
-    // 功率谱：行 = 距离门（行轴为斜距 m），列 = 频点（列轴为频率 MHz）。型号在规格里给出网格与两条轴，
-    // 收包期间只追加元素；频率起点随协议在首包确定的型号可在那时再写列轴。
     LinearArray2D<double> spectrum;
-    double zeroWindMHz = std::numeric_limits<double>::quiet_NaN();
-    // 逐门产物：轴取功率谱的行轴（斜距），由处理一并给出。
+    double zeroWindMHz;
+    // 逐门产物：轴取功率谱的行轴（斜距）；网格不完整或轴无效时为空。
     LinearArray<double> radialWind; // m/s；零风速参考不在频带内时为 NaN
-    LinearArray<double> cnr;        // dB；空 = 未处理
+    LinearArray<double> cnr;        // dB
 
-    // 已处理：径向风与 CNR 都已按功率谱的门数算出。
-    [[nodiscard]] bool processed() const noexcept
-    {
-        const auto rows = static_cast<std::size_t>(spectrum.rows);
-        return rows > 0 && radialWind.size() == rows && cnr.size() == rows;
-    }
-
-    // 标准处理（幂等，已处理即返回）：逐门高斯拟合出峰位与 CNR，峰位按频率轴与零风速参考换算为径向风速。
-    // metersPerSecondPerMHz 由族基按本卡激光波长给出（λ/2）；网格不完整或轴无效时不出结果。
-    void process(const double metersPerSecondPerMHz)
-    {
-        if (processed())
-            return;
-        auto result = RadialWind::Calc(spectrum, metersPerSecondPerMHz, zeroWindMHz);
-        radialWind = std::move(result.ws);
-        cnr = std::move(result.cnr);
-    }
+private:
+    // 功率谱按右值引用收：拟合结果先于功率谱移入成员算出，不依赖实参求值顺序。
+    DAQChannel(QString name, RadialWind::Result wind, LinearArray2D<double> &&spectrum, const double zeroWindMHz)
+        : name(std::move(name)), spectrum(std::move(spectrum)), zeroWindMHz(zeroWindMHz),
+          radialWind(std::move(wind.ws)), cnr(std::move(wind.cnr)) {}
 };
 
-// 族基：通道数组即本帧全部数据（运行期定通道数）；型号负责按协议整理功率谱，收齐末包时调用 complete。
-// 族基提供时刻、本次请求参数与本卡激光波长；处理在 worker 线程完成后才判齐，交付后只读。
-class DAQCollector : public Collector<QByteArray>, public std::vector<DAQChannel>
+// 族基：收包期间只把一帧原始字节凑进缓冲，凑齐即交型号 decode 解析成通道，之后本帧判齐。
+// 型号 onFeed 只做协议校验、去掉包头（帧内数组元素原样保留）并以 store 放置字节，不做换算。
+// 族基提供时刻、本次请求参数与本卡激光波长；交付后只读。
+class DAQCollector : public Collector<QByteArray>
 {
 public:
     // 当前帧的到料时刻由型号按协议确定；完成后供落盘文件名和风廓线时间轴使用。
@@ -70,37 +62,52 @@ public:
     [[nodiscard]] const DAQParameters &parameters() const noexcept { return parameters_; }
     // 本卡激光波长（m）：各通道共用，决定频移→风速系数 λ/2。
     [[nodiscard]] double wavelengthM() const noexcept { return wavelengthM_; }
-
-    // 型号调用 complete 之后才算收齐；判齐后公共 feed 不再进料。
-    // 判齐 = 每个通道都已处理（由各通道的产物长度判断，不另存状态位）。
-    [[nodiscard]] bool settled() const final
-    {
-        return !empty() && std::ranges::all_of(*this, [](const DAQChannel &channel) { return channel.processed(); });
-    }
+    // 本帧全部通道；判齐前为空。
+    [[nodiscard]] const std::vector<DAQChannel> &channels() const noexcept { return channels_; }
+    // 判齐 = 一帧凑齐且已解析出通道；判齐后公共 feed 不再进料。
+    [[nodiscard]] bool settled() const final { return !channels_.empty(); }
 
 protected:
-    // 派生构造必须显式交入请求参数、通道规格与激光波长（m）；参数已由官邸 paramsFor 校验。
-    DAQCollector(DAQParameters parameters, std::vector<DAQChannel> channels, const double wavelengthM)
-        : std::vector<DAQChannel>(std::move(channels)), parameters_(std::move(parameters)), wavelengthM_(wavelengthM) {}
+    // 派生构造必须显式交入请求参数、整帧字节数与激光波长（m）；参数已由官邸 paramsFor 校验。
+    DAQCollector(DAQParameters parameters, const qsizetype frameBytes, const double wavelengthM)
+        : parameters_(std::move(parameters)), wavelengthM_(wavelengthM), raw_(frameBytes, Qt::Uninitialized) {}
     // 非虚 + protected：与 Collector / GMBCollector 同判例——销毁恒经控制块记下的具体删除器，
     // 从不经本类指针 delete；protected 顺带把裸删门封死。
     ~DAQCollector() = default;
 
-    // [worker] 型号在 onFeed 收齐末包时调用一次：按通道串行做标准处理（算法内部 OpenMP），之后本帧判齐。
-    void complete()
+    // [worker] 把一段字节放到帧内 offset 处；越界（含已解析后）拒收并返回 false。
+    // 累计字节凑满整帧即调用 decode，随后释放原始缓冲（算法内部 OpenMP）。
+    bool store(const qsizetype offset, const QByteArrayView bytes)
     {
-        const double metersPerSecondPerMHz = RadialWind::metersPerSecondPerMHz(wavelengthM_);
-        for (auto &channel : *this)
-            channel.process(metersPerSecondPerMHz);
+        if (offset < 0 || bytes.size() > raw_.size() - offset)
+            return false;
+        std::memcpy(raw_.data() + offset, bytes.data(), static_cast<std::size_t>(bytes.size()));
+        received_ += bytes.size();
+        if (received_ == raw_.size())
+        {
+            channels_ = decode(raw_);
+            raw_ = QByteArray();
+        }
+        return true;
     }
+    // [worker] 已收字节数：顺序到达的协议以它作为下一段的偏移。
+    [[nodiscard]] qsizetype received() const noexcept { return received_; }
+    // [worker] 协议换帧时弃旧启新：只清计数，不清缓冲——凑满即每个位置都被本帧写过。
+    void restart() noexcept { received_ = 0; }
 
     // 仅型号 onFeed 写：未完成时可随协议换帧更新，完成后公共 feed 不再改写。
     // makeSelf 只保留不可变配置，另建初始帧时刻，不继承旧尝试的观测。
     RxTime frameTime_{};
 
 private:
+    // [worker] 型号按协议把凑齐的一帧解析为各通道（构造即处理）；解析失败返回空，本帧不判齐。
+    [[nodiscard]] virtual std::vector<DAQChannel> decode(const QByteArray &frame) const = 0;
+
     const DAQParameters parameters_;
     const double wavelengthM_;
+    QByteArray raw_;
+    qsizetype received_ = 0;
+    std::vector<DAQChannel> channels_;
 };
 
 // 具体类型须属于本族、沿用 feed；静态工厂按请求参数交出完整、可写的自身（已备齐收集区），makeSelf 供重试。

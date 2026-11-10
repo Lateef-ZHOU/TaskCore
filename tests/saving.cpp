@@ -45,22 +45,21 @@ public:
     QList<QByteArray> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
-    explicit SavedFrame(DAQParameters p)
-        : DAQCollector(std::move(p), {channel("A", 1.5), channel("B", 99.0)}, 1.55e-6) {}
-    static DAQChannel channel(const char *name, double zero)
-    {
-        DAQChannel c;
-        c.name = QString::fromLatin1(name);
-        c.spectrum = LinearArray2D<double>(2, 4, 0, 15, 0, 1);
-        c.zeroWindMHz = zero;
-        return c;
-    }
+    explicit SavedFrame(DAQParameters p) : DAQCollector(std::move(p), 1, 1.55e-6) {}
     void onFeed(const std::optional<QByteArray> &, RxTime at) override
     {
-        for (auto &c : *this)
-            static_cast<std::vector<double> &>(c.spectrum) = {1, 2, 9, 2, 1, 3, 8, 3};
         frameTime_ = at;
-        complete();
+        (void)store(received(), QByteArrayView("x", 1));
+    }
+    std::vector<DAQChannel> decode(const QByteArray &) const override
+    {
+        std::vector<DAQChannel> channels;
+        for (const auto &[name, zero] : {std::pair{"A", 1.5}, std::pair{"B", 99.0}}) {
+            LinearArray2D<double> spectrum(2, 4, 0, 15, 0, 1);
+            static_cast<std::vector<double> &>(spectrum) = {1, 2, 9, 2, 1, 3, 8, 3};
+            channels.emplace_back(QString::fromLatin1(name), std::move(spectrum), zero, wavelengthM());
+        }
+        return channels;
     }
 };
 static_assert(DAQCollectorLike<SavedFrame>);

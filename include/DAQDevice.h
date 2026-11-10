@@ -153,9 +153,9 @@ private:
     void onConsume(const std::shared_ptr<const CollectorT> &frame) override
     {
         const auto &context = frame->parameters();
-        for (std::size_t i = 0; i < frame->size(); ++i)
+        for (std::size_t i = 0; i < frame->channels().size(); ++i)
         {
-            const auto &channel = (*frame)[i];
+            const auto &channel = frame->channels()[i];
             Q_EMIT this->spectrumReady(int(i), channel.spectrum);
             Q_EMIT this->radialReady(int(i), channel.radialWind, channel.cnr,
                                          RadialWind::inBand(channel.spectrum, channel.zeroWindMHz));
@@ -166,14 +166,14 @@ private:
         if (!context.sync || !beams_.full())
             return;
         std::vector<AcqSaver::ProfileChannel> profiles;
-        for (std::size_t i = 0; i < frame->size(); ++i)
+        for (std::size_t i = 0; i < frame->channels().size(); ++i)
         {
-            const auto &channel = (*frame)[i];
+            const auto &channel = frame->channels()[i];
             std::array<WindProfile::Input, WindProfile::kBeams> inputs;
             bool usable = true;
             for (std::size_t beam = 0; beam < inputs.size(); ++beam)
             {
-                const auto &past = (*beams_[beam])[i];
+                const auto &past = beams_[beam]->channels()[i];
                 usable = usable && RadialWind::inBand(past.spectrum, past.zeroWindMHz)
                          && past.radialWind.sameAxis(channel.radialWind);
                 inputs[beam] = {beams_[beam]->parameters().pose, past.radialWind};

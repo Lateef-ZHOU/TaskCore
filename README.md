@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-10 用户定（收包与解析分离）：`DAQCollector` 不再继承通道 vector，改为持有原始帧缓冲与 `channels()`。型号 `onFeed` 只做协议校验、去掉不属于数组元素的包头，并以 `store(偏移, 字节)` 放置字节（族层查越界）；`restart()` 供换帧清计数；凑满整帧即调用型号的 `decode(帧)` 解析为通道，随后释放缓冲。`settled()` = 通道已存在。`DAQChannel` 构造即按标准方法算出径向风与 CNR，删除 `process`/`processed`/`complete`。
+
 2026-11-10 用户定（二维线性数组）：`DAQChannel` 的 rows/columns/freqStartMHz/freqStepMHz/spectrum 合并为 `LinearArray2D<double> spectrum`；径向风与 CNR 的轴由 `RadialWind::Calc` 从功率谱行轴给出，型号不再另设。`spectrumReady(channel, LinearArray2D<double>)`；帧 JSON 的距离与频率起点、步长从功率谱两条轴读取，格式不变。
 
 2026-11-10 用户定（波长与抽稀）：激光波长移到族基，`DAQCollector(parameters, channels, wavelengthM)`，`complete()` 按 λ/2 换算后交各通道 `process(metersPerSecondPerMHz)`；`DAQChannel` 删除 `metersPerSecondPerMHz`。

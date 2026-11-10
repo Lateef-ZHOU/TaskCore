@@ -65,25 +65,22 @@ public:
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
     // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
-    explicit TestCollector(DAQParameters p) : DAQCollector(std::move(p), {channel()}, 2e-6) {}
-    static DAQChannel channel()
-    {
-        DAQChannel c;
-        c.name = QStringLiteral("T");
-        c.spectrum = LinearArray2D<double>(2, 8, 100, 30, 0, 1);
-        c.zeroWindMHz = 3.5;
-        return c;
-    }
+    explicit TestCollector(DAQParameters p) : DAQCollector(std::move(p), 1, 2e-6) {}
     void onFeed(const std::optional<QByteArray> &, RxTime at) override
     {
-        auto &c = front();
-        c.spectrum.clear();
-        for (int row = 0; row < c.spectrum.rows; ++row)
-            for (int column = 0; column < c.spectrum.columns; ++column)
-                c.spectrum.push_back(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
-        complete();
+        (void)store(received(), QByteArrayView("x", 1)); // 一字节即一整帧，凑齐即在本线程解析与处理
+    }
+    std::vector<DAQChannel> decode(const QByteArray &) const override
+    {
+        LinearArray2D<double> spectrum(2, 8, 100, 30, 0, 1);
+        for (int row = 0; row < spectrum.rows; ++row)
+            for (int column = 0; column < spectrum.columns; ++column)
+                spectrum.push_back(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
+        std::vector<DAQChannel> channels;
+        channels.emplace_back(QStringLiteral("T"), std::move(spectrum), 3.5, wavelengthM());
+        return channels;
     }
     QThread *processedOn_ = nullptr;
 };

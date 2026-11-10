@@ -152,8 +152,8 @@ private:
         out.raw("},");
         out.key("channels");
         out.raw("[");
-        for (std::size_t i = 0; i < frame->size(); ++i) {
-            const auto &channel = (*frame)[i];
+        for (std::size_t i = 0; i < frame->channels().size(); ++i) {
+            const auto &channel = frame->channels()[i];
             if (i) out.raw(",");
             out.raw("{");
             out.key("name"); out.text(channel.name); out.raw(",");
