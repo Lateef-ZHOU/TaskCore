@@ -21,18 +21,10 @@
 // 采集卡族定义标准能力；纯 C++ 旁支，不继承 QObject（唯一 QObject 来自末端继承的 Handle）。
 // 模板层同时继承具体 Device 与本类；编排只持族引用，通过 device() 使用锁，不认识具体 Handle 或 Collector。
 // 没有处理线程：Collector 在收包线程收齐末包时完成标准处理，完成帧在主线程显示、落盘并参与风廓线反演。
-class DAQDeviceBase
+// 请求为采集参数（协程按卡保存），账本元素为 DAQCollector；begin / stop / device() 由 FamilyBase 声明。
+class DAQDeviceBase : public FamilyBase<DAQParameters, DAQCollector>
 {
 public:
-    DAQDeviceBase() = default;
-    Q_DISABLE_COPY_MOVE(DAQDeviceBase)
-    virtual ~DAQDeviceBase() = default;
-
-    // 本族的收集器基（`RunAwaiter<DAQDeviceBase>` 由此取账本的元素型——族基是非模板类，
-    // 故这条别名就是等待器"存得下"的全部依据）。
-    using CollectorBase = DAQCollector;
-    // 等待器账本的请求槽：协程按卡保存采集参数，族口 begin 据此造 Collector。
-    using Request = DAQParameters;
 
     // ── pcap 读取政策：**族级常量** ────────
     // 住族基而不是型号宪法：这两个数由**本族的流量形状**决定——帧是成批爆发的，
@@ -48,22 +40,10 @@ public:
     static constexpr std::chrono::milliseconds kPcapReadTimeout{100};
     static constexpr int kPcapKernelBufferBytes = 4 * 1024 * 1024;
 
-    // 同一对象的机制面：模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。
-    [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
-
     // 由原始量构造本型号的采集参数：累积时间超出本型号范围时返回空并记录原因；不造 Collector、不发令。
     // 任务与单卡测试在发令前调用，任一为空即拒绝启动。
     [[nodiscard]] virtual std::optional<DAQParameters> paramsFor(int accumSec, std::optional<WorldModel> pose,
         std::optional<QDir> saveRoot, QString sessionDir, bool sync) const = 0;
-
-    // 按采集参数启动一次采集（等待器在挂起成立后调）。模板层据参数直接造出本型号的具体 Collector 交 Device，
-    // 不经原型、验型或启动时 makeSelf。返 false = 设备不收（被占 / 未连）。形制与 GMBDeviceBase 逐条对仗。
-    [[nodiscard]] virtual bool begin(const DAQParameters &parameters,
-                                     DoneFn<DAQCollector> done,
-                                     const std::shared_ptr<const DeviceLock> &lock) = 0;
-
-    // 停机 / 撤单：与 begin 同一笔账，形制逐条对仗 GMBDeviceBase::stop（见那边）。
-    virtual void stop(const std::shared_ptr<const DeviceLock> &lock) = 0;
 
     // 通知契约：末端在 Q_SIGNALS 中覆写，由 moc 提供实现；均在主线程按通道下标发出。
     virtual void spectrumReady(int channel, const LinearArray2D<double> &spectrum) = 0;
@@ -75,12 +55,12 @@ public:
 // 模板层继承具体 Device 与族基：按参数造斗、主线程消费（显示、落盘、四束环与风廓线）及单卡测试协程。
 // 型号只给通道规格并按协议整理功率谱，不写处理或落盘代码。
 template <HandleLike HandleT, DAQCollectorLike CollectorT>
-class DAQDevice : public Device<HandleT, CollectorT>, public DAQDeviceBase
+class DAQDevice : public FamilyDevice<HandleT, CollectorT, DAQDeviceBase>
 {
     using DeviceT = Device<HandleT, CollectorT>;
 protected:
     DAQDevice(QString name, QString subtitle, QObject *parent)
-        : DeviceT(std::move(name), std::move(subtitle), parent)
+        : FamilyDevice<HandleT, CollectorT, DAQDeviceBase>(std::move(name), std::move(subtitle), parent)
     {
         static_assert(DeviceLifecycleLayer<DAQDevice, decltype(&DAQDevice::PreDestruction)>);
     }
@@ -95,23 +75,16 @@ protected:
 public:
     ~DAQDevice() override = default;
 
-    // 返回自身的 DeviceBase 基类。不用协变返回 DeviceT&：MSVC 对结构体非类型模板实参（CDL5 规格）
-    // 与协变返回的组合报 C2062；持具体类型者直接在设备对象上使用完整 Device 接口。
-    [[nodiscard]] DeviceBase &device() noexcept final { return *this; }
-
     // 按参数经型号静态工厂直接造出完整的具体 Collector 交 Device：无原型、无验型、启动时不 makeSelf。
     // begin 是公开入口，先以 paramsFor 同一判据复核，不合即拒收（原因由型号记录）。
     [[nodiscard]] bool begin(const DAQParameters &parameters,
                              DoneFn<DAQCollector> done,
                              const std::shared_ptr<const DeviceLock> &lock) final
     {
-        const auto checked = paramsFor(parameters.accumSec, parameters.pose, parameters.saveRoot,
+        const auto checked = this->paramsFor(parameters.accumSec, parameters.pose, parameters.saveRoot,
                                        parameters.sessionDir, parameters.sync);
         return checked && DeviceT::start(CollectorT::create(*checked), std::move(done), lock);
     }
-
-    // 停机：族基的纯虚 stop 在此落地（final），实现就是机制层 Device::stop（同 GMBDevice::stop）。
-    void stop(const std::shared_ptr<const DeviceLock> &lock) final { DeviceT::stop(lock); }
 
     // ── 采集测试（设备页的两个按钮）：只占本卡的锁，循环采集直到停止 ─────────────────────
     // 没有云台：朝向传空、同步位恒假，触发不了风廓线反演。同一时刻只跑一个测试；与编排的互斥由设备锁
@@ -135,7 +108,7 @@ public:
             saveRoot = QDir(folder.toLocalFile());
         }
         // 没有云台：朝向为空、同步位恒假；参数不合本型号即不起协程。
-        auto parameters = paramsFor(accumSec, std::nullopt, std::move(saveRoot), std::move(sessionDir), false);
+        auto parameters = this->paramsFor(accumSec, std::nullopt, std::move(saveRoot), std::move(sessionDir), false);
         if (!parameters)
             return;
         // 裸 new 刻意：make_unique 走转发必索 move（DeviceCoro 不可动），prvalue 直构保证省略。

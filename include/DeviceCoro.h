@@ -8,6 +8,7 @@
 #include <QString>
 
 #include "DeviceBase.h" // DeviceBase / DeviceLock + 设备类型
+#include "FamilyBase.h" // FamilyLike（等待器只接受设备族基）
 
 // ============================================================
 // DeviceCoro 管理协程帧和设备锁；RunAwaiter 等待单台或同族多台设备，HeldLock 只取本帧令牌。
@@ -301,7 +302,7 @@ private:
 
 // 请求与结果按设备配对；DAQ 成功帧已由设备先行消费，等待器只汇总成败。
 // 请求与结果分槽：请求始终保留为提交时的原始参数，结果只由完成回调填入本轮成品。
-template <typename FamilyT>
+template <FamilyLike FamilyT>
 struct RunOrder
 {
     using ColT = typename FamilyT::CollectorBase;
@@ -325,7 +326,7 @@ struct RunOrder
 // orders_ 保留设备对应关系与原始请求；结果槽只保存本轮回调交付的成品。成功结果仍复制到基类结果槽。
 // 回调弱持账本，不捕获等待器 this；运行中的局部强份额可活过等待器，续体仍只能恢复一次。
 // ============================================================
-template <typename FamilyT>
+template <FamilyLike FamilyT>
 class RunAwaiter final : public AwaiterBase<std::vector<RunOrder<FamilyT>>>
 {
 public:
@@ -412,5 +413,5 @@ private:
 
 // CTAD：`RunAwaiter{lock, gmb, parameters}` 由第**二**实参定族（第三实参是非推导语境）。
 // 名单形（`RunAwaiter<DAQDeviceBase>(lock, orders)`）须显式写族——从 vector<Order> 推不出族。
-template <typename FamilyT>
+template <FamilyLike FamilyT>
 RunAwaiter(std::shared_ptr<DeviceLock>, FamilyT &, typename FamilyT::Request) -> RunAwaiter<FamilyT>;

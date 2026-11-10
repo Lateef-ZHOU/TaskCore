@@ -10,25 +10,17 @@
 #include <QVariantMap>
 
 #include "GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
-#include "DeviceBase.h" // DeviceBase / Device<H,C>
+#include "FamilyBase.h" // FamilyBase / FamilyDevice（族骨架与共同实现）
 #include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
 #include "GMBCollector.h"          // 云台族读口、运动参数与型号收集器（喂位形、判到位 + 驻留）
 
 // 云台族定义标准能力；纯 C++ 旁支，不继承 QObject（唯一 QObject 来自末端继承的 Handle）。
 // 模板层同时继承具体 Device 与本类，持有唯一安装姿态；编排只持族引用，通过 device() 使用锁，
 // 不认识具体 Handle 或 Collector。Qt 属性、信号和 QML 入口由末端官邸声明。
-class GMBDeviceBase
+// 请求为运动参数（协程按束保存），账本元素为 GMBCollector；begin / stop / device() 由 FamilyBase 声明。
+class GMBDeviceBase : public FamilyBase<GMBMoveParameters, GMBCollector>
 {
 public:
-    GMBDeviceBase() = default;
-    Q_DISABLE_COPY_MOVE(GMBDeviceBase)
-    virtual ~GMBDeviceBase() = default;
-
-    // 本族的收集器基（`RunAwaiter<GMBDeviceBase>` 由此取账本的元素型——族基是非模板类，
-    // 故这条别名就是等待器"存得下"的全部依据）。
-    using CollectorBase = GMBCollector;
-    // 等待器账本的请求槽：协程按束保存运动参数，族口 begin 据此造 Collector。
-    using Request = GMBMoveParameters;
 
     // ── pcap 读取政策：**族级常量** ──────────────────────────────
     // 住族基而不是型号宪法：这两个数由**本族的流量形状**决定，不由型号决定——任何一台
@@ -45,9 +37,6 @@ public:
     //（别误用"积压是守恒量"那条——它说的是被事件循环限速的**主线程队列**，不是内核环。）
     static constexpr std::chrono::milliseconds kPcapReadTimeout{20};
     static constexpr int kPcapKernelBufferBytes = 1024 * 1024;
-
-    // 同一对象的机制面：模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。
-    [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
     // ── 这台云台的方位轴上有没有滑环（铭辰有、视强没有）───────────────
     // **是族级特性，不是型号知识的泄漏**：每台云台都答得上（族级验收条件"无一字段是某成员填不出的"），
@@ -121,38 +110,23 @@ public:
     // 预览用的型号行程判据；末端以 Q_INVOKABLE 覆写供 QML 调用。
     [[nodiscard]] virtual bool withinTravel(double pan, double tilt) const = 0;
 
-    // 按运动参数启动一次到位（等待器在挂起成立后调）。模板层据参数直接造出本型号的具体 Collector 交 Device，
-    // 不经原型、验型或 makeSelf。返 false = 设备不收（参数不合本型号 / 被占 / 未连）。
-    [[nodiscard]] virtual bool begin(const GMBMoveParameters &parameters,
-                                     DoneFn<GMBCollector> done,
-                                     const std::shared_ptr<const DeviceLock> &lock) = 0;
-
-    // 停机 / 撤单（等待器析构时对未结的单调）。**与 begin 同一笔账**：编排层只认族基，而停机的实现住机制层
-    // Device<>——族基不认识机制层，故本族声明停机虚口，由同时继承两者的模板层转到 Device::stop。
-    // 可反复调用（幂等）：对交付 / 取消 / 拒收回滚三条出路一视同仁。
-    virtual void stop(const std::shared_ptr<const DeviceLock> &lock) = 0;
-
     // 通知契约：末端在 Q_SIGNALS 中覆写，由 moc 提供实现；均在主线程发出。
     virtual void mountingChanged(const WorldModel &mounting) = 0;
     virtual void anglesReady(RxTime at, double pan, double tilt, double azimuth, double elevation) = 0;
 };
 
-// 模板层继承具体 Device 与族基，完成具体 Collector 验型及收包接入；型号只解析协议、检查行程和组装命令。
+// 模板层经 FamilyDevice 继承具体 Device 与族基，完成造斗及收包接入；型号只解析协议、检查行程和组装命令。
 // 本层没有需要单独清理的线程源，不声明预析构；末端析构首句调用 Device 的预析构链。
 template <HandleLike HandleT, GMBCollectorLike CollectorT>
-class GMBDevice : public Device<HandleT, CollectorT>, public GMBDeviceBase
+class GMBDevice : public FamilyDevice<HandleT, CollectorT, GMBDeviceBase>
 {
     using DeviceT = Device<HandleT, CollectorT>;
 protected:
     GMBDevice(QString name, QString subtitle, QObject *parent)
-        : DeviceT(std::move(name), std::move(subtitle), parent) {}
+        : FamilyDevice<HandleT, CollectorT, GMBDeviceBase>(std::move(name), std::move(subtitle), parent) {}
 
 public:
     ~GMBDevice() override = default;
-
-    // 协变返回自身的机制层基类：族引用只见 DeviceBase，持具体类型者可用完整 Device 接口。
-    [[nodiscard]] DeviceT &device() noexcept final { return *this; }
-    [[nodiscard]] const DeviceT &device() const noexcept { return *this; }
 
     [[nodiscard]] const WorldModel &mounting() const noexcept final { return mounting_; }
     [[nodiscard]] bool setMounting(const WorldModel &zeroPose,
@@ -177,7 +151,7 @@ public:
             Q_EMIT this->logMessage(QStringLiteral("转台运动参数无效，未下发"));
             return false;
         }
-        return issueGoTo(paramsFor(PanTiltModel(pan, tilt), {}, *speeds));
+        return issueGoTo(this->paramsFor(PanTiltModel(pan, tilt), {}, *speeds));
     }
 
     // 按参数直接造出本型号的具体 Collector 交 Device：无原型、无验型、启动时不 makeSelf。
@@ -192,9 +166,6 @@ public:
         return DeviceT::start(std::move(collector), std::move(done), lock);
     }
 
-    // 停机：族基的纯虚 stop 在此落地（final），实现就是机制层 Device::stop（它不是虚的，停机虚口只在族基）。
-    void stop(const std::shared_ptr<const DeviceLock> &lock) final { DeviceT::stop(lock); }
-
 private:
 
     // [Handle 收包线程] 解析在收包线程；安装姿态只在主线程读取和换算。
@@ -203,7 +174,7 @@ private:
         const auto pose = decodeStream(raw);
         if (!pose) return std::nullopt;
         QMetaObject::invokeMethod(this, [this, at, p = *pose] {
-            const auto world = worldOf(p);
+            const auto world = this->worldOf(p);
             Q_EMIT this->anglesReady(at, p.pan(), p.tilt(), world.azimuth(), world.elevation());
         }, Qt::QueuedConnection);
         return pose;
