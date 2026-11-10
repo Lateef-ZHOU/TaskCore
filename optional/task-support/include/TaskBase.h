@@ -110,6 +110,8 @@ public Q_SLOTS:
                 || std::ranges::any_of(picked, [card](const auto &entry) { return &entry.get() == card; })) {
                 Q_EMIT logMessage(QStringLiteral("采集卡未登记或重复选择，任务未启动")); return false;
             }
+            // 发令前按型号预验累积时间；朝向与会话逐束确定，begin 会以同一判据复核。
+            if (!card->paramsFor(accumSec, std::nullopt, std::nullopt, {}, false)) return false;
             picked.emplace_back(*card);
             const auto &device = card->device();
             scope << device.displayName + QStringLiteral(" · ") + device.subtitle;
@@ -195,8 +197,8 @@ protected:
         RunAwaiter<DAQDeviceBase>::Orders orders;
         // 族基不是 QObject：会话目录的 ASCII 标识取同一对象上的 objectName（交叉转换必然成功）。
         for (DAQDeviceBase &card : cards)
-            orders.push_back({card, DAQParameters{accumSec, {world, saveRoot,
-                AcqSaver::sessionDir(sessionTime, dynamic_cast<const QObject &>(card).objectName()), sync}}});
+            orders.push_back({card, DAQParameters{accumSec, world, saveRoot,
+                AcqSaver::sessionDir(sessionTime, dynamic_cast<const QObject &>(card).objectName()), sync}});
         return RunAwaiter<DAQDeviceBase>{lock, std::move(orders)};
     }
 

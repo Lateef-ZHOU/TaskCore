@@ -40,13 +40,13 @@ class SavedFrame final : public DAQCollector
 {
 public:
     static std::shared_ptr<SavedFrame> create(const DAQParameters &p)
-    { return std::shared_ptr<SavedFrame>(new SavedFrame(p.accumSec, p.context)); }
-    std::shared_ptr<SavedFrame> makeSelf() const { return create({accumSec(), context()}); }
+    { return std::shared_ptr<SavedFrame>(new SavedFrame(p)); }
+    std::shared_ptr<SavedFrame> makeSelf() const { return create(parameters()); }
     QList<QByteArray> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
-    SavedFrame(int seconds, DAQContext context)
-        : DAQCollector(std::move(context), seconds, {channel("A", 1.5), channel("B", 99.0)}) {}
+    explicit SavedFrame(DAQParameters p)
+        : DAQCollector(std::move(p), {channel("A", 1.5), channel("B", 99.0)}) {}
     static DAQChannel channel(const char *name, double zero)
     {
         DAQChannel c;
@@ -79,7 +79,7 @@ int main(int argc, char **argv)
     const auto at = std::chrono::system_clock::now();
 
     // 无朝向帧：朝向写 null，未标定通道的风速写 null，CNR 照常。
-    auto frame = SavedFrame::create({3, {std::nullopt, root, QStringLiteral("session"), false}});
+    auto frame = SavedFrame::create({3, std::nullopt, root, QStringLiteral("session"), false});
     check(frame->feed(QByteArray("x"), at), "frame did not complete");
     AcqSaver::saveFrame(frame, QStringLiteral("Card"));
     const auto saved = readCompleted(root.filePath("session/" + AcqSaver::fileStem(at) + ".json"));
@@ -117,7 +117,7 @@ int main(int argc, char **argv)
           "profile direction or speeds differ");
 
     // 不落盘：saveRoot 为空时入口直接返回。
-    AcqSaver::saveFrame(SavedFrame::create({1, {}}), QStringLiteral("Card"));
+    AcqSaver::saveFrame(SavedFrame::create({1}), QStringLiteral("Card"));
     std::cout << "saving checks passed: " << checks << '\n';
     return 0;
 }

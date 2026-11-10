@@ -51,6 +51,11 @@ public:
     // 同一对象的机制面：模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
+    // 由原始量构造本型号的采集参数：累积时间超出本型号范围时返回空并记录原因；不造 Collector、不发令。
+    // 任务与单卡测试在发令前调用，任一为空即拒绝启动。
+    [[nodiscard]] virtual std::optional<DAQParameters> paramsFor(int accumSec, std::optional<WorldModel> pose,
+        std::optional<QDir> saveRoot, QString sessionDir, bool sync) const = 0;
+
     // 按采集参数启动一次采集（等待器在挂起成立后调）。模板层据参数直接造出本型号的具体 Collector 交 Device，
     // 不经原型、验型或启动时 makeSelf。返 false = 设备不收（被占 / 未连）。形制与 GMBDeviceBase 逐条对仗。
     [[nodiscard]] virtual bool begin(const DAQParameters &parameters,
@@ -95,11 +100,14 @@ public:
     [[nodiscard]] DeviceBase &device() noexcept final { return *this; }
 
     // 按参数经型号静态工厂直接造出完整的具体 Collector 交 Device：无原型、无验型、启动时不 makeSelf。
+    // begin 是公开入口，先以 paramsFor 同一判据复核，不合即拒收（原因由型号记录）。
     [[nodiscard]] bool begin(const DAQParameters &parameters,
                              DoneFn<DAQCollector> done,
                              const std::shared_ptr<const DeviceLock> &lock) final
     {
-        return DeviceT::start(CollectorT::create(parameters), std::move(done), lock);
+        const auto checked = paramsFor(parameters.accumSec, parameters.pose, parameters.saveRoot,
+                                       parameters.sessionDir, parameters.sync);
+        return checked && DeviceT::start(CollectorT::create(*checked), std::move(done), lock);
     }
 
     // 停机：族基的纯虚 stop 在此落地（final），实现就是机制层 Device::stop（同 GMBDevice::stop）。
@@ -126,10 +134,13 @@ public:
             }
             saveRoot = QDir(folder.toLocalFile());
         }
+        // 没有云台：朝向为空、同步位恒假；参数不合本型号即不起协程。
+        auto parameters = paramsFor(accumSec, std::nullopt, std::move(saveRoot), std::move(sessionDir), false);
+        if (!parameters)
+            return;
         // 裸 new 刻意：make_unique 走转发必索 move（DeviceCoro 不可动），prvalue 直构保证省略。
         // 锁请求交给准备模块（promise 的构造函数）：本卡只占自己这一台。
-        testCoro_.reset(new DeviceCoro(
-            runTest(LockRequest{QStringLiteral("设备控制"), {*this}}, accumSec, std::move(saveRoot), std::move(sessionDir))));
+        testCoro_.reset(new DeviceCoro(runTest(LockRequest{QStringLiteral("设备控制"), {*this}}, std::move(parameters))));
     }
     // 预析构及停止按钮共用；取消时设备各层仍在，等待器可安全撤单。
     void cancelTest() noexcept { testCoro_.reset(); }
@@ -137,7 +148,7 @@ public:
 private:
     // 测试采集协程：取令牌 → 每轮交等待器一份采集参数，经 begin 启动；
     // 完成帧由设备自行消费；启动时固定带 "Test" 后缀的会话目录名，各轮共用。
-    DeviceCoro runTest(LockRequest, const int accumSec, const std::optional<QDir> saveRoot, const QString sessionDir)
+    DeviceCoro runTest(LockRequest, const std::optional<DAQParameters> parameters)
     {
         // 试锁已由**准备模块**（promise 的构造函数）在本行之前做完；这里只取那枚令牌——begin 要出示它。
         const auto lock = co_await HeldLock{};
@@ -149,11 +160,10 @@ private:
         while (true)
         {
             Q_EMIT this->logMessage(QString("开始采集（累积 %1 秒）%2")
-                                 .arg(accumSec)
-                                 .arg(saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(saveRoot->absolutePath())
-                                               : QStringLiteral("，不落盘")));
-            const auto framed = co_await RunAwaiter<DAQDeviceBase>{lock, *this,
-                DAQParameters{accumSec, {std::nullopt, saveRoot, sessionDir, false}}};
+                                 .arg(parameters->accumSec)
+                                 .arg(parameters->saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(parameters->saveRoot->absolutePath())
+                                                           : QStringLiteral("，不落盘")));
+            const auto framed = co_await RunAwaiter<DAQDeviceBase>{lock, *this, *parameters};
             if (framed.empty())
             {
                 Q_EMIT this->logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));
@@ -177,7 +187,7 @@ private:
     // 一组四束须是同一通道、同一距离轴且均已换算风速；任一束朝向未知则不反演。
     void consume(std::shared_ptr<const CollectorT> frame)
     {
-        const auto &context = frame->context();
+        const auto &context = frame->parameters();
         for (std::size_t i = 0; i < frame->size(); ++i)
         {
             const auto &channel = (*frame)[i];
@@ -200,7 +210,7 @@ private:
             {
                 const auto &past = (*beams_[beam])[i];
                 usable = usable && past.calibrated() && !past.cnr.isEmpty() && past.rangeM == channel.rangeM;
-                inputs[beam] = {beams_[beam]->context().pose, past.radialWind};
+                inputs[beam] = {beams_[beam]->parameters().pose, past.radialWind};
             }
             if (!usable)
                 continue;
