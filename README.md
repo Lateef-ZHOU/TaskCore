@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-10 用户定（波长与抽稀）：激光波长移到族基，`DAQCollector(parameters, channels, wavelengthM)`，`complete()` 按 λ/2 换算后交各通道 `process(metersPerSecondPerMHz)`；`DAQChannel` 删除 `metersPerSecondPerMHz`。
+
 2026-11-10 用户定（线性数组）：`DAQChannel::radialWind`、`cnr` 都是 `LinearArray<double>`（轴为斜距，型号在规格里给出同一轴，处理只填数值），删除 `rangeStartM`/`rangeStepM`；`radialReady(channel, LinearArray<double> speeds, LinearArray<double> cnr, calibrated)`；四束环以 `sameAxis` 判同一网格，反演为 `WindProfile::Calc(beams, at)`。频率轴暂仍为 `freqStartMHz`/`freqStepMHz`（功率谱是二维）。
 
 2026-11-10 用户定（等间隔轴）：`DAQChannel` 以 `rangeStartM`/`rangeStepM`、`freqStartMHz`/`freqStepMHz` 取代逐点数组，径向风只要求两个步长为正；`radialReady(channel, speeds, cnr, calibrated)` 不再带斜距（几何由型号的绘图参数给出），`profileReady` 发均匀 `VerticalWindProfilePtr`，四束环按起点与门距判同一网格，反演用 `WindProfile::Calc(beams, start, step, at)`。帧 JSON 与风廓线 JSON 改写起点与步长。

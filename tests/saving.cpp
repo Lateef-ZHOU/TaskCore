@@ -46,7 +46,7 @@ public:
     int timeoutMs() const override { return 0; }
 private:
     explicit SavedFrame(DAQParameters p)
-        : DAQCollector(std::move(p), {channel("A", 1.5), channel("B", 99.0)}) {}
+        : DAQCollector(std::move(p), {channel("A", 1.5), channel("B", 99.0)}, 1.55e-6) {}
     static DAQChannel channel(const char *name, double zero)
     {
         DAQChannel c;
@@ -57,7 +57,6 @@ private:
         c.freqStartMHz = 0;
         c.freqStepMHz = 1;
         c.zeroWindMHz = zero;
-        c.metersPerSecondPerMHz = 0.775;
         return c;
     }
     void onFeed(const std::optional<QByteArray> &, RxTime at) override

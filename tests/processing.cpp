@@ -64,7 +64,8 @@ public:
     int timeoutMs() const override { return 0; }
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
-    explicit TestCollector(DAQParameters p) : DAQCollector(std::move(p), {channel()}) {}
+    // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
+    explicit TestCollector(DAQParameters p) : DAQCollector(std::move(p), {channel()}, 2e-6) {}
     static DAQChannel channel()
     {
         DAQChannel c;
@@ -75,7 +76,6 @@ private:
         c.freqStartMHz = 0;
         c.freqStepMHz = 1;
         c.zeroWindMHz = 3.5;
-        c.metersPerSecondPerMHz = 1.0;
         return c;
     }
     void onFeed(const std::optional<QByteArray> &, RxTime at) override
