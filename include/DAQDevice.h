@@ -184,8 +184,7 @@ private:
         {
             const auto &channel = (*frame)[i];
             Q_EMIT this->spectrumReady(int(i), channel.spectrum);
-            if (!channel.cnr.empty())
-                Q_EMIT this->radialReady(int(i), channel.radialWind, channel.cnr,
+            Q_EMIT this->radialReady(int(i), channel.radialWind, channel.cnr,
                                          RadialWind::inBand(channel.spectrum, channel.zeroWindMHz));
         }
         if (context.saveRoot)
@@ -202,7 +201,7 @@ private:
             for (std::size_t beam = 0; beam < inputs.size(); ++beam)
             {
                 const auto &past = (*beams_[beam])[i];
-                usable = usable && RadialWind::inBand(past.spectrum, past.zeroWindMHz) && !past.cnr.empty()
+                usable = usable && RadialWind::inBand(past.spectrum, past.zeroWindMHz)
                          && past.radialWind.sameAxis(channel.radialWind);
                 inputs[beam] = {beams_[beam]->parameters().pose, past.radialWind};
             }

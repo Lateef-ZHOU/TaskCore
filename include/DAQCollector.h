@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <concepts>
 #include <limits>
 #include <memory>
@@ -40,10 +41,19 @@ struct DAQChannel
     LinearArray<double> radialWind; // m/s；零风速参考不在频带内时为 NaN
     LinearArray<double> cnr;        // dB；空 = 未处理
 
-    // 标准处理：逐门高斯拟合出峰位与 CNR，峰位按频率轴与零风速参考换算为径向风速。
+    // 已处理：径向风与 CNR 都已按功率谱的门数算出。
+    [[nodiscard]] bool processed() const noexcept
+    {
+        const auto rows = static_cast<std::size_t>(spectrum.rows);
+        return rows > 0 && radialWind.size() == rows && cnr.size() == rows;
+    }
+
+    // 标准处理（幂等，已处理即返回）：逐门高斯拟合出峰位与 CNR，峰位按频率轴与零风速参考换算为径向风速。
     // metersPerSecondPerMHz 由族基按本卡激光波长给出（λ/2）；网格不完整或轴无效时不出结果。
     void process(const double metersPerSecondPerMHz)
     {
+        if (processed())
+            return;
         auto result = RadialWind::Calc(spectrum, metersPerSecondPerMHz, zeroWindMHz);
         radialWind = std::move(result.ws);
         cnr = std::move(result.cnr);
@@ -62,7 +72,11 @@ public:
     [[nodiscard]] double wavelengthM() const noexcept { return wavelengthM_; }
 
     // 型号调用 complete 之后才算收齐；判齐后公共 feed 不再进料。
-    [[nodiscard]] bool settled() const final { return processed_; }
+    // 判齐 = 每个通道都已处理（由各通道的产物长度判断，不另存状态位）。
+    [[nodiscard]] bool settled() const final
+    {
+        return !empty() && std::ranges::all_of(*this, [](const DAQChannel &channel) { return channel.processed(); });
+    }
 
 protected:
     // 派生构造必须显式交入请求参数、通道规格与激光波长（m）；参数已由官邸 paramsFor 校验。
@@ -78,7 +92,6 @@ protected:
         const double metersPerSecondPerMHz = RadialWind::metersPerSecondPerMHz(wavelengthM_);
         for (auto &channel : *this)
             channel.process(metersPerSecondPerMHz);
-        processed_ = true;
     }
 
     // 仅型号 onFeed 写：未完成时可随协议换帧更新，完成后公共 feed 不再改写。
@@ -88,7 +101,6 @@ protected:
 private:
     const DAQParameters parameters_;
     const double wavelengthM_;
-    bool processed_ = false;
 };
 
 // 具体类型须属于本族、沿用 feed；静态工厂按请求参数交出完整、可写的自身（已备齐收集区），makeSelf 供重试。
