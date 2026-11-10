@@ -33,8 +33,10 @@ struct DAQChannel
     QString name;
     int rows = 0;    // 距离门数
     int columns = 0; // 频点数
-    QVector<double> rangeM;  // 每门斜距（m）；空 = 本帧没有可用距离，不算径向风
-    QVector<double> freqMHz; // 每个频点的频率（MHz），等间距递增
+    double rangeStartM = 0.0; // 第 k 门斜距 = rangeStartM + k·rangeStepM（m）
+    double rangeStepM = 0.0;  // 门距（m），正数才算径向风
+    double freqStartMHz = std::numeric_limits<double>::quiet_NaN(); // 第 i 频点 = freqStartMHz + i·freqStepMHz
+    double freqStepMHz = 0.0; // 频点间隔（MHz），正数才算径向风
     double zeroWindMHz = std::numeric_limits<double>::quiet_NaN();
     double metersPerSecondPerMHz = 0.0;
     QVector<double> spectrum;   // rows × columns 行主序（行 = 距离门）
@@ -44,17 +46,18 @@ struct DAQChannel
     // 零风速参考落在本帧频带内才换算风速，否则只出 CNR。
     [[nodiscard]] bool calibrated() const noexcept
     {
-        return !freqMHz.isEmpty() && zeroWindMHz >= freqMHz.front() && zeroWindMHz <= freqMHz.back();
+        return columns > 0 && freqStepMHz > 0.0 && zeroWindMHz >= freqStartMHz
+               && zeroWindMHz <= freqStartMHz + (columns - 1) * freqStepMHz;
     }
 
     // 标准处理：逐门高斯拟合出峰位与 CNR，峰位按频率轴与零风速参考线性换算为径向风速。
     void process()
     {
-        if (rows <= 0 || columns < 2 || rangeM.size() != rows || freqMHz.size() != columns
+        if (rows <= 0 || columns < 2 || !(rangeStepM > 0.0) || !(freqStepMHz > 0.0) || !std::isfinite(freqStartMHz)
             || spectrum.size() != qsizetype(rows) * columns)
             return;
-        const double slope = (freqMHz[1] - freqMHz[0]) * metersPerSecondPerMHz;
-        const double offset = calibrated() ? (freqMHz.front() - zeroWindMHz) * metersPerSecondPerMHz
+        const double slope = freqStepMHz * metersPerSecondPerMHz;
+        const double offset = calibrated() ? (freqStartMHz - zeroWindMHz) * metersPerSecondPerMHz
                                            : std::numeric_limits<double>::quiet_NaN();
         auto result = RadialWind::Calc(spectrum, rows, columns, slope, offset);
         radialWind = std::move(result.ws);

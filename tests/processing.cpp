@@ -1,5 +1,6 @@
 #include <atomic>
 #include <cmath>
+#include <numbers>
 #include <functional>
 #include "DAQDevice.h"
 #include <QCoreApplication>
@@ -70,8 +71,10 @@ private:
         c.name = QStringLiteral("T");
         c.rows = 2;
         c.columns = 8;
-        c.rangeM = {100, 130};
-        c.freqMHz = {0, 1, 2, 3, 4, 5, 6, 7};
+        c.rangeStartM = 100;
+        c.rangeStepM = 30;
+        c.freqStartMHz = 0;
+        c.freqStepMHz = 1;
         c.zeroWindMHz = 3.5;
         c.metersPerSecondPerMHz = 1.0;
         return c;
@@ -106,9 +109,9 @@ public:
 Q_SIGNALS:
     void lockChanged(HandleCore::ResourcePhase) override;
     void spectrumReady(int channel, const QVector<double> &values) override;
-    void radialReady(int channel, const QVector<double> &ranges, const QVector<double> &speeds,
+    void radialReady(int channel, const QVector<double> &speeds,
                      const QVector<double> &cnr, bool calibrated) override;
-    void profileReady(int channel, NonuniformVerticalWindProfilePtr profile) override;
+    void profileReady(int channel, VerticalWindProfilePtr profile) override;
 private:
     void PreDestruction() noexcept final
     {
@@ -139,14 +142,16 @@ int main(int argc, char **argv)
         ++spectra;
     });
     QObject::connect(&device, &TestDevice::radialReady, &app,
-                     [&](int channel, const QVector<double> &ranges, const QVector<double> &speeds, const QVector<double> &cnr, bool calibrated) {
-        if (channel != 0 || ranges.size() != 2 || speeds.size() != 2 || cnr.size() != 2 || !calibrated
+                     [&](int channel, const QVector<double> &speeds, const QVector<double> &cnr, bool calibrated) {
+        if (channel != 0 || speeds.size() != 2 || cnr.size() != 2 || !calibrated
             || std::abs(speeds[0] - 0.5) > 0.05)
             qFatal("standard radial processing differs");
         ++radials;
     });
-    QObject::connect(&device, &TestDevice::profileReady, &app, [&](int channel, NonuniformVerticalWindProfilePtr profile) {
-        if (channel != 0 || !profile || profile->heights.empty()) qFatal("wind profile differs");
+    QObject::connect(&device, &TestDevice::profileReady, &app, [&](int channel, VerticalWindProfilePtr profile) {
+        // 第 0 束 100 m 起、30 m 门距，60° 仰角：高度起点 100·sin60°、层距 30·sin60°。
+        if (channel != 0 || !profile || profile->winds.size() != 2 || std::abs(profile->startHeightM - 100 * std::sin(std::numbers::pi / 3)) > 1e-9
+            || std::abs(profile->heightStepM - 30 * std::sin(std::numbers::pi / 3)) > 1e-9) qFatal("wind profile differs");
         ++profiles;
     });
     if (!device.open(Parameters{std::make_shared<Transport>()}) || !until([&] { return device.isOpen(); })) return 1;

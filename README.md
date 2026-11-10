@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-10 用户定（等间隔轴）：`DAQChannel` 以 `rangeStartM`/`rangeStepM`、`freqStartMHz`/`freqStepMHz` 取代逐点数组，径向风只要求两个步长为正；`radialReady(channel, speeds, cnr, calibrated)` 不再带斜距（几何由型号的绘图参数给出），`profileReady` 发均匀 `VerticalWindProfilePtr`，四束环按起点与门距判同一网格，反演用 `WindProfile::Calc(beams, start, step, at)`。帧 JSON 与风廓线 JSON 改写起点与步长。
+
 2026-11-09 用户定（DAQ 第二步）：DAQ 请求改为按值参数 `DAQParameters{accumSec, context}`，删除 collectorFor、只读原型与 begin 中的验型；`DAQCollectorLike` 改为要求静态 `create(const DAQParameters&)` 交出完整可写自身，begin 直接 `create` 后交 Device。DAQDeviceBase::Request = DAQParameters。
 
 2026-11-09 用户定（DAQ 族第一步）：删除 DAQ 处理线程，DAQDeviceBase 改为纯 C++ 旁支，`DAQDevice<HandleT, CollectorT>` 同时继承 Device 与族基（device() 返回 DeviceBase&，不用协变以避开 MSVC 对结构体模板实参的 C2062）。DAQChannel（名称、门数 × 频点数、每门距离、每频点频率、零风速参考、频移→风速系数及谱/风/CNR 数据）放在 DAQCollector 之前，DAQCollector 直接继承 std::vector<DAQChannel>；型号收齐末包调用 complete()，在收包线程按通道串行做标准处理后才判齐。主线程消费：按通道发 spectrumReady/radialReady/profileReady，Boost circular_buffer 保存最近 4 帧，同步位为真时逐通道反演风廓线。AcqSaver 并入核心（删除 TASKCORE_WITH_DAQ_SAVING 与 Lidar::DAQSaving），只保留 saveFrame/saveWindProfiles 两个入口：每帧一个 JSON、风廓线同构 JSON，英文键、6 位有效数字、缺测 null。TaskBase 的 addCard/start 收 QObject* 交叉转换验族，任务 QML 采集卡类型改为 QtObject。请求仍是只读原型（第二步见主程序待办）。
@@ -33,15 +35,10 @@ TaskModule 接收两个 `list<QtObject>`（云台与采集卡设备本身），�
 
 这些目标均是可选实现，不要求任务官邸继承 TaskBase 或 TaskModule。三个具体计划和协程不在本库，官邸可以只使用核心能力自行编排。附加保存继续使用独立线程，不反向访问日志对象，不增加退出排空。
 
-### 非均匀位置的保存
+### 采集卡数据的保存
 
-`AcqSaver` 保留已有均匀入口，新增以下重载（2026-11-01）：
+`AcqSaver` 只有两个入口，均为 detached 线程逐段写 JSON，官邸不参与：`saveFrame` 每帧写 `<保存根>/<会话>/<帧时间>.json`，`saveWindProfiles` 在同步点写 `profile_<同步时间>.json`。每通道写名称、`rangeStartM`/`rangeStepM`、`freqStartMHz`/`freqStepMHz`、零风速参考、功率谱（行 = 门）、径向风与 CNR；风廓线写 `heightStartM`/`heightStepM` 与逐层水平风向、水平风速、垂直风速。非有限值写 `null`。
 
-- `saveRadialWind(..., QVector<NonuniformRadialChannel>)`：每通道按值持有 `tag`、斜距 `ranges`（米）和 `RadialWind::Result` 的风速/CNR 两列。位置与值分数组，提交时检查三列等长、位置有限且严格递增；整组不合法直接拒绝，不截短、补齐或创建文件。旧 `RadialChannel` 格式只有数值，不能用于需要保存真实斜距的非均匀剖面。
-- `saveWindProfile(NonuniformVerticalWindProfilePtr, ...)`：接收 Algorithm 的只读整帧，提交时检查高度/向量等长及高度有效递增；随后线程只读共享帧。生产者交出只读份额后不得再通过可写别名改动它。
-- 径向风路径及 `Vr<小写tag>`、`CNR<小写tag>`、`date` 保持，非均匀文件另写 `Range<小写tag>`，例如 `Rangeadc0`；各通道可以有不同的斜距网格。风廓线仍写 `HSpeed/HDir/VSpeed/High/Date`，其中 `High` 逐项来自 `heights`，绝不按首尾位置推算等间距。均匀入口仍按起点/步进生成 `High`，现有均匀文件不变。
-- 位置与值下标一一对应，不重排，不在保存时重采样。径向风沿用六位、风廓线四位小数及已有 NaN 记法（含 NaN 时不是严格 JSON）。空数组可保存为空剖面，单点不涉及除以层数减一。
-- 检查只在接收边界进行一次，写入阶段信任数据；QVector 隐式共享或 const 整帧保活，不创建额外的高度数组。仍是 detached 保存、就地 Qt 诊断，不连接设备日志或增加退出等待。
 
 验证：`saving_contract` 检查帧 JSON 与风廓线 JSON 的字段、通道顺序、null 缺测和风向换算；`processing_contract` 检查收包线程完成标准处理、主线程按通道发信号与四束反演。
 

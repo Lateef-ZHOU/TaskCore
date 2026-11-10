@@ -51,7 +51,7 @@ public:
     struct ProfileChannel
     {
         QString name;
-        NonuniformVerticalWindProfilePtr profile;
+        VerticalWindProfilePtr profile;
     };
 
     // 完成帧落盘；card 为设备的 ASCII 标识（objectName）。
@@ -157,8 +157,10 @@ private:
             if (i) out.raw(",");
             out.raw("{");
             out.key("name"); out.text(channel.name); out.raw(",");
-            out.key("rangeM"); out.numbers(channel.rangeM); out.raw(",");
-            out.key("freqMHz"); out.numbers(channel.freqMHz); out.raw(",");
+            out.key("rangeStartM"); out.number(channel.rangeStartM); out.raw(",");
+            out.key("rangeStepM"); out.number(channel.rangeStepM); out.raw(",");
+            out.key("freqStartMHz"); out.number(channel.freqStartMHz); out.raw(",");
+            out.key("freqStepMHz"); out.number(channel.freqStepMHz); out.raw(",");
             out.key("zeroWindMHz"); out.number(channel.zeroWindMHz); out.raw(",");
             out.key("spectrum");
             out.raw("[");
@@ -204,7 +206,8 @@ private:
             if (i) out.raw(",");
             out.raw("{");
             out.key("name"); out.text(channels[i].name); out.raw(",");
-            out.key("heightM"); out.numbers(profile.heights); out.raw(",");
+            out.key("heightStartM"); out.number(profile.startHeightM); out.raw(",");
+            out.key("heightStepM"); out.number(profile.heightStepM); out.raw(",");
             out.key("horizontalDirectionDeg"); out.numbers(direction); out.raw(",");
             out.key("horizontalSpeed"); out.numbers(horizontal); out.raw(",");
             out.key("verticalSpeed"); out.numbers(vertical);

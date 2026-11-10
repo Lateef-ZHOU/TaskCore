@@ -67,9 +67,9 @@ public:
 
     // 通知契约：末端在 Q_SIGNALS 中覆写，由 moc 提供实现；均在主线程按通道下标发出。
     virtual void spectrumReady(int channel, const QVector<double> &values) = 0;
-    virtual void radialReady(int channel, const QVector<double> &ranges, const QVector<double> &speeds,
-                             const QVector<double> &cnr, bool calibrated) = 0;
-    virtual void profileReady(int channel, NonuniformVerticalWindProfilePtr profile) = 0;
+    // 距离几何是固定通道规格（起点 + k·门距），页面从型号的绘图参数取，信号只带逐门数值。
+    virtual void radialReady(int channel, const QVector<double> &speeds, const QVector<double> &cnr, bool calibrated) = 0;
+    virtual void profileReady(int channel, VerticalWindProfilePtr profile) = 0;
 };
 
 // 模板层继承具体 Device 与族基：按参数造斗、主线程消费（显示、落盘、四束环与风廓线）及单卡测试协程。
@@ -193,7 +193,7 @@ private:
             const auto &channel = (*frame)[i];
             Q_EMIT this->spectrumReady(int(i), channel.spectrum);
             if (!channel.cnr.isEmpty())
-                Q_EMIT this->radialReady(int(i), channel.rangeM, channel.radialWind, channel.cnr, channel.calibrated());
+                Q_EMIT this->radialReady(int(i), channel.radialWind, channel.cnr, channel.calibrated());
         }
         if (context.saveRoot)
             AcqSaver::saveFrame(frame, this->objectName());
@@ -209,12 +209,13 @@ private:
             for (std::size_t beam = 0; beam < inputs.size(); ++beam)
             {
                 const auto &past = (*beams_[beam])[i];
-                usable = usable && past.calibrated() && !past.cnr.isEmpty() && past.rangeM == channel.rangeM;
+                usable = usable && past.calibrated() && !past.cnr.isEmpty() && past.rangeStartM == channel.rangeStartM
+                         && past.rangeStepM == channel.rangeStepM;
                 inputs[beam] = {beams_[beam]->parameters().pose, past.radialWind};
             }
             if (!usable)
                 continue;
-            auto profile = WindProfile::Calc(inputs, channel.rangeM, frame->frameTime());
+            auto profile = WindProfile::Calc(inputs, channel.rangeStartM, channel.rangeStepM, frame->frameTime());
             if (!profile)
                 continue;
             Q_EMIT this->profileReady(int(i), profile);
