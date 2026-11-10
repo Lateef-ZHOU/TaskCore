@@ -3,14 +3,14 @@ include(FetchContent)
 if(NOT TARGET Lidar::HandleCore)
     FetchContent_Declare(lidar_handle_core
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/HandleCore.git
-        GIT_TAG 4b2479bcd1911298f28ff12f0e78f9e4774acb8c)
+        GIT_TAG 7ad9b380fe8d58cdb00a97107e06a96f6f4ba9b0)
     FetchContent_MakeAvailable(lidar_handle_core)
 endif()
 # 消费方已提供目标时直接复用；否则拉取经过验证的固定提交，不启用 Handle 可选模块。
 if(NOT TARGET Lidar::Algorithm)
     FetchContent_Declare(lidar_algorithm
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/Algorithm.git
-        GIT_TAG 733d0e72058783247ccf8c5a194afaa1765b9de5)
+        GIT_TAG c42cff8f14226969fdeca030a3196b901ab7b967)
     FetchContent_MakeAvailable(lidar_algorithm)
 endif()
 # 采集卡族的四束环用 Boost.CircularBuffer；先复用消费方目标或已装包，再取固定哈希的官方归档。
@@ -28,6 +28,6 @@ endif()
 if(NOT TARGET Lidar::DeviceCore)
     FetchContent_Declare(lidar_devicecore
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/DeviceCore.git
-        GIT_TAG bdcc0b576bcfe21a569cc2fcbebf1c8f3173fb88)
+        GIT_TAG a7c15dd5587ee8d8b077cf0e1c41d013d0f66eb0)
     FetchContent_MakeAvailable(lidar_devicecore)
 endif()
