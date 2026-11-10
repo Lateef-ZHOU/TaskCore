@@ -11,6 +11,7 @@
 #include <QVector>
 
 #include "GimbalModel.h"
+#include "LinearArray.h"
 #include "RadialWind.h" // 标准径向风 / CNR 算法（各卡共用）
 #include "RunBase.h" // Collector 契约基类
 
@@ -33,15 +34,14 @@ struct DAQChannel
     QString name;
     int rows = 0;    // 距离门数
     int columns = 0; // 频点数
-    double rangeStartM = 0.0; // 第 k 门斜距 = rangeStartM + k·rangeStepM（m）
-    double rangeStepM = 0.0;  // 门距（m），正数才算径向风
     double freqStartMHz = std::numeric_limits<double>::quiet_NaN(); // 第 i 频点 = freqStartMHz + i·freqStepMHz
     double freqStepMHz = 0.0; // 频点间隔（MHz），正数才算径向风
     double zeroWindMHz = std::numeric_limits<double>::quiet_NaN();
     double metersPerSecondPerMHz = 0.0;
     QVector<double> spectrum;   // rows × columns 行主序（行 = 距离门）
-    QVector<double> radialWind; // 每门（m/s）；零风速参考不在频带内时为 NaN
-    QVector<double> cnr;        // 每门（dB）；空 = 未处理
+    // 逐门产物：轴为斜距（第 k 门 = positionAt(k)，m），型号在规格里给出两者相同的轴，处理只填数值。
+    LinearArray<double> radialWind; // m/s；零风速参考不在频带内时为 NaN；门距为正才算
+    LinearArray<double> cnr;        // dB；空 = 未处理
 
     // 零风速参考落在本帧频带内才换算风速，否则只出 CNR。
     [[nodiscard]] bool calibrated() const noexcept
@@ -53,15 +53,15 @@ struct DAQChannel
     // 标准处理：逐门高斯拟合出峰位与 CNR，峰位按频率轴与零风速参考线性换算为径向风速。
     void process()
     {
-        if (rows <= 0 || columns < 2 || !(rangeStepM > 0.0) || !(freqStepMHz > 0.0) || !std::isfinite(freqStartMHz)
+        if (rows <= 0 || columns < 2 || !radialWind.hasValidAxis() || !(freqStepMHz > 0.0) || !std::isfinite(freqStartMHz)
             || spectrum.size() != qsizetype(rows) * columns)
             return;
         const double slope = freqStepMHz * metersPerSecondPerMHz;
         const double offset = calibrated() ? (freqStartMHz - zeroWindMHz) * metersPerSecondPerMHz
                                            : std::numeric_limits<double>::quiet_NaN();
         auto result = RadialWind::Calc(spectrum, rows, columns, slope, offset);
-        radialWind = std::move(result.ws);
-        cnr = std::move(result.cnr);
+        static_cast<std::vector<double> &>(radialWind) = std::move(result.ws);
+        static_cast<std::vector<double> &>(cnr) = std::move(result.cnr);
     }
 };
 

@@ -53,8 +53,7 @@ private:
         c.name = QString::fromLatin1(name);
         c.rows = 2;
         c.columns = 4;
-        c.rangeStartM = 0;
-        c.rangeStepM = 15;
+        c.radialWind = c.cnr = LinearArray<double>(0, 15);
         c.freqStartMHz = 0;
         c.freqStepMHz = 1;
         c.zeroWindMHz = zero;
@@ -104,8 +103,8 @@ int main(int argc, char **argv)
     check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "uncalibrated wind not null");
 
     // 风廓线：东风 5 m/s、上升 0.5 m/s → 来向 90°。
-    auto unit = std::make_shared<VerticalWindProfileUnit>(at, 10.0, 10.0,
-        std::vector<LinAlg::Vec3>{LinAlg::Vec3(-5, 0, 0.5), LinAlg::Vec3(0, -3, 0)});
+    auto unit = std::make_shared<VerticalWindProfileUnit>(VerticalWindProfileUnit{at,
+        LinearArray<LinAlg::Vec3>(10.0, 10.0, {LinAlg::Vec3(-5, 0, 0.5), LinAlg::Vec3(0, -3, 0)})});
     AcqSaver::saveWindProfiles(frame, {{QStringLiteral("A"), unit}});
     const auto profile = readCompleted(root.filePath("session/profile_" + AcqSaver::fileStem(at) + ".json"));
     const auto first = profile.value("channels").toArray()[0].toObject();

@@ -157,8 +157,8 @@ private:
             if (i) out.raw(",");
             out.raw("{");
             out.key("name"); out.text(channel.name); out.raw(",");
-            out.key("rangeStartM"); out.number(channel.rangeStartM); out.raw(",");
-            out.key("rangeStepM"); out.number(channel.rangeStepM); out.raw(",");
+            out.key("rangeStartM"); out.number(channel.radialWind.start); out.raw(",");
+            out.key("rangeStepM"); out.number(channel.radialWind.step); out.raw(",");
             out.key("freqStartMHz"); out.number(channel.freqStartMHz); out.raw(",");
             out.key("freqStepMHz"); out.number(channel.freqStepMHz); out.raw(",");
             out.key("zeroWindMHz"); out.number(channel.zeroWindMHz); out.raw(",");
@@ -206,8 +206,8 @@ private:
             if (i) out.raw(",");
             out.raw("{");
             out.key("name"); out.text(channels[i].name); out.raw(",");
-            out.key("heightStartM"); out.number(profile.startHeightM); out.raw(",");
-            out.key("heightStepM"); out.number(profile.heightStepM); out.raw(",");
+            out.key("heightStartM"); out.number(profile.winds.start); out.raw(",");
+            out.key("heightStepM"); out.number(profile.winds.step); out.raw(",");
             out.key("horizontalDirectionDeg"); out.numbers(direction); out.raw(",");
             out.key("horizontalSpeed"); out.numbers(horizontal); out.raw(",");
             out.key("verticalSpeed"); out.numbers(vertical);
