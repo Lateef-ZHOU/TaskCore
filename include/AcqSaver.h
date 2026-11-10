@@ -157,17 +157,17 @@ private:
             if (i) out.raw(",");
             out.raw("{");
             out.key("name"); out.text(channel.name); out.raw(",");
-            out.key("rangeStartM"); out.number(channel.radialWind.start); out.raw(",");
-            out.key("rangeStepM"); out.number(channel.radialWind.step); out.raw(",");
-            out.key("freqStartMHz"); out.number(channel.freqStartMHz); out.raw(",");
-            out.key("freqStepMHz"); out.number(channel.freqStepMHz); out.raw(",");
+            const auto &spectrum = channel.spectrum;
+            out.key("rangeStartM"); out.number(spectrum.rowStart); out.raw(",");
+            out.key("rangeStepM"); out.number(spectrum.rowStep); out.raw(",");
+            out.key("freqStartMHz"); out.number(spectrum.columnStart); out.raw(",");
+            out.key("freqStepMHz"); out.number(spectrum.columnStep); out.raw(",");
             out.key("zeroWindMHz"); out.number(channel.zeroWindMHz); out.raw(",");
             out.key("spectrum");
             out.raw("[");
-            for (int row = 0; row < channel.rows && channel.spectrum.size() == qsizetype(channel.rows) * channel.columns; ++row) {
+            for (int row = 0; spectrum.complete() && row < spectrum.rows; ++row) {
                 if (row) out.raw(",");
-                const auto begin = channel.spectrum.cbegin() + qsizetype(row) * channel.columns;
-                out.numbers(std::span<const double>(&*begin, channel.columns));
+                out.numbers(spectrum.row(row));
             }
             out.raw("],");
             out.key("radialWind"); out.numbers(channel.radialWind); out.raw(",");

@@ -51,18 +51,14 @@ private:
     {
         DAQChannel c;
         c.name = QString::fromLatin1(name);
-        c.rows = 2;
-        c.columns = 4;
-        c.radialWind = c.cnr = LinearArray<double>(0, 15);
-        c.freqStartMHz = 0;
-        c.freqStepMHz = 1;
+        c.spectrum = LinearArray2D<double>(2, 4, 0, 15, 0, 1);
         c.zeroWindMHz = zero;
         return c;
     }
     void onFeed(const std::optional<QByteArray> &, RxTime at) override
     {
         for (auto &c : *this)
-            c.spectrum = {1, 2, 9, 2, 1, 3, 8, 3};
+            static_cast<std::vector<double> &>(c.spectrum) = {1, 2, 9, 2, 1, 3, 8, 3};
         frameTime_ = at;
         complete();
     }

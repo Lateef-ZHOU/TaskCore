@@ -70,11 +70,7 @@ private:
     {
         DAQChannel c;
         c.name = QStringLiteral("T");
-        c.rows = 2;
-        c.columns = 8;
-        c.radialWind = c.cnr = LinearArray<double>(100, 30);
-        c.freqStartMHz = 0;
-        c.freqStepMHz = 1;
+        c.spectrum = LinearArray2D<double>(2, 8, 100, 30, 0, 1);
         c.zeroWindMHz = 3.5;
         return c;
     }
@@ -82,9 +78,9 @@ private:
     {
         auto &c = front();
         c.spectrum.clear();
-        for (int row = 0; row < c.rows; ++row)
-            for (int column = 0; column < c.columns; ++column)
-                c.spectrum.append(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
+        for (int row = 0; row < c.spectrum.rows; ++row)
+            for (int column = 0; column < c.spectrum.columns; ++column)
+                c.spectrum.push_back(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
         complete();
@@ -107,7 +103,7 @@ public:
     }
 Q_SIGNALS:
     void lockChanged(HandleCore::ResourcePhase) override;
-    void spectrumReady(int channel, const QVector<double> &values) override;
+    void spectrumReady(int channel, const LinearArray2D<double> &spectrum) override;
     void radialReady(int channel, const LinearArray<double> &speeds,
                      const LinearArray<double> &cnr, bool calibrated) override;
     void profileReady(int channel, VerticalWindProfilePtr profile) override;
@@ -136,7 +132,7 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     TestDevice device;
     int spectra = 0, radials = 0, profiles = 0, completed = 0;
-    QObject::connect(&device, &TestDevice::spectrumReady, &app, [&](int channel, const QVector<double> &values) {
+    QObject::connect(&device, &TestDevice::spectrumReady, &app, [&](int channel, const LinearArray2D<double> &values) {
         if (channel != 0 || values.size() != 16 || QThread::currentThread() != app.thread()) qFatal("spectrum signal differs");
         ++spectra;
     });

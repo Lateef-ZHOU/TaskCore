@@ -27,41 +27,29 @@ struct DAQParameters
     bool sync = false;
 };
 
-// 一个通道：型号给出规格（名称、门与频点的物理坐标、零风速参考），收集期间整理功率谱，
+// 一个通道：型号给出规格（名称、功率谱网格与两条物理轴、零风速参考），收集期间往 spectrum 里整理功率谱，
 // 收齐后按标准方法算径向风与 CNR。显示、反演与落盘只认这些字段，不认识官邸。
 struct DAQChannel
 {
     QString name;
-    int rows = 0;    // 距离门数
-    int columns = 0; // 频点数
-    double freqStartMHz = std::numeric_limits<double>::quiet_NaN(); // 第 i 频点 = freqStartMHz + i·freqStepMHz
-    double freqStepMHz = 0.0; // 频点间隔（MHz），正数才算径向风
+    // 功率谱：行 = 距离门（行轴为斜距 m），列 = 频点（列轴为频率 MHz）。型号在规格里给出网格与两条轴，
+    // 收包期间只追加元素；频率起点随协议在首包确定的型号可在那时再写列轴。
+    LinearArray2D<double> spectrum;
     double zeroWindMHz = std::numeric_limits<double>::quiet_NaN();
-    QVector<double> spectrum;   // rows × columns 行主序（行 = 距离门）
-    // 逐门产物：轴为斜距（第 k 门 = positionAt(k)，m），型号在规格里给出两者相同的轴，处理只填数值。
-    LinearArray<double> radialWind; // m/s；零风速参考不在频带内时为 NaN；门距为正才算
+    // 逐门产物：轴取功率谱的行轴（斜距），由处理一并给出。
+    LinearArray<double> radialWind; // m/s；零风速参考不在频带内时为 NaN
     LinearArray<double> cnr;        // dB；空 = 未处理
 
     // 零风速参考落在本帧频带内才换算风速，否则只出 CNR。
-    [[nodiscard]] bool calibrated() const noexcept
-    {
-        return columns > 0 && freqStepMHz > 0.0 && zeroWindMHz >= freqStartMHz
-               && zeroWindMHz <= freqStartMHz + (columns - 1) * freqStepMHz;
-    }
+    [[nodiscard]] bool calibrated() const noexcept { return RadialWind::inBand(spectrum, zeroWindMHz); }
 
-    // 标准处理：逐门高斯拟合出峰位与 CNR，峰位按频率轴与零风速参考线性换算为径向风速。
-    // metersPerSecondPerMHz 由族基按本卡激光波长给出（λ/2）。
+    // 标准处理：逐门高斯拟合出峰位与 CNR，峰位按频率轴与零风速参考换算为径向风速。
+    // metersPerSecondPerMHz 由族基按本卡激光波长给出（λ/2）；网格不完整或轴无效时不出结果。
     void process(const double metersPerSecondPerMHz)
     {
-        if (rows <= 0 || columns < 2 || !radialWind.hasValidAxis() || !(freqStepMHz > 0.0) || !std::isfinite(freqStartMHz)
-            || spectrum.size() != qsizetype(rows) * columns)
-            return;
-        const double slope = freqStepMHz * metersPerSecondPerMHz;
-        const double offset = calibrated() ? (freqStartMHz - zeroWindMHz) * metersPerSecondPerMHz
-                                           : std::numeric_limits<double>::quiet_NaN();
-        auto result = RadialWind::Calc(spectrum, rows, columns, slope, offset);
-        static_cast<std::vector<double> &>(radialWind) = std::move(result.ws);
-        static_cast<std::vector<double> &>(cnr) = std::move(result.cnr);
+        auto result = RadialWind::Calc(spectrum, metersPerSecondPerMHz, zeroWindMHz);
+        radialWind = std::move(result.ws);
+        cnr = std::move(result.cnr);
     }
 };
 

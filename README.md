@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-10 用户定（二维线性数组）：`DAQChannel` 的 rows/columns/freqStartMHz/freqStepMHz/spectrum 合并为 `LinearArray2D<double> spectrum`；径向风与 CNR 的轴由 `RadialWind::Calc` 从功率谱行轴给出，型号不再另设。`spectrumReady(channel, LinearArray2D<double>)`；帧 JSON 的距离与频率起点、步长从功率谱两条轴读取，格式不变。
+
 2026-11-10 用户定（波长与抽稀）：激光波长移到族基，`DAQCollector(parameters, channels, wavelengthM)`，`complete()` 按 λ/2 换算后交各通道 `process(metersPerSecondPerMHz)`；`DAQChannel` 删除 `metersPerSecondPerMHz`。
 
 2026-11-10 用户定（线性数组）：`DAQChannel::radialWind`、`cnr` 都是 `LinearArray<double>`（轴为斜距，型号在规格里给出同一轴，处理只填数值），删除 `rangeStartM`/`rangeStepM`；`radialReady(channel, LinearArray<double> speeds, LinearArray<double> cnr, calibrated)`；四束环以 `sameAxis` 判同一网格，反演为 `WindProfile::Calc(beams, at)`。频率轴暂仍为 `freqStartMHz`/`freqStepMHz`（功率谱是二维）。
