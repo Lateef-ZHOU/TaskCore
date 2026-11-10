@@ -45,14 +45,10 @@ public:
     QList<QByteArray> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
-    explicit SavedFrame(DAQParameters p) : DAQCollector(std::move(p), 1, 1.55e-6) {}
-    void onFeed(const std::optional<QByteArray> &, RxTime at) override
+    explicit SavedFrame(DAQParameters p) : DAQCollector(std::move(p), 1.55e-6) {}
+    std::optional<std::vector<DAQChannel>> assemble(QByteArrayView, RxTime at) override
     {
         frameTime_ = at;
-        (void)store(received(), QByteArrayView("x", 1));
-    }
-    std::vector<DAQChannel> decode(const QByteArray &) const override
-    {
         std::vector<DAQChannel> channels;
         for (const auto &[name, zero] : {std::pair{"A", 1.5}, std::pair{"B", 99.0}}) {
             LinearArray2D<double> spectrum(2, 4, 0, 15, 0, 1);

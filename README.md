@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-10 用户定（凑帧归官邸）：原始帧缓冲与凑帧状态移到官邸。`DAQCollector` 只要求官邸实现 `assemble(QByteArrayView bytes, RxTime at) -> std::optional<std::vector<DAQChannel>>`：未凑齐返回空，凑齐的那一口返回解析出的通道；`settled()` 当且仅当已返回通道。删除族层的 `store`/`restart`/`received`/`decode` 与原始缓冲。取代同日“族层持有缓冲”的做法。
+
 2026-11-10 用户定（收包与解析分离）：`DAQCollector` 不再继承通道 vector，改为持有原始帧缓冲与 `channels()`。型号 `onFeed` 只做协议校验、去掉不属于数组元素的包头，并以 `store(偏移, 字节)` 放置字节（族层查越界）；`restart()` 供换帧清计数；凑满整帧即调用型号的 `decode(帧)` 解析为通道，随后释放缓冲。`settled()` = 通道已存在。`DAQChannel` 构造即按标准方法算出径向风与 CNR，删除 `process`/`processed`/`complete`。
 
 2026-11-10 用户定（二维线性数组）：`DAQChannel` 的 rows/columns/freqStartMHz/freqStepMHz/spectrum 合并为 `LinearArray2D<double> spectrum`；径向风与 CNR 的轴由 `RadialWind::Calc` 从功率谱行轴给出，型号不再另设。`spectrumReady(channel, LinearArray2D<double>)`；帧 JSON 的距离与频率起点、步长从功率谱两条轴读取，格式不变。

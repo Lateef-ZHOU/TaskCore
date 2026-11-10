@@ -65,15 +65,12 @@ public:
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
     // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
-    explicit TestCollector(DAQParameters p) : DAQCollector(std::move(p), 1, 2e-6) {}
-    void onFeed(const std::optional<QByteArray> &, RxTime at) override
+    explicit TestCollector(DAQParameters p) : DAQCollector(std::move(p), 2e-6) {}
+    // 每口料即一整帧：在收包线程解析与处理。
+    std::optional<std::vector<DAQChannel>> assemble(QByteArrayView, RxTime at) override
     {
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
-        (void)store(received(), QByteArrayView("x", 1)); // 一字节即一整帧，凑齐即在本线程解析与处理
-    }
-    std::vector<DAQChannel> decode(const QByteArray &) const override
-    {
         LinearArray2D<double> spectrum(2, 8, 100, 30, 0, 1);
         for (int row = 0; row < spectrum.rows; ++row)
             for (int column = 0; column < spectrum.columns; ++column)
