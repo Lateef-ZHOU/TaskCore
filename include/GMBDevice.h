@@ -145,7 +145,7 @@ class GMBDevice : public Device<HandleT, CollectorT>, public GMBDeviceBase
     using DeviceT = Device<HandleT, CollectorT>;
 protected:
     GMBDevice(QString name, QString subtitle, QObject *parent)
-        : DeviceT(std::move(name), std::move(subtitle), makeOnStream(this), {}, parent) {}
+        : DeviceT(std::move(name), std::move(subtitle), parent) {}
 
 public:
     ~GMBDevice() override = default;
@@ -197,19 +197,16 @@ public:
 
 private:
 
-    // Device 独持此回调；构造时只记下 this，收包开始前不会调用。
-    // 解析在收包线程；安装姿态只在主线程读取和换算。
-    static typename DeviceT::OnStream makeOnStream(GMBDevice *self)
+    // [Handle 收包线程] 解析在收包线程；安装姿态只在主线程读取和换算。
+    std::optional<PanTiltModel> onStream(const QByteArray &raw, RxTime at) final
     {
-        return [self](const QByteArray &raw, const RxTime at) -> std::optional<PanTiltModel> {
-            const auto pose = self->decodeStream(raw);
-            if (!pose) return std::nullopt;
-            QMetaObject::invokeMethod(self, [self, at, p = *pose] {
-                const auto world = self->worldOf(p);
-                Q_EMIT self->anglesReady(at, p.pan(), p.tilt(), world.azimuth(), world.elevation());
-            }, Qt::QueuedConnection);
-            return pose;
-        };
+        const auto pose = decodeStream(raw);
+        if (!pose) return std::nullopt;
+        QMetaObject::invokeMethod(this, [this, at, p = *pose] {
+            const auto world = worldOf(p);
+            Q_EMIT this->anglesReady(at, p.pan(), p.tilt(), world.azimuth(), world.elevation());
+        }, Qt::QueuedConnection);
+        return pose;
     }
 
     // [worker] **型号该填**：一口上行 → 实测位形（云台系）。

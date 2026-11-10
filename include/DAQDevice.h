@@ -80,7 +80,7 @@ class DAQDevice : public Device<HandleT, CollectorT>, public DAQDeviceBase
     using DeviceT = Device<HandleT, CollectorT>;
 protected:
     DAQDevice(QString name, QString subtitle, QObject *parent)
-        : DeviceT(std::move(name), std::move(subtitle), makeOnStream(), makeOnConsume(this), parent)
+        : DeviceT(std::move(name), std::move(subtitle), parent)
     {
         static_assert(DeviceLifecycleLayer<DAQDevice, decltype(&DAQDevice::PreDestruction)>);
     }
@@ -172,20 +172,12 @@ private:
         }
     }
 
-    static typename DeviceT::OnStream makeOnStream()
-    {
-        return [](const QByteArray &raw, RxTime) -> std::optional<QByteArray> { return raw; };
-    }
-
-    // Device 独持此回调；构造时只记下 this，完成帧到达前不会调用。
-    static typename DeviceT::OnConsume makeOnConsume(DAQDevice *self)
-    {
-        return [self](std::shared_ptr<const CollectorT> frame) { self->consume(std::move(frame)); };
-    }
+    // [Handle 收包线程] 采集卡的一口上行原样交给收集器，按协议整理归型号的 onFeed。
+    std::optional<QByteArray> onStream(const QByteArray &raw, RxTime) final { return raw; }
 
     // [主] 完成帧：按通道发功率谱与径向风、整帧落盘，进四束环；同步位为真时逐通道反演风廓线。
     // 一组四束须是同一通道、同一距离轴且均已换算风速；任一束朝向未知则不反演。
-    void consume(std::shared_ptr<const CollectorT> frame)
+    void onConsume(const std::shared_ptr<const CollectorT> &frame) override
     {
         const auto &context = frame->parameters();
         for (std::size_t i = 0; i < frame->size(); ++i)
