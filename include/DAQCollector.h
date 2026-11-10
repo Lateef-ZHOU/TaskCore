@@ -40,9 +40,6 @@ struct DAQChannel
     LinearArray<double> radialWind; // m/s；零风速参考不在频带内时为 NaN
     LinearArray<double> cnr;        // dB；空 = 未处理
 
-    // 零风速参考落在本帧频带内才换算风速，否则只出 CNR。
-    [[nodiscard]] bool calibrated() const noexcept { return RadialWind::inBand(spectrum, zeroWindMHz); }
-
     // 标准处理：逐门高斯拟合出峰位与 CNR，峰位按频率轴与零风速参考换算为径向风速。
     // metersPerSecondPerMHz 由族基按本卡激光波长给出（λ/2）；网格不完整或轴无效时不出结果。
     void process(const double metersPerSecondPerMHz)
