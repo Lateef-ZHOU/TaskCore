@@ -143,7 +143,9 @@ public:
         return true;
     }
 
-    // 模板层完成 QML 值到强类型的边界转换；末端仅提供同名 Qt 槽。手动直发不等到位，停稳等待不用。
+    // 设备页手动前往：模板层完成 QML 值到强类型的边界转换，末端仅提供同名 Qt 槽。参数经 paramsFor 造出后
+    // 走与任务相同的运行槽（看门狗按型号时限重发），不需要结局，故完成回调为空；不持锁，设备被占用时拒收。
+    // 失败由发现原因的层记录并返回 false（paramsFor / Device::start 各自记录），成功只返 true，由 QML 记日志。
     bool issueGoTo(const double pan, const double tilt, const QVariantMap &values)
     {
         const auto speeds = GMBMoveParameters::speedsFromQml(values);
@@ -152,7 +154,21 @@ public:
             Q_EMIT this->logMessage(QStringLiteral("转台运动参数无效，未下发"));
             return false;
         }
-        return issueGoTo(this->paramsFor(PanTiltModel(pan, tilt), {}, *speeds));
+        const auto parameters = this->paramsFor(PanTiltModel(pan, tilt), {}, *speeds);
+        return parameters && DeviceT::start(std::make_shared<CollectorT>(*parameters), {}, nullptr);
+    }
+
+    // 设备页停止 = 撤 run：Device 无条件发停机命令（无 run 时用型号的 stopCommands），对直发的扫描 / 旋转
+    // 同样有效。不持锁：设备正被任务占用或未连接时拒绝并记录原因。
+    bool issueStop()
+    {
+        if (!this->canEngage({}))
+        {
+            Q_EMIT this->logMessage(QStringLiteral("设备未连接或正被占用，指令未下发"));
+            return false;
+        }
+        DeviceT::stop({});
+        return true;
     }
 
     // 参数只能由 paramsFor 造出，存在即有效：直接以它构造本型号的具体 Collector 交 Device，不再复核。
@@ -184,11 +200,8 @@ private:
     // **非 const**：型号要攒另一根轴（sqaf 的 Pelco 应答经、纬分帧），MCZT 还要记报警状态。
     [[nodiscard]] virtual std::optional<PanTiltModel> decodeStream(const QByteArray &) = 0;
 
-    // 手动直发原样接收 paramsFor 的结果（空 = 型号已拒绝并记录原因），不造 Collector、不等到位；
-    // 失败由发现原因的层记录并返回 false，成功只返 true，由 QML 最终调用处记日志。
-    // QML 通过官邸的同名 Qt 入口调用；世界角先用安装姿态值换算，不把文案传入设备。
-    [[nodiscard]] virtual bool issueGoTo(const std::optional<GMBMoveParameters> &parameters) = 0;
-    [[nodiscard]] virtual bool issueStop() = 0;
+    // 本型号停机命令取自型号标签，与参数无关。
+    [[nodiscard]] QList<QByteArray> stopCommands() const final { return CollectorT::stopOf(); }
 
     // 唯一安装标定；主线程读写，族基通过 mounting() 使用。
     WorldModel mounting_;

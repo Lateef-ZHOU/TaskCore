@@ -145,8 +145,12 @@ public:
     {
         return std::make_shared<TypedGMBCollector>(parameters());
     }
+
+    // 本型号的停机命令与参数无关；族模板层据此实现 Device 的 stopCommands（无 run 时也能停）。
+    [[nodiscard]] static QList<QByteArray> stopOf() { return Model::stopOf(); }
 };
 
 template <typename C>
 concept GMBCollectorLike = std::derived_from<C, GMBCollector> && CollectorLike<C>
-    && std::constructible_from<C, const GMBMoveParameters &>;
+    && std::constructible_from<C, const GMBMoveParameters &>
+    && requires { { C::stopOf() } -> std::same_as<QList<QByteArray>>; };

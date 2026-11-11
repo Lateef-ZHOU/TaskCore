@@ -93,6 +93,7 @@ public:
         if (accumSec < 1 || accumSec > 10) return std::nullopt;
         return DAQParameters(*this, accumSec, std::move(pose), std::move(saveRoot), std::move(sessionDir), sync);
     }
+    QList<QByteArray> stopCommands() const override { return {}; }
 Q_SIGNALS:
     void lockChanged(HandleCore::ResourcePhase) override;
     void spectrumReady(int channel, const LinearArray2D<double> &spectrum) override;

@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-11 用户定：停机不再以“有 run”为前提：Device<HandleT, CollectorT> 要求子类实现 stopCommands()；teardown 在连接打开时无条件发停机命令（有 run 用其 buildStop，否则用 stopCommands），断联（AboutToRelease）促停由 DeviceCore 负责。完成回调允许为空（空 = 调用方不关心结局）。云台族删除型号的 issueGoTo(optional) 与 issueStop 虚函数：设备页前往经 paramsFor 后走 Device::start（空回调、看门狗重发），停止即撤 run。
+
 2026-11-11 用户定：参数无效在生成参数时拦下：DAQParameters / GMBMoveParameters 只能出示通行证（DAQParamsKey / GMBParamsKey，构造受保护、族基 protected 继承）构造，字段只读，官邸 paramsFor 以 *this 出示；收集器以 const Parameters& 公开构造，删除静态工厂 create 与云台 makeMoveCollector；begin 不再复核，直接 make_shared<CollectorT>(parameters)。不用 friend。
 
 2026-11-11 用户定：族基改名：GMBDeviceBase → GMBFamily，DAQDeviceBase → DAQFamily（继承 FamilyBase 后即族这一层，避免与 DeviceCore 的 DeviceBase 混淆）。
