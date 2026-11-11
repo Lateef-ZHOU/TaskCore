@@ -57,7 +57,7 @@ struct GMBParameters
 // 云台族公共到位/驻留判据与位形读口；型号以 TypedGMBCollector 的标签区分。
 // 指示区不可变，收集区只由收包线程写，完成后按 const 份额交付。
 // 对象不可复制或移动的约束由 Collector 基类统一提供，调用方只共享指针份额。
-class GMBCollector : public Collector<PanTiltModel>
+class GMBCollector : public Collector<PanTiltModel, GMBParameters>
 {
 public:
     static constexpr std::chrono::milliseconds kMinHold{2000}; // 驻留下限：任务页的输入框同此下限，斗再兜一道
@@ -68,7 +68,7 @@ public:
 protected:
     GMBCollector(const GMBParameters &parameters, const double tolerance, QList<QByteArray> start,
                  QList<QByteArray> stop, const int timeoutMs)
-        : parameters_(parameters), tolerance_(tolerance), hold_(std::max(parameters.hold, kMinHold)),
+        : Collector(parameters), tolerance_(tolerance), hold_(std::max(parameters.hold, kMinHold)),
           start_(std::move(start)), stop_(std::move(stop)), timeoutMs_(timeoutMs)
     {
     }
@@ -89,8 +89,7 @@ public:
 
     // 本次 run **被命令去的**位形——运动参数目标的回读（收集器 → 位形）。每只斗都有目标
     // （扇扫 / 循环 / 方向键不造斗），故不是 optional。
-    [[nodiscard]] PanTiltModel target() const { return parameters_.target; }
-    [[nodiscard]] const GMBParameters &parameters() const noexcept { return parameters_; }
+    [[nodiscard]] PanTiltModel target() const { return parameters.target; }
 
     [[nodiscard]] QList<QByteArray> buildStart() const override { return start_; }
     [[nodiscard]] QList<QByteArray> buildStop() const override { return stop_; }
@@ -106,7 +105,7 @@ private:
     void onFeed(const PanTiltModel &sample, RxTime) override
     {
         last_ = sample;
-        if (PanTiltModel::distance(sample, parameters_.target) > tolerance_)
+        if (PanTiltModel::distance(sample, parameters.target) > tolerance_)
         {
             firstHitAt_ = std::nullopt;
             lastHitAt_ = std::nullopt;
@@ -120,7 +119,6 @@ private:
 
     // ── 指示区（const：出生即定，多线程只读）──
 protected:
-    const GMBParameters parameters_;
     const double tolerance_;
     const std::chrono::milliseconds hold_;
     const QList<QByteArray> start_;
@@ -142,12 +140,6 @@ public:
     // 族模板层按已校验的运动参数直接构造完整、可写的本次 Collector，独占交给 Device。
     explicit TypedGMBCollector(const GMBParameters &parameters)
         : GMBCollector(parameters, Model::tolerance, Model::startOf(parameters), Model::stopOf(), Model::timeoutMs) {}
-
-    // 看门狗重试用：按同一参数另造初始观测的新斗。
-    [[nodiscard]] std::shared_ptr<TypedGMBCollector> makeSelf() const
-    {
-        return std::make_shared<TypedGMBCollector>(parameters());
-    }
 
     // 本型号的停机命令与参数无关；族模板层据此实现 Device 的 stopCommands（无 run 时也能停）。
     [[nodiscard]] static QList<QByteArray> stopOf() { return Model::stopOf(); }

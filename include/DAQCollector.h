@@ -67,12 +67,11 @@ private:
 // 族基：每口料原样交型号 assemble；型号自己维护原始帧缓冲与凑帧状态，凑齐那一口解析出通道并返回。
 // 型号收包期间只做协议校验、去掉不属于数组元素的包头并放置字节，不做换算；换算在凑齐后一次完成。
 // 族基提供时刻、本次请求参数与本卡激光波长；交付后只读。
-class DAQCollector : public Collector<QByteArray>
+class DAQCollector : public Collector<QByteArray, DAQParameters>
 {
 public:
     // 当前帧的到料时刻由型号按协议确定；完成后供落盘文件名和风廓线时间轴使用。
     [[nodiscard]] RxTime frameTime() const noexcept { return frameTime_; }
-    [[nodiscard]] const DAQParameters &parameters() const noexcept { return parameters_; }
     // 本卡激光波长（m）：各通道共用，决定频移→风速系数 λ/2。
     [[nodiscard]] double wavelengthM() const noexcept { return wavelengthM_; }
     // 本帧全部通道；仅判齐后可读。
@@ -83,13 +82,13 @@ public:
 protected:
     // 派生构造必须显式交入请求参数与激光波长（m）；参数已由官邸 paramsFor 校验。
     DAQCollector(DAQParameters parameters, const double wavelengthM)
-        : parameters_(std::move(parameters)), wavelengthM_(wavelengthM) {}
+        : Collector(std::move(parameters)), wavelengthM_(wavelengthM) {}
     // 非虚 + protected：与 Collector / GMBCollector 同判例——销毁恒经控制块记下的具体删除器，
     // 从不经本类指针 delete；protected 顺带把裸删门封死。
     ~DAQCollector() = default;
 
     // 仅型号 assemble 写：未完成时可随协议换帧更新，完成后公共 feed 不再改写。
-    // makeSelf 只保留不可变配置，另建初始帧时刻，不继承旧尝试的观测。
+    // 看门狗重试以同一参数另造新斗，帧时刻从初始值重来，不继承旧尝试的观测。
     RxTime frameTime_{};
 
 private:
@@ -98,12 +97,11 @@ private:
     // [worker] 型号凑帧：校验并放置这一口字节；未凑齐返回空，凑齐的那一口按协议解析为各通道（构造即处理）。
     [[nodiscard]] virtual std::optional<std::vector<DAQChannel>> assemble(QByteArrayView bytes, RxTime at) = 0;
 
-    const DAQParameters parameters_;
     const double wavelengthM_;
     std::optional<std::vector<DAQChannel>> channels_;
 };
 
-// 具体类型须属于本族、沿用 feed；公开构造函数按已校验的请求参数造出完整、可写的自身，makeSelf 供重试。
+// 具体类型须属于本族、沿用 feed；公开构造函数按已校验的请求参数造出完整、可写的自身（首次启动与看门狗重试共用）。
 template <typename C>
 concept DAQCollectorLike = std::derived_from<C, DAQCollector> && CollectorLike<C>
     && std::constructible_from<C, const DAQParameters &>;

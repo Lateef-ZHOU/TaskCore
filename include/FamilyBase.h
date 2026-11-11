@@ -26,7 +26,7 @@ public:
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
     // 按请求启动一次 run（等待器在挂起成立后调）。族模板层据请求直接造出本型号的具体 Collector 交 Device，
-    // 不经原型、验型或启动时 makeSelf。返 false = 设备不收（请求不合本型号 / 被占 / 未连）。
+    // 不经原型或验型。返 false = 设备不收（请求不合本型号 / 被占 / 未连）。
     [[nodiscard]] virtual bool begin(const Request &request, DoneFn<CollectorBase> done,
                                      const std::shared_ptr<const DeviceLock> &lock) = 0;
 

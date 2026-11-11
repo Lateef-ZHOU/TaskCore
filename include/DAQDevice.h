@@ -150,7 +150,7 @@ private:
     // 一组四束须是同一通道、同一距离轴且均已换算风速；任一束朝向未知则不反演。
     void onConsume(const std::shared_ptr<const CollectorT> &frame) override
     {
-        const auto &context = frame->parameters();
+        const auto &context = frame->parameters;
         for (std::size_t i = 0; i < frame->channels().size(); ++i)
         {
             const auto &channel = frame->channels()[i];
@@ -174,7 +174,7 @@ private:
                 const auto &past = beams_[beam]->channels()[i];
                 usable = usable && RadialWind::inBand(past.spectrum, past.zeroWindMHz)
                          && past.radialWind.sameAxis(channel.radialWind);
-                inputs[beam] = {beams_[beam]->parameters().pose, past.radialWind};
+                inputs[beam] = {beams_[beam]->parameters.pose, past.radialWind};
             }
             if (!usable)
                 continue;

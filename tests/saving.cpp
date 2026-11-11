@@ -40,7 +40,6 @@ class SavedFrame final : public DAQCollector
 {
 public:
     explicit SavedFrame(const DAQParameters &p) : DAQCollector(p, 1.55e-6) {}
-    std::shared_ptr<SavedFrame> makeSelf() const { return std::make_shared<SavedFrame>(parameters()); }
     QList<QByteArray> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:

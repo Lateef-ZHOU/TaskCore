@@ -59,7 +59,6 @@ class TestCollector final : public DAQCollector
 public:
     // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
     explicit TestCollector(const DAQParameters &p) : DAQCollector(p, 2e-6) {}
-    std::shared_ptr<TestCollector> makeSelf() const { return std::make_shared<TestCollector>(parameters()); }
     QList<QByteArray> buildStart() const override { return {"start"}; }
     int timeoutMs() const override { return 0; }
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
