@@ -196,9 +196,15 @@ protected:
         const auto world = measured ? std::optional{gmb.worldOf(*measured)} : std::nullopt;
         RunAwaiter<DAQFamily>::Orders orders;
         // 族基不是 QObject：会话目录的 ASCII 标识取同一对象上的 objectName（交叉转换必然成功）。
+        // 参数逐卡经官邸 paramsFor 构造；任一张卡拒绝（原因由型号记录）即交空名单，等待器不挂起、返回空结果。
         for (DAQFamily &card : cards)
-            orders.push_back({card, DAQParameters{accumSec, world, saveRoot,
-                AcqSaver::sessionDir(sessionTime, dynamic_cast<const QObject &>(card).objectName()), sync}});
+        {
+            auto parameters = card.paramsFor(accumSec, world, saveRoot,
+                AcqSaver::sessionDir(sessionTime, dynamic_cast<const QObject &>(card).objectName()), sync);
+            if (!parameters)
+                return RunAwaiter<DAQFamily>{lock, {}};
+            orders.push_back({card, std::move(*parameters)});
+        }
         return RunAwaiter<DAQFamily>{lock, std::move(orders)};
     }
 

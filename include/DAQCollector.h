@@ -14,16 +14,30 @@
 #include "RadialWind.h" // 标准径向风 / CNR 算法（各卡共用）
 #include "RunBase.h" // Collector 契约基类
 
+// 采集参数的通行证：构造与析构受保护，族外造不出来。DAQFamily 以 protected 方式继承它，
+// 官邸 paramsFor 以 *this 出示；参数构造必须交入通行证，于是只有型号校验过的参数才存在。
+class DAQParamsKey
+{
+protected:
+    DAQParamsKey() = default;
+    ~DAQParamsKey() = default;
+};
+
 // 一次采集请求的按值参数：累积时间与消费上下文（世界朝向、落盘根、会话目录、同步位）。
-// 官邸 paramsFor 负责型号校验；协程按卡保存它并交族口 begin，模板层据此造出本次 Collector。
-// 重试照抄，完成帧自带处理与保存所需信息。
+// 只能由官邸 paramsFor 校验后构造，存在即有效；字段只读。协程按卡保存它并交族口 begin，
+// 模板层据此直接构造本次 Collector；重试照抄，完成帧自带处理与保存所需信息。
 struct DAQParameters
 {
-    int accumSec = 0;
-    std::optional<WorldModel> pose;
-    std::optional<QDir> saveRoot; // 空 = 不落盘
-    QString sessionDir;
-    bool sync = false;
+    DAQParameters(const DAQParamsKey &, const int accumSec, std::optional<WorldModel> pose, std::optional<QDir> saveRoot,
+                  QString sessionDir, const bool sync)
+        : accumSec(accumSec), pose(std::move(pose)), saveRoot(std::move(saveRoot)), sessionDir(std::move(sessionDir)),
+          sync(sync) {}
+
+    const int accumSec;
+    const std::optional<WorldModel> pose;
+    const std::optional<QDir> saveRoot; // 空 = 不落盘
+    const QString sessionDir;
+    const bool sync;
 };
 
 // 一个通道：型号解析出完整功率谱后构造，构造即按标准方法算出径向风与 CNR；存在即已处理。
@@ -89,9 +103,7 @@ private:
     std::optional<std::vector<DAQChannel>> channels_;
 };
 
-// 具体类型须属于本族、沿用 feed；静态工厂按请求参数交出完整、可写的自身（已备齐收集区），makeSelf 供重试。
+// 具体类型须属于本族、沿用 feed；公开构造函数按已校验的请求参数造出完整、可写的自身，makeSelf 供重试。
 template <typename C>
 concept DAQCollectorLike = std::derived_from<C, DAQCollector> && CollectorLike<C>
-    && requires(const DAQParameters &parameters) {
-        { C::create(parameters) } -> std::same_as<std::shared_ptr<C>>;
-    };
+    && std::constructible_from<C, const DAQParameters &>;

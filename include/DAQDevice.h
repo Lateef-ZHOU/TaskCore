@@ -22,7 +22,7 @@
 // 模板层同时继承具体 Device 与本类；编排只持族引用，通过 device() 使用锁，不认识具体 Handle 或 Collector。
 // 没有处理线程：Collector 在收包线程收齐末包时完成标准处理，完成帧在主线程显示、落盘并参与风廓线反演。
 // 请求为采集参数（协程按卡保存），账本元素为 DAQCollector；begin / stop / device() 由 FamilyBase 声明。
-class DAQFamily : public FamilyBase<DAQParameters, DAQCollector>
+class DAQFamily : public FamilyBase<DAQParameters, DAQCollector>, protected DAQParamsKey
 {
 public:
 
@@ -41,7 +41,7 @@ public:
     static constexpr int kPcapKernelBufferBytes = 4 * 1024 * 1024;
 
     // 由原始量构造本型号的采集参数：累积时间超出本型号范围时返回空并记录原因；不造 Collector、不发令。
-    // 任务与单卡测试在发令前调用，任一为空即拒绝启动。
+    // 这是造出 DAQParameters 的唯一入口：型号以 *this 出示通行证。任务与单卡测试在发令前调用，为空即拒绝启动。
     [[nodiscard]] virtual std::optional<DAQParameters> paramsFor(int accumSec, std::optional<WorldModel> pose,
         std::optional<QDir> saveRoot, QString sessionDir, bool sync) const = 0;
 
@@ -75,15 +75,13 @@ protected:
 public:
     ~DAQDevice() override = default;
 
-    // 按参数经型号静态工厂直接造出完整的具体 Collector 交 Device：无原型、无验型、启动时不 makeSelf。
-    // begin 是公开入口，先以 paramsFor 同一判据复核，不合即拒收（原因由型号记录）。
+    // 参数只能由 paramsFor 造出，存在即有效：直接以它构造完整的具体 Collector 交 Device，不再复核。
+    // 返 false = 设备不收（被占 / 未连）。
     [[nodiscard]] bool begin(const DAQParameters &parameters,
                              DoneFn<DAQCollector> done,
                              const std::shared_ptr<const DeviceLock> &lock) final
     {
-        const auto checked = this->paramsFor(parameters.accumSec, parameters.pose, parameters.saveRoot,
-                                       parameters.sessionDir, parameters.sync);
-        return checked && DeviceT::start(CollectorT::create(*checked), std::move(done), lock);
+        return DeviceT::start(std::make_shared<CollectorT>(parameters), std::move(done), lock);
     }
 
     // ── 采集测试（设备页的两个按钮）：只占本卡的锁，循环采集直到停止 ─────────────────────

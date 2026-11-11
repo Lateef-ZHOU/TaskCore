@@ -17,12 +17,27 @@
 // 一次运动请求的按值参数：云台位形目标、停稳等待及可选两轴速度（无速度表示本型号定位协议不携带速度）。
 // 协程按束保存它并交族口 begin，由模板层据此造出本次 Collector；官邸 paramsFor 负责型号校验与量化。
 // QML 仅在命令/任务启动边界交一份值，协程与工厂不回读界面。
+// 运动参数的通行证：构造与析构受保护，族外造不出来。GMBFamily 以 protected 方式继承它，
+// 官邸 paramsFor 以 *this 出示；参数构造必须交入通行证，于是只有型号校验过的参数才存在。
+class GMBParamsKey
+{
+protected:
+    GMBParamsKey() = default;
+    ~GMBParamsKey() = default;
+};
+
+// 一次到位请求：目标位形、停稳等待与（型号量化后的）速度。只能由官邸 paramsFor 校验后构造，存在即有效；字段只读。
 struct GMBMoveParameters
 {
     struct Speeds { double pan; double tilt; }; // °/s，两轴必须成组提供
-    PanTiltModel target;
-    std::chrono::milliseconds hold{0};
-    std::optional<Speeds> speeds;
+
+    GMBMoveParameters(const GMBParamsKey &, PanTiltModel target, const std::chrono::milliseconds hold,
+                      const std::optional<Speeds> speeds)
+        : target(std::move(target)), hold(hold), speeds(speeds) {}
+
+    const PanTiltModel target;
+    const std::chrono::milliseconds hold;
+    const std::optional<Speeds> speeds;
 
     // QML 边界只解析速度表：外层空 = 表无效；内层空 = 空表，即不带速度；非空表须恰为两轴有限值。
     // 参数本身由官邸 paramsFor 用目标、停稳和速度这些原始量构造。
@@ -47,15 +62,14 @@ class GMBCollector : public Collector<PanTiltModel>
 public:
     static constexpr std::chrono::milliseconds kMinHold{2000}; // 驻留下限：任务页的输入框同此下限，斗再兜一道
 
-    // 型号通过 makeMoveCollector 交齐一次尝试的不可变配置：目标、容差（°）、等待时长、
-    // 启动 / 停机指令和看门狗时限（ms，非正 = 不设看门狗）。
-    // hold 对应任务页的“停稳等待”，不足 kMinHold 时取下限。首次进圈后保留起点，
+    // 型号收集器交齐一次尝试的不可变配置：已校验的运动参数、容差（°）、启动 / 停机指令和看门狗时限
+    // （ms，非正 = 不设看门狗）。hold 对应任务页的“停稳等待”，不足 kMinHold 时取下限。首次进圈后保留起点，
     // 中途出圈不重新计时；再次收到圈内样本且首末时刻相差达到 hold 才完成，不要求连续在圈内。
 protected:
-    GMBCollector(PanTiltModel target, const double tolerance, const std::chrono::milliseconds hold,
-                 QList<QByteArray> start, QList<QByteArray> stop, const int timeoutMs)
-        : target_(std::move(target)), tolerance_(tolerance), hold_(std::max(hold, kMinHold)), start_(std::move(start)),
-          stop_(std::move(stop)), timeoutMs_(timeoutMs)
+    GMBCollector(const GMBMoveParameters &parameters, const double tolerance, QList<QByteArray> start,
+                 QList<QByteArray> stop, const int timeoutMs)
+        : parameters_(parameters), tolerance_(tolerance), hold_(std::max(parameters.hold, kMinHold)),
+          start_(std::move(start)), stop_(std::move(stop)), timeoutMs_(timeoutMs)
     {
     }
     // 族基不拥有对象，销毁由具体类型的 shared_ptr 控制块负责。
@@ -75,7 +89,8 @@ public:
 
     // 本次 run **被命令去的**位形——运动参数目标的回读（收集器 → 位形）。每只斗都有目标
     // （扇扫 / 循环 / 方向键不造斗），故不是 optional。
-    [[nodiscard]] PanTiltModel target() const { return target_; }
+    [[nodiscard]] PanTiltModel target() const { return parameters_.target; }
+    [[nodiscard]] const GMBMoveParameters &parameters() const noexcept { return parameters_; }
 
     [[nodiscard]] QList<QByteArray> buildStart() const override { return start_; }
     [[nodiscard]] QList<QByteArray> buildStop() const override { return stop_; }
@@ -92,7 +107,7 @@ private:
     {
         const auto &sample = *item;
         last_ = sample;
-        if (PanTiltModel::distance(sample, target_) >= tolerance_)
+        if (PanTiltModel::distance(sample, parameters_.target) >= tolerance_)
             return;
         const auto now = Clock::now();
         if (!firstHitAt_)
@@ -102,7 +117,7 @@ private:
 
     // ── 指示区（const：出生即定，多线程只读）──
 protected:
-    const PanTiltModel target_;
+    const GMBMoveParameters parameters_;
     const double tolerance_;
     const std::chrono::milliseconds hold_;
     const QList<QByteArray> start_;
@@ -115,31 +130,23 @@ private:
     Clock::time_point lastHitAt_{};               // 最近一次落进容差圈的时刻（firstHitAt_ 有值时才有意义）
 };
 
-// 标签只决定 C++ 身份；三型号共享同一到位/驻留实现和重试工厂。
+// 型号标签给出本型号的容差 tolerance（°）、看门狗时限 timeoutMs、按参数成帧的 startOf 与停机 stopOf；
+// 三型号共享同一到位/驻留实现。
 template <typename Model>
 class TypedGMBCollector final : public GMBCollector
 {
 public:
-    // 族模板层按运动参数直接造出完整、可写的本次 Collector，独占交给 Device。
-    [[nodiscard]] static std::shared_ptr<TypedGMBCollector> create(
-        PanTiltModel target, double tolerance, std::chrono::milliseconds hold,
-        QList<QByteArray> start, QList<QByteArray> stop, int timeoutMs)
-    {
-        return std::shared_ptr<TypedGMBCollector>(new TypedGMBCollector(
-            std::move(target), tolerance, hold, std::move(start), std::move(stop), timeoutMs));
-    }
+    // 族模板层按已校验的运动参数直接构造完整、可写的本次 Collector，独占交给 Device。
+    explicit TypedGMBCollector(const GMBMoveParameters &parameters)
+        : GMBCollector(parameters, Model::tolerance, Model::startOf(parameters), Model::stopOf(), Model::timeoutMs) {}
 
-    // 看门狗重试用：按不可变配置另造初始观测的新斗；云台收集区是内嵌观测，不需谱数组。
+    // 看门狗重试用：按同一参数另造初始观测的新斗。
     [[nodiscard]] std::shared_ptr<TypedGMBCollector> makeSelf() const
     {
-        return std::shared_ptr<TypedGMBCollector>(new TypedGMBCollector(target_, tolerance_, hold_, start_, stop_, timeoutMs_));
+        return std::make_shared<TypedGMBCollector>(parameters());
     }
-
-private:
-    TypedGMBCollector(PanTiltModel target, double tolerance, std::chrono::milliseconds hold,
-                      QList<QByteArray> start, QList<QByteArray> stop, int timeoutMs)
-        : GMBCollector(std::move(target), tolerance, hold, std::move(start), std::move(stop), timeoutMs) {}
 };
 
 template <typename C>
-concept GMBCollectorLike = std::derived_from<C, GMBCollector> && CollectorLike<C>;
+concept GMBCollectorLike = std::derived_from<C, GMBCollector> && CollectorLike<C>
+    && std::constructible_from<C, const GMBMoveParameters &>;

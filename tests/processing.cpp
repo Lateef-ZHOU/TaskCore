@@ -57,15 +57,13 @@ private:
 class TestCollector final : public DAQCollector
 {
 public:
-    static std::shared_ptr<TestCollector> create(const DAQParameters &p)
-    { return std::shared_ptr<TestCollector>(new TestCollector(p)); }
-    std::shared_ptr<TestCollector> makeSelf() const { return create(parameters()); }
+    // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
+    explicit TestCollector(const DAQParameters &p) : DAQCollector(p, 2e-6) {}
+    std::shared_ptr<TestCollector> makeSelf() const { return std::make_shared<TestCollector>(parameters()); }
     QList<QByteArray> buildStart() const override { return {"start"}; }
     int timeoutMs() const override { return 0; }
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
-    // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
-    explicit TestCollector(DAQParameters p) : DAQCollector(std::move(p), 2e-6) {}
     // 每口料即一整帧：在收包线程解析与处理。
     std::optional<std::vector<DAQChannel>> assemble(QByteArrayView, RxTime at) override
     {
@@ -93,7 +91,7 @@ public:
                                            QString sessionDir, bool sync) const override
     {
         if (accumSec < 1 || accumSec > 10) return std::nullopt;
-        return DAQParameters{accumSec, std::move(pose), std::move(saveRoot), std::move(sessionDir), sync};
+        return DAQParameters(*this, accumSec, std::move(pose), std::move(saveRoot), std::move(sessionDir), sync);
     }
 Q_SIGNALS:
     void lockChanged(HandleCore::ResourcePhase) override;
@@ -146,7 +144,7 @@ int main(int argc, char **argv)
     if (!device.open(Parameters{std::make_shared<Transport>()}) || !until([&] { return device.isOpen(); })) return 1;
     // 四个方位各一帧，第四帧带同步位：前三帧不反演，第四帧对满环反演一次。
     for (int i = 0; i < 4; ++i) {
-        const DAQParameters parameters{1, WorldModel(i * 90.0, 60.0), std::nullopt, QStringLiteral("s"), i == 3};
+        const auto parameters = *device.paramsFor(1, WorldModel(i * 90.0, 60.0), std::nullopt, QStringLiteral("s"), i == 3);
         if (!device.begin(parameters, [&](auto frame) {
             const auto typed = std::dynamic_pointer_cast<const TestCollector>(frame);
             if (!typed || !typed->settled() || typed->processedOn() == app.thread() || QThread::currentThread() != app.thread())
@@ -155,8 +153,8 @@ int main(int argc, char **argv)
         }, {}) || !until([&] { return completed == i + 1 && radials == i + 1; })) return 2;
         if (profiles != (i == 3 ? 1 : 0)) return 3;
     }
-    // 越出型号范围的参数在 begin 复核时拒收，不发启动命令。
-    if (device.begin(DAQParameters{11}, [](auto) { qFatal("out-of-range request completed"); }, {})) return 5;
+    // 越出型号范围的参数在 paramsFor 处拦下，造不出参数，也就到不了 begin。
+    if (device.paramsFor(11, std::nullopt, std::nullopt, {}, false)) return 5;
     return spectra == 4 ? 0 : 4;
 }
 #include "processing.moc"

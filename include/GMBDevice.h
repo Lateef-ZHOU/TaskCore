@@ -18,7 +18,7 @@
 // 模板层同时继承具体 Device 与本类，持有唯一安装姿态；编排只持族引用，通过 device() 使用锁，
 // 不认识具体 Handle 或 Collector。Qt 属性、信号和 QML 入口由末端官邸声明。
 // 请求为运动参数（协程按束保存），账本元素为 GMBCollector；begin / stop / device() 由 FamilyBase 声明。
-class GMBFamily : public FamilyBase<GMBMoveParameters, GMBCollector>
+class GMBFamily : public FamilyBase<GMBMoveParameters, GMBCollector>, protected GMBParamsKey
 {
 public:
 
@@ -90,7 +90,8 @@ public:
 
     // 由原始量构造本型号的运动参数：目标云台位形、停稳等待、可选两轴速度。
     // 越出本台行程或速度不合本型号协议时返回空并记录原因；成功返回规范化（量化/去速度）的参数，
-    // 不造 Collector、不发令。任务协程发令前对全部波束调用，任一为空即拒绝启动；世界角先经 gimbalOf 换算。
+    // 不造 Collector、不发令。这是造出 GMBMoveParameters 的唯一入口：型号以 *this 出示通行证。
+    // 任务协程发令前对全部波束调用，任一为空即拒绝启动；世界角先经 gimbalOf 换算。
     [[nodiscard]] virtual std::optional<GMBMoveParameters> paramsFor(const PanTiltModel &target,
         std::chrono::milliseconds hold, const std::optional<GMBMoveParameters::Speeds> &speeds) const = 0;
 
@@ -154,16 +155,13 @@ public:
         return issueGoTo(this->paramsFor(PanTiltModel(pan, tilt), {}, *speeds));
     }
 
-    // 按参数直接造出本型号的具体 Collector 交 Device：无原型、无验型、启动时不 makeSelf。
-    // 型号造斗时复用 paramsFor 的判据；参数不合本型号即拒收，拒绝原因由型号记录。
+    // 参数只能由 paramsFor 造出，存在即有效：直接以它构造本型号的具体 Collector 交 Device，不再复核。
+    // 返 false = 设备不收（被占 / 未连）。
     [[nodiscard]] bool begin(const GMBMoveParameters &parameters,
                              DoneFn<GMBCollector> done,
                              const std::shared_ptr<const DeviceLock> &lock) final
     {
-        auto collector = this->makeMoveCollector(parameters);
-        if (!collector)
-            return false;
-        return DeviceT::start(std::move(collector), std::move(done), lock);
+        return DeviceT::start(std::make_shared<CollectorT>(parameters), std::move(done), lock);
     }
 
 private:
@@ -185,11 +183,6 @@ private:
     //     本口是族层接口，官邸在此摆位形合乎"位形只在接口处出现"。
     // **非 const**：型号要攒另一根轴（sqaf 的 Pelco 应答经、纬分帧），MCZT 还要记报警状态。
     [[nodiscard]] virtual std::optional<PanTiltModel> decodeStream(const QByteArray &) = 0;
-
-    // 本层另一个可变点（NVI，派生只实现、不调用）：照本次运动参数造出完整、可写的具体 Collector，
-    // 把启动 / 停机指令、容差、驻留时长（斗里有下限）、时限交给 GMBCollector。形参的目标是**云台位形**，
-    // 世界角换算由调用方经 gimbalOf 做完。begin 是公开入口，型号仍以 paramsFor 同一判据复核，不合即返空、拒收。
-    [[nodiscard]] virtual std::shared_ptr<CollectorT> makeMoveCollector(const GMBMoveParameters &parameters) const = 0;
 
     // 手动直发原样接收 paramsFor 的结果（空 = 型号已拒绝并记录原因），不造 Collector、不等到位；
     // 失败由发现原因的层记录并返回 false，成功只返 true，由 QML 最终调用处记日志。

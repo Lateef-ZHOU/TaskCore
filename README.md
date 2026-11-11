@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-11 用户定：参数无效在生成参数时拦下：DAQParameters / GMBMoveParameters 只能出示通行证（DAQParamsKey / GMBParamsKey，构造受保护、族基 protected 继承）构造，字段只读，官邸 paramsFor 以 *this 出示；收集器以 const Parameters& 公开构造，删除静态工厂 create 与云台 makeMoveCollector；begin 不再复核，直接 make_shared<CollectorT>(parameters)。不用 friend。
+
 2026-11-11 用户定：族基改名：GMBDeviceBase → GMBFamily，DAQDeviceBase → DAQFamily（继承 FamilyBase 后即族这一层，避免与 DeviceCore 的 DeviceBase 混淆）。
 
 2026-11-10 用户定（凑帧归官邸）：原始帧缓冲与凑帧状态移到官邸。`DAQCollector` 只要求官邸实现 `assemble(QByteArrayView bytes, RxTime at) -> std::optional<std::vector<DAQChannel>>`：未凑齐返回空，凑齐的那一口返回解析出的通道；`settled()` 当且仅当已返回通道。删除族层的 `store`/`restart`/`received`/`decode` 与原始缓冲。取代同日“族层持有缓冲”的做法。

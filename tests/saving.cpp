@@ -39,13 +39,11 @@ QJsonObject readCompleted(const QString &path)
 class SavedFrame final : public DAQCollector
 {
 public:
-    static std::shared_ptr<SavedFrame> create(const DAQParameters &p)
-    { return std::shared_ptr<SavedFrame>(new SavedFrame(p)); }
-    std::shared_ptr<SavedFrame> makeSelf() const { return create(parameters()); }
+    explicit SavedFrame(const DAQParameters &p) : DAQCollector(p, 1.55e-6) {}
+    std::shared_ptr<SavedFrame> makeSelf() const { return std::make_shared<SavedFrame>(parameters()); }
     QList<QByteArray> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
-    explicit SavedFrame(DAQParameters p) : DAQCollector(std::move(p), 1.55e-6) {}
     std::optional<std::vector<DAQChannel>> assemble(QByteArrayView, RxTime at) override
     {
         frameTime_ = at;
@@ -59,6 +57,9 @@ private:
     }
 };
 static_assert(DAQCollectorLike<SavedFrame>);
+
+// 存盘测试不经设备：自行派生通行证造参数（通行证只防误用，不防刻意派生）。
+struct TestKey : DAQParamsKey { TestKey() {} };
 }
 
 int main(int argc, char **argv)
@@ -70,7 +71,7 @@ int main(int argc, char **argv)
     const auto at = std::chrono::system_clock::now();
 
     // 无朝向帧：朝向写 null，未标定通道的风速写 null，CNR 照常。
-    auto frame = SavedFrame::create({3, std::nullopt, root, QStringLiteral("session"), false});
+    auto frame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 3, std::nullopt, root, QStringLiteral("session"), false));
     check(frame->feed(QByteArray("x"), at), "frame did not complete");
     AcqSaver::saveFrame(frame, QStringLiteral("Card"));
     const auto saved = readCompleted(root.filePath("session/" + AcqSaver::fileStem(at) + ".json"));
@@ -108,7 +109,8 @@ int main(int argc, char **argv)
           "profile direction or speeds differ");
 
     // 不落盘：saveRoot 为空时入口直接返回。
-    AcqSaver::saveFrame(SavedFrame::create({1}), QStringLiteral("Card"));
+    AcqSaver::saveFrame(std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, std::nullopt, {}, false)),
+                        QStringLiteral("Card"));
     std::cout << "saving checks passed: " << checks << '\n';
     return 0;
 }
