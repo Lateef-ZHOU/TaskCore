@@ -150,7 +150,7 @@ public:
     bool issueGoTo(const double pan, const double tilt, const double panSpeed, const double tiltSpeed)
     {
         const auto parameters = this->paramsFor(PanTiltModel(pan, tilt), {}, GMBParameters::Speeds{panSpeed, tiltSpeed});
-        return parameters && DeviceT::start(std::make_shared<CollectorT>(*parameters), {}, nullptr);
+        return parameters && DeviceT::start(*parameters, {}, nullptr);
     }
 
     // 设备页停止 = 撤 run：Device 无条件发停机命令（无 run 时用型号的 stopCommands），对直发的扫描 / 旋转

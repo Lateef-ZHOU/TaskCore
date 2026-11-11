@@ -62,7 +62,7 @@ public:
     [[nodiscard]] bool begin(const typename FamilyT::Request &request, DoneFn<typename FamilyT::CollectorBase> done,
                              const std::shared_ptr<const DeviceLock> &lock) final
     {
-        return DeviceT::start(std::make_shared<CollectorT>(request), std::move(done), lock);
+        return DeviceT::start(request, std::move(done), lock);
     }
 
     // 族基的纯虚 stop 在此落地；机制层 Device::stop 不是虚的，停机虚口只在族基。
