@@ -75,14 +75,6 @@ protected:
 public:
     ~DAQDevice() override = default;
 
-    // 参数只能由 paramsFor 造出，存在即有效：直接以它构造完整的具体 Collector 交 Device，不再复核。
-    // 返 false = 设备不收（被占 / 未连）。
-    [[nodiscard]] bool begin(const DAQParameters &parameters,
-                             DoneFn<DAQCollector> done,
-                             const std::shared_ptr<const DeviceLock> &lock) final
-    {
-        return DeviceT::start(std::make_shared<CollectorT>(parameters), std::move(done), lock);
-    }
 
     // ── 采集测试（设备页的两个按钮）：只占本卡的锁，循环采集直到停止 ─────────────────────
     // 没有云台：朝向传空、同步位恒假，触发不了风廓线反演。同一时刻只跑一个测试；与编排的互斥由设备锁

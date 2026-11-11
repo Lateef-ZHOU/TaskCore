@@ -162,14 +162,6 @@ public:
     // 同样有效。不持锁：设备正被任务占用时 Device 验锁拒绝，返回 false。
     bool issueStop() { return DeviceT::stop({}); }
 
-    // 参数只能由 paramsFor 造出，存在即有效：直接以它构造本型号的具体 Collector 交 Device，不再复核。
-    // 返 false = 设备不收（被占 / 未连）。
-    [[nodiscard]] bool begin(const GMBParameters &parameters,
-                             DoneFn<GMBCollector> done,
-                             const std::shared_ptr<const DeviceLock> &lock) final
-    {
-        return DeviceT::start(std::make_shared<CollectorT>(parameters), std::move(done), lock);
-    }
 
 private:
 
