@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-11 用户定：族基改名：GMBDeviceBase → GMBFamily，DAQDeviceBase → DAQFamily（继承 FamilyBase 后即族这一层，避免与 DeviceCore 的 DeviceBase 混淆）。
+
 2026-11-10 用户定（凑帧归官邸）：原始帧缓冲与凑帧状态移到官邸。`DAQCollector` 只要求官邸实现 `assemble(QByteArrayView bytes, RxTime at) -> std::optional<std::vector<DAQChannel>>`：未凑齐返回空，凑齐的那一口返回解析出的通道；`settled()` 当且仅当已返回通道。删除族层的 `store`/`restart`/`received`/`decode` 与原始缓冲。取代同日“族层持有缓冲”的做法。
 
 2026-11-10 用户定（收包与解析分离）：`DAQCollector` 不再继承通道 vector，改为持有原始帧缓冲与 `channels()`。型号 `onFeed` 只做协议校验、去掉不属于数组元素的包头，并以 `store(偏移, 字节)` 放置字节（族层查越界）；`restart()` 供换帧清计数；凑满整帧即调用型号的 `decode(帧)` 解析为通道，随后释放缓冲。`settled()` = 通道已存在。`DAQChannel` 构造即按标准方法算出径向风与 CNR，删除 `process`/`processed`/`complete`。

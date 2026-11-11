@@ -316,9 +316,9 @@ struct RunOrder
 // ============================================================
 // RunAwaiter<FamilyT> — 一批 run 的等待器：**下单 + 攒账 + 判齐 + 撤单**四件都在这儿。
 //   if ((co_await RunAwaiter{lock, gmb, *gmb.paramsFor(target, hold, speeds)}).empty()) co_return; // 单台
-//   const auto r = co_await RunAwaiter<DAQDeviceBase>(lock, std::move(orders));         // 多卡同采 join（名单运行期拼好）
+//   const auto r = co_await RunAwaiter<DAQFamily>(lock, std::move(orders));         // 多卡同采 join（名单运行期拼好）
 //
-// **按族模板化**：`FamilyT` 是族基（GMBDeviceBase / DAQDeviceBase），账本元素型由
+// **按族模板化**：`FamilyT` 是族基（GMBFamily / DAQFamily），账本元素型由
 // `FamilyT::CollectorBase` 给出。**批量天然族内同质**（一台云台带多张卡同时开采），族基本身就是
 // 可存的类型，故单据是**数据**（设备引用 + 斗份额），"启动"就是族口 `begin` 的一次虚调用。
 // 混族同批不可能——那是这笔交易付出去的东西，而它零客户。
@@ -346,7 +346,7 @@ public:
     }
 
     // 名单形（多卡任务：卡数开始时才知道）：同族任意型号任意台数（型号已擦到
-    // 族基，名单天然同质）。调用面：`co_await RunAwaiter<DAQDeviceBase>(lock, orders)`。
+    // 族基，名单天然同质）。调用面：`co_await RunAwaiter<DAQFamily>(lock, orders)`。
     RunAwaiter(std::shared_ptr<DeviceLock> lock, Orders orders)
         : AwaiterBase<Orders>(std::move(lock)), orders_(std::make_shared<Orders>(std::move(orders)))
     {
@@ -412,6 +412,6 @@ private:
 };
 
 // CTAD：`RunAwaiter{lock, gmb, parameters}` 由第**二**实参定族（第三实参是非推导语境）。
-// 名单形（`RunAwaiter<DAQDeviceBase>(lock, orders)`）须显式写族——从 vector<Order> 推不出族。
+// 名单形（`RunAwaiter<DAQFamily>(lock, orders)`）须显式写族——从 vector<Order> 推不出族。
 template <FamilyLike FamilyT>
 RunAwaiter(std::shared_ptr<DeviceLock>, FamilyT &, typename FamilyT::Request) -> RunAwaiter<FamilyT>;

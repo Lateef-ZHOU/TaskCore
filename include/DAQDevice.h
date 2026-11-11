@@ -22,7 +22,7 @@
 // 模板层同时继承具体 Device 与本类；编排只持族引用，通过 device() 使用锁，不认识具体 Handle 或 Collector。
 // 没有处理线程：Collector 在收包线程收齐末包时完成标准处理，完成帧在主线程显示、落盘并参与风廓线反演。
 // 请求为采集参数（协程按卡保存），账本元素为 DAQCollector；begin / stop / device() 由 FamilyBase 声明。
-class DAQDeviceBase : public FamilyBase<DAQParameters, DAQCollector>
+class DAQFamily : public FamilyBase<DAQParameters, DAQCollector>
 {
 public:
 
@@ -55,12 +55,12 @@ public:
 // 模板层继承具体 Device 与族基：按参数造斗、主线程消费（显示、落盘、四束环与风廓线）及单卡测试协程。
 // 型号只给通道规格并按协议整理功率谱，不写处理或落盘代码。
 template <HandleLike HandleT, DAQCollectorLike CollectorT>
-class DAQDevice : public FamilyDevice<HandleT, CollectorT, DAQDeviceBase>
+class DAQDevice : public FamilyDevice<HandleT, CollectorT, DAQFamily>
 {
     using DeviceT = Device<HandleT, CollectorT>;
 protected:
     DAQDevice(QString name, QString subtitle, QObject *parent)
-        : FamilyDevice<HandleT, CollectorT, DAQDeviceBase>(std::move(name), std::move(subtitle), parent)
+        : FamilyDevice<HandleT, CollectorT, DAQFamily>(std::move(name), std::move(subtitle), parent)
     {
         static_assert(DeviceLifecycleLayer<DAQDevice, decltype(&DAQDevice::PreDestruction)>);
     }
@@ -136,7 +136,7 @@ private:
                                  .arg(parameters->accumSec)
                                  .arg(parameters->saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(parameters->saveRoot->absolutePath())
                                                            : QStringLiteral("，不落盘")));
-            const auto framed = co_await RunAwaiter<DAQDeviceBase>{lock, *this, *parameters};
+            const auto framed = co_await RunAwaiter<DAQFamily>{lock, *this, *parameters};
             if (framed.empty())
             {
                 Q_EMIT this->logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));

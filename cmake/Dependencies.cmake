@@ -10,7 +10,7 @@ endif()
 if(NOT TARGET Lidar::Algorithm)
     FetchContent_Declare(lidar_algorithm
         GIT_REPOSITORY https://github.com/Lateef-ZHOU/Algorithm.git
-        GIT_TAG c42cff8f14226969fdeca030a3196b901ab7b967)
+        GIT_TAG a7a3b8ae4b3447a5d838af2625ceabc464049811)
     FetchContent_MakeAvailable(lidar_algorithm)
 endif()
 # 采集卡族的四束环用 Boost.CircularBuffer；先复用消费方目标或已装包，再取固定哈希的官方归档。

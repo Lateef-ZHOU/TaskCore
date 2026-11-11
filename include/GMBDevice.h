@@ -18,7 +18,7 @@
 // 模板层同时继承具体 Device 与本类，持有唯一安装姿态；编排只持族引用，通过 device() 使用锁，
 // 不认识具体 Handle 或 Collector。Qt 属性、信号和 QML 入口由末端官邸声明。
 // 请求为运动参数（协程按束保存），账本元素为 GMBCollector；begin / stop / device() 由 FamilyBase 声明。
-class GMBDeviceBase : public FamilyBase<GMBMoveParameters, GMBCollector>
+class GMBFamily : public FamilyBase<GMBMoveParameters, GMBCollector>
 {
 public:
 
@@ -118,12 +118,12 @@ public:
 // 模板层经 FamilyDevice 继承具体 Device 与族基，完成造斗及收包接入；型号只解析协议、检查行程和组装命令。
 // 本层没有需要单独清理的线程源，不声明预析构；末端析构首句调用 Device 的预析构链。
 template <HandleLike HandleT, GMBCollectorLike CollectorT>
-class GMBDevice : public FamilyDevice<HandleT, CollectorT, GMBDeviceBase>
+class GMBDevice : public FamilyDevice<HandleT, CollectorT, GMBFamily>
 {
     using DeviceT = Device<HandleT, CollectorT>;
 protected:
     GMBDevice(QString name, QString subtitle, QObject *parent)
-        : FamilyDevice<HandleT, CollectorT, GMBDeviceBase>(std::move(name), std::move(subtitle), parent) {}
+        : FamilyDevice<HandleT, CollectorT, GMBFamily>(std::move(name), std::move(subtitle), parent) {}
 
 public:
     ~GMBDevice() override = default;

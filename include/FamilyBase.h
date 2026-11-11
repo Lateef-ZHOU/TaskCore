@@ -7,7 +7,7 @@
 #include "DeviceBase.h" // DeviceBase / Device<H,C>
 #include "RunBase.h"    // DoneFn<C> / DeviceLock
 
-// 设备族的共同骨架：一个族 = 一种请求 + 一种收集器族基。族基（GMBDeviceBase / DAQDeviceBase）继承本模板并
+// 设备族的共同骨架：一个族 = 一种请求 + 一种收集器族基。族基（GMBFamily / DAQFamily）继承本模板并
 // 定下两个类型参数，本身仍不带模板；纯 C++，不继承 QObject（唯一 QObject 来自末端继承的 Handle）。
 // 编排只持族引用：经 begin / stop 下单与撤单，经 device() 使用锁，不认识具体 Handle 或 Collector。
 template <class RequestT, class CollectorBaseT>

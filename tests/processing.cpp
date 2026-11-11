@@ -108,7 +108,7 @@ private:
         DAQDevice::PreDestruction();
     }
 };
-static_assert(!std::derived_from<DAQDeviceBase, QObject> && std::derived_from<TestDevice, TestHandle>);
+static_assert(!std::derived_from<DAQFamily, QObject> && std::derived_from<TestDevice, TestHandle>);
 
 template<class Predicate> bool until(Predicate predicate)
 {

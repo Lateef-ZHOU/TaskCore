@@ -37,7 +37,7 @@ class TaskBase : public QObject
     Q_PROPERTY(int currentBeam READ currentBeam NOTIFY runChanged)
 
 public:
-    using Cards = std::vector<std::reference_wrapper<DAQDeviceBase>>;
+    using Cards = std::vector<std::reference_wrapper<DAQFamily>>;
     explicit TaskBase(QObject *parent = nullptr) : QObject(parent) {}
     ~TaskBase() override = default;
 
@@ -57,7 +57,7 @@ public:
     // 云台族基不是 QObject：QML 交入设备对象本身，在此交叉转换验族，非云台拒收。
     Q_INVOKABLE bool addGimbal(QObject *object)
     {
-        if (!dynamic_cast<GMBDeviceBase *>(object) || std::ranges::find(gimbals_, object) != gimbals_.end()) return false;
+        if (!dynamic_cast<GMBFamily *>(object) || std::ranges::find(gimbals_, object) != gimbals_.end()) return false;
         gimbals_.push_back(object);
         // destroyed 时族基子对象已析构，此处只比较指针；运行借用已由设备预析构的锁铃收回。
         connect(object, &QObject::destroyed, this, [this, object] {
@@ -71,7 +71,7 @@ public:
     // 采集卡族基同样不是 QObject：QML 交入设备对象本身，在此交叉转换验族，非采集卡拒收。
     Q_INVOKABLE bool addCard(QObject *object)
     {
-        if (!dynamic_cast<DAQDeviceBase *>(object) || std::ranges::find(cards_, object) != cards_.end()) return false;
+        if (!dynamic_cast<DAQFamily *>(object) || std::ranges::find(cards_, object) != cards_.end()) return false;
         cards_.push_back(object);
         // destroyed 时族基子对象已析构，此处只比较指针；运行借用已由设备预析构的锁铃收回。
         connect(object, &QObject::destroyed, this, [this, object] {
@@ -94,7 +94,7 @@ public Q_SLOTS:
     {
         if (running()) { Q_EMIT logMessage(QStringLiteral("任务正在进行中")); return false; }
         // 先按身份查登记，只对已登记的活对象交叉转换：调用方可能交来已退场设备的旧指针。
-        auto *gmb = std::ranges::find(gimbals_, gimbal) != gimbals_.end() ? dynamic_cast<GMBDeviceBase *>(gimbal) : nullptr;
+        auto *gmb = std::ranges::find(gimbals_, gimbal) != gimbals_.end() ? dynamic_cast<GMBFamily *>(gimbal) : nullptr;
         if (!gmb) {
             Q_EMIT logMessage(QStringLiteral("没有可用的已登记转台")); return false;
         }
@@ -105,7 +105,7 @@ public Q_SLOTS:
         QStringList scope{gmb->device().displayName + QStringLiteral(" · ") + gmb->device().subtitle};
         for (auto *object : cards)
         {
-            auto *card = std::ranges::find(cards_, object) != cards_.end() ? dynamic_cast<DAQDeviceBase *>(object) : nullptr;
+            auto *card = std::ranges::find(cards_, object) != cards_.end() ? dynamic_cast<DAQFamily *>(object) : nullptr;
             if (!card
                 || std::ranges::any_of(picked, [card](const auto &entry) { return &entry.get() == card; })) {
                 Q_EMIT logMessage(QStringLiteral("采集卡未登记或重复选择，任务未启动")); return false;
@@ -134,7 +134,7 @@ public Q_SLOTS:
             return false;
         }
         std::vector<std::reference_wrapper<DeviceBase>> devices{gmb->device()};
-        for (DAQDeviceBase &card : picked) devices.emplace_back(card.device());
+        for (DAQFamily &card : picked) devices.emplace_back(card.device());
         LockRequest request{displayName(), std::move(devices)};
         delivered_ = 0;
         scopeText_ = scope.join(QStringLiteral("；"));
@@ -167,9 +167,9 @@ protected:
         if (!running()) { beam_ = -1; phase_ = Phase::Idle; delivered_ = 0; }
         Q_EMIT runChanged();
     }
-    using GmbOrders = RunAwaiter<GMBDeviceBase>::Orders;
+    using GmbOrders = RunAwaiter<GMBFamily>::Orders;
     // hold 与 speeds 为启动时固定的快照；协程逐束连同目标位形交官邸 paramsFor 构造运动参数。
-    virtual DeviceCoro run(LockRequest, GMBDeviceBase &, Cards, QList<double>, double, int,
+    virtual DeviceCoro run(LockRequest, GMBFamily &, Cards, QList<double>, double, int,
                           std::chrono::milliseconds hold, std::optional<GMBMoveParameters::Speeds> speeds,
                           std::optional<QDir>) = 0;
 
@@ -178,28 +178,28 @@ protected:
     [[nodiscard]] QDateTime beginSession() { return startedAt_ = QDateTime::currentDateTime(); }
     void completeBeam() noexcept { ++delivered_; }
     // 只构造等待器，共用本帧的锁/取消入口；co_await 和失败出口在每个具体协程内。
-    [[nodiscard]] RunAwaiter<GMBDeviceBase> moveTo(const std::shared_ptr<DeviceLock> &lock,
-        GMBDeviceBase &gmb, const GMBMoveParameters &parameters, const int beam)
+    [[nodiscard]] RunAwaiter<GMBFamily> moveTo(const std::shared_ptr<DeviceLock> &lock,
+        GMBFamily &gmb, const GMBMoveParameters &parameters, const int beam)
     {
         const auto &target = parameters.target;
         step(beam, Phase::Moving,
              QString("转台 前往 (水平 %1°, 俯仰 %2°)...").arg(target.pan(), 0, 'f', 2).arg(target.tilt(), 0, 'f', 2));
-        return RunAwaiter<GMBDeviceBase>{lock, gmb, parameters};
+        return RunAwaiter<GMBFamily>{lock, gmb, parameters};
     }
-    [[nodiscard]] RunAwaiter<DAQDeviceBase> acquireAt(const std::shared_ptr<DeviceLock> &lock,
-        GMBDeviceBase &gmb, const Cards &cards, const GmbOrders &moved, const int beam, const int accumSec,
+    [[nodiscard]] RunAwaiter<DAQFamily> acquireAt(const std::shared_ptr<DeviceLock> &lock,
+        GMBFamily &gmb, const Cards &cards, const GmbOrders &moved, const int beam, const int accumSec,
         const std::optional<QDir> &saveRoot, const QDateTime &sessionTime, const bool sync)
     {
         step(beam, Phase::Acquiring, QString("%1 张卡同时采集%2...").arg(static_cast<int>(cards.size()))
              .arg(saveRoot ? QStringLiteral("（落盘）") : QStringLiteral("（不落盘）")));
         const auto measured = moved[0].result->measured();
         const auto world = measured ? std::optional{gmb.worldOf(*measured)} : std::nullopt;
-        RunAwaiter<DAQDeviceBase>::Orders orders;
+        RunAwaiter<DAQFamily>::Orders orders;
         // 族基不是 QObject：会话目录的 ASCII 标识取同一对象上的 objectName（交叉转换必然成功）。
-        for (DAQDeviceBase &card : cards)
+        for (DAQFamily &card : cards)
             orders.push_back({card, DAQParameters{accumSec, world, saveRoot,
                 AcqSaver::sessionDir(sessionTime, dynamic_cast<const QObject &>(card).objectName()), sync}});
-        return RunAwaiter<DAQDeviceBase>{lock, std::move(orders)};
+        return RunAwaiter<DAQFamily>{lock, std::move(orders)};
     }
 
 private:
