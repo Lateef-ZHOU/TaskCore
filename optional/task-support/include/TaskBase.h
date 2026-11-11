@@ -99,7 +99,7 @@ public Q_SLOTS:
             Q_EMIT logMessage(QStringLiteral("没有可用的已登记转台")); return false;
         }
         // 停稳与速度在启动时固定；协程逐束以目标位形和它们经官邸 paramsFor 构造运动参数。
-        const auto speeds = GMBMoveParameters::speedsFromQml(movement);
+        const auto speeds = GMBParameters::speedsFromQml(movement);
         if (!speeds) { Q_EMIT logMessage(QStringLiteral("转台运动参数无效，任务未启动")); return false; }
         Cards picked;
         QStringList scope{gmb->device().displayName + QStringLiteral(" · ") + gmb->device().subtitle};
@@ -170,7 +170,7 @@ protected:
     using GmbOrders = RunAwaiter<GMBFamily>::Orders;
     // hold 与 speeds 为启动时固定的快照；协程逐束连同目标位形交官邸 paramsFor 构造运动参数。
     virtual DeviceCoro run(LockRequest, GMBFamily &, Cards, QList<double>, double, int,
-                          std::chrono::milliseconds hold, std::optional<GMBMoveParameters::Speeds> speeds,
+                          std::chrono::milliseconds hold, std::optional<GMBParameters::Speeds> speeds,
                           std::optional<QDir>) = 0;
 
     // 不发业务状态通知，不调用虚函数；末端析构在自己的成员拆除前调用。
@@ -179,7 +179,7 @@ protected:
     void completeBeam() noexcept { ++delivered_; }
     // 只构造等待器，共用本帧的锁/取消入口；co_await 和失败出口在每个具体协程内。
     [[nodiscard]] RunAwaiter<GMBFamily> moveTo(const std::shared_ptr<DeviceLock> &lock,
-        GMBFamily &gmb, const GMBMoveParameters &parameters, const int beam)
+        GMBFamily &gmb, const GMBParameters &parameters, const int beam)
     {
         const auto &target = parameters.target;
         step(beam, Phase::Moving,

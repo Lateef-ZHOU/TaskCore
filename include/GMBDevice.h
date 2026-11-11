@@ -18,7 +18,7 @@
 // 模板层同时继承具体 Device 与本类，持有唯一安装姿态；编排只持族引用，通过 device() 使用锁，
 // 不认识具体 Handle 或 Collector。Qt 属性、信号和 QML 入口由末端官邸声明。
 // 请求为运动参数（协程按束保存），账本元素为 GMBCollector；begin / stop / device() 由 FamilyBase 声明。
-class GMBFamily : public FamilyBase<GMBMoveParameters, GMBCollector>, protected GMBParamsKey
+class GMBFamily : public FamilyBase<GMBParameters, GMBCollector>, protected GMBParamsKey
 {
 public:
 
@@ -90,10 +90,10 @@ public:
 
     // 由原始量构造本型号的运动参数：目标云台位形、停稳等待、可选两轴速度。
     // 越出本台行程或速度不合本型号协议时返回空并记录原因；成功返回规范化（量化/去速度）的参数，
-    // 不造 Collector、不发令。这是造出 GMBMoveParameters 的唯一入口：型号以 *this 出示通行证。
+    // 不造 Collector、不发令。这是造出 GMBParameters 的唯一入口：型号以 *this 出示通行证。
     // 任务协程发令前对全部波束调用，任一为空即拒绝启动；世界角先经 gimbalOf 换算。
-    [[nodiscard]] virtual std::optional<GMBMoveParameters> paramsFor(const PanTiltModel &target,
-        std::chrono::milliseconds hold, const std::optional<GMBMoveParameters::Speeds> &speeds) const = 0;
+    [[nodiscard]] virtual std::optional<GMBParameters> paramsFor(const PanTiltModel &target,
+        std::chrono::milliseconds hold, const std::optional<GMBParameters::Speeds> &speeds) const = 0;
 
     // 世界角 → 云台位形（反解）：R_云台 = R_安装⁻¹ · R_世界(目标)，再由 `PanTiltModel::fromOrientation`
     // 解出。`worldOf` 的去程，**不造斗**（设备页的"前往世界角"只要位形、直发即可，不需要结果）。
@@ -148,7 +148,7 @@ public:
     // 失败由发现原因的层记录并返回 false（paramsFor / Device::start 各自记录），成功只返 true，由 QML 记日志。
     bool issueGoTo(const double pan, const double tilt, const QVariantMap &values)
     {
-        const auto speeds = GMBMoveParameters::speedsFromQml(values);
+        const auto speeds = GMBParameters::speedsFromQml(values);
         if (!speeds)
         {
             Q_EMIT this->logMessage(QStringLiteral("转台运动参数无效，未下发"));
@@ -164,7 +164,7 @@ public:
 
     // 参数只能由 paramsFor 造出，存在即有效：直接以它构造本型号的具体 Collector 交 Device，不再复核。
     // 返 false = 设备不收（被占 / 未连）。
-    [[nodiscard]] bool begin(const GMBMoveParameters &parameters,
+    [[nodiscard]] bool begin(const GMBParameters &parameters,
                              DoneFn<GMBCollector> done,
                              const std::shared_ptr<const DeviceLock> &lock) final
     {

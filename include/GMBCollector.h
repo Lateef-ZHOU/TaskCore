@@ -27,11 +27,11 @@ protected:
 };
 
 // 一次到位请求：目标位形、停稳等待与（型号量化后的）速度。只能由官邸 paramsFor 校验后构造，存在即有效；字段只读。
-struct GMBMoveParameters
+struct GMBParameters
 {
     struct Speeds { double pan; double tilt; }; // °/s，两轴必须成组提供
 
-    GMBMoveParameters(const GMBParamsKey &, PanTiltModel target, const std::chrono::milliseconds hold,
+    GMBParameters(const GMBParamsKey &, PanTiltModel target, const std::chrono::milliseconds hold,
                       const std::optional<Speeds> speeds)
         : target(std::move(target)), hold(hold), speeds(speeds) {}
 
@@ -63,10 +63,10 @@ public:
     static constexpr std::chrono::milliseconds kMinHold{2000}; // 驻留下限：任务页的输入框同此下限，斗再兜一道
 
     // 型号收集器交齐一次尝试的不可变配置：已校验的运动参数、容差（°）、启动 / 停机指令和看门狗时限
-    // （ms，非正 = 不设看门狗）。hold 对应任务页的“停稳等待”，不足 kMinHold 时取下限。首次进圈后保留起点，
-    // 中途出圈不重新计时；再次收到圈内样本且首末时刻相差达到 hold 才完成，不要求连续在圈内。
+    // （ms，非正 = 不设看门狗）。hold 对应任务页的“停稳等待”，不足 kMinHold 时取下限。进圈后开始计时，
+    // 出圈即清零重新计时；须连续在圈内（样本首末时刻相差达到 hold）才完成。
 protected:
-    GMBCollector(const GMBMoveParameters &parameters, const double tolerance, QList<QByteArray> start,
+    GMBCollector(const GMBParameters &parameters, const double tolerance, QList<QByteArray> start,
                  QList<QByteArray> stop, const int timeoutMs)
         : parameters_(parameters), tolerance_(tolerance), hold_(std::max(parameters.hold, kMinHold)),
           start_(std::move(start)), stop_(std::move(stop)), timeoutMs_(timeoutMs)
@@ -76,11 +76,11 @@ protected:
     ~GMBCollector() = default;
 
 public:
-    // 仅由已收到的圈内样本判齐：未进圈时 firstHitAt_ 为空，停止回报时 lastHitAt_ 不再推进。
+    // 仅由已收到的圈内样本判齐：未进圈或刚出圈时两个时刻为空，停止回报时 lastHitAt_ 不再推进。
     // 此处不读当前时间，避免仅因时间流逝就把缺少新回报的尝试判为完成。
     [[nodiscard]] bool settled() const override
     {
-        return firstHitAt_ && (lastHitAt_ - *firstHitAt_) >= hold_;
+        return firstHitAt_ && lastHitAt_ && (*lastHitAt_ - *firstHitAt_) >= hold_;
     }
 
     // 本次尝试的**实测位形**：最近一次采样（进没进圈都记）。判齐之后由编排层读出，交给族基 `worldOf(位形)`
@@ -90,7 +90,7 @@ public:
     // 本次 run **被命令去的**位形——运动参数目标的回读（收集器 → 位形）。每只斗都有目标
     // （扇扫 / 循环 / 方向键不造斗），故不是 optional。
     [[nodiscard]] PanTiltModel target() const { return parameters_.target; }
-    [[nodiscard]] const GMBMoveParameters &parameters() const noexcept { return parameters_; }
+    [[nodiscard]] const GMBParameters &parameters() const noexcept { return parameters_; }
 
     [[nodiscard]] QList<QByteArray> buildStart() const override { return start_; }
     [[nodiscard]] QList<QByteArray> buildStop() const override { return stop_; }
@@ -100,15 +100,19 @@ public:
 private:
     using Clock = std::chrono::steady_clock;
 
-    // [worker] 每口先记录实测位形；圈内样本设置首次时刻并推进末次时刻，圈外样本不改两个时刻。
-    // settled 统一判断首末间隔；完成后 Collector::feed 不再调用本口，实测结果也随之冻结。
+    // [worker] 每口先记录实测位形；圈外样本（距离大于容差）清空两个时刻，圈内样本首次进圈时记起点、
+    // 每次推进末次时刻。settled 统一判断首末间隔；完成后 Collector::feed 不再调用本口，实测结果也随之冻结。
     // RxTime 是可能被校时调整的墙钟；这里量等待时长，使用处理样本时的单调钟。
     void onFeed(const std::optional<PanTiltModel> &item, RxTime) override
     {
         const auto &sample = *item;
         last_ = sample;
-        if (PanTiltModel::distance(sample, parameters_.target) >= tolerance_)
+        if (PanTiltModel::distance(sample, parameters_.target) > tolerance_)
+        {
+            firstHitAt_ = std::nullopt;
+            lastHitAt_ = std::nullopt;
             return;
+        }
         const auto now = Clock::now();
         if (!firstHitAt_)
             firstHitAt_ = now;
@@ -117,7 +121,7 @@ private:
 
     // ── 指示区（const：出生即定，多线程只读）──
 protected:
-    const GMBMoveParameters parameters_;
+    const GMBParameters parameters_;
     const double tolerance_;
     const std::chrono::milliseconds hold_;
     const QList<QByteArray> start_;
@@ -126,8 +130,8 @@ protected:
     // ── 收集区（[仅 worker] 可写；判齐后 worker 不再触斗，主线程只读）──
 private:
     std::optional<PanTiltModel> last_;       // 最近一次采样（给 measured()，与判据无关）
-    std::optional<Clock::time_point> firstHitAt_; // 第一次落进容差圈的时刻（**空 = 还没进过圈**）
-    Clock::time_point lastHitAt_{};               // 最近一次落进容差圈的时刻（firstHitAt_ 有值时才有意义）
+    std::optional<Clock::time_point> firstHitAt_; // 本段连续在圈内的起点（**空 = 不在圈内**）
+    std::optional<Clock::time_point> lastHitAt_;  // 本段最近一次圈内样本的时刻（与起点同空同有）
 };
 
 // 型号标签给出本型号的容差 tolerance（°）、看门狗时限 timeoutMs、按参数成帧的 startOf 与停机 stopOf；
@@ -137,7 +141,7 @@ class TypedGMBCollector final : public GMBCollector
 {
 public:
     // 族模板层按已校验的运动参数直接构造完整、可写的本次 Collector，独占交给 Device。
-    explicit TypedGMBCollector(const GMBMoveParameters &parameters)
+    explicit TypedGMBCollector(const GMBParameters &parameters)
         : GMBCollector(parameters, Model::tolerance, Model::startOf(parameters), Model::stopOf(), Model::timeoutMs) {}
 
     // 看门狗重试用：按同一参数另造初始观测的新斗。
@@ -152,5 +156,5 @@ public:
 
 template <typename C>
 concept GMBCollectorLike = std::derived_from<C, GMBCollector> && CollectorLike<C>
-    && std::constructible_from<C, const GMBMoveParameters &>
+    && std::constructible_from<C, const GMBParameters &>
     && requires { { C::stopOf() } -> std::same_as<QList<QByteArray>>; };
