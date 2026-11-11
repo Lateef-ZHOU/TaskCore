@@ -159,17 +159,8 @@ public:
     }
 
     // 设备页停止 = 撤 run：Device 无条件发停机命令（无 run 时用型号的 stopCommands），对直发的扫描 / 旋转
-    // 同样有效。不持锁：设备正被任务占用或未连接时拒绝并记录原因。
-    bool issueStop()
-    {
-        if (!this->canEngage({}))
-        {
-            Q_EMIT this->logMessage(QStringLiteral("设备未连接或正被占用，指令未下发"));
-            return false;
-        }
-        DeviceT::stop({});
-        return true;
-    }
+    // 同样有效。不持锁：设备正被任务占用时 Device 验锁拒绝，返回 false。
+    bool issueStop() { return DeviceT::stop({}); }
 
     // 参数只能由 paramsFor 造出，存在即有效：直接以它构造本型号的具体 Collector 交 Device，不再复核。
     // 返 false = 设备不收（被占 / 未连）。
