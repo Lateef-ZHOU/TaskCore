@@ -38,7 +38,7 @@ Section {
                 value: root.panMin
                 onCommitted: function (v) {
                     tPan.value = v;
-                    root.device.issueGoTo(tPan.value, tTilt.value, root.settings.moveParameters());
+                    root.device.issueGoTo(tPan.value, tTilt.value, root.settings.panSpeed, root.settings.tiltSpeed);
                 }
             }
         }
@@ -53,7 +53,7 @@ Section {
                 value: root.tiltMin
                 onCommitted: function (v) {
                     tTilt.value = v;
-                    root.device.issueGoTo(tPan.value, tTilt.value, root.settings.moveParameters());
+                    root.device.issueGoTo(tPan.value, tTilt.value, root.settings.panSpeed, root.settings.tiltSpeed);
                 }
             }
         }
@@ -69,7 +69,7 @@ Section {
                 onCommitted: function (v) {
                     tAz.value = v;
                     const pose = root.device.mounting.gimbalAngles(tAz.value, tEl.value);
-                    root.device.issueGoTo(pose.pan, pose.tilt, root.settings.moveParameters());
+                    root.device.issueGoTo(pose.pan, pose.tilt, root.settings.panSpeed, root.settings.tiltSpeed);
                 }
             }
         }
@@ -85,7 +85,7 @@ Section {
                 onCommitted: function (v) {
                     tEl.value = v;
                     const pose = root.device.mounting.gimbalAngles(tAz.value, tEl.value);
-                    root.device.issueGoTo(pose.pan, pose.tilt, root.settings.moveParameters());
+                    root.device.issueGoTo(pose.pan, pose.tilt, root.settings.panSpeed, root.settings.tiltSpeed);
                 }
             }
         }

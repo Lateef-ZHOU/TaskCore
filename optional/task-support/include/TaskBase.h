@@ -90,7 +90,7 @@ public:
 public Q_SLOTS:
     bool start(QObject *gimbal, const QList<QObject *> &cards, QList<double> worldAzimuths,
                const double worldElevation, const int accumSec, const int settleSec,
-               const bool save, const QUrl &folder, const QVariantMap &movement)
+               const bool save, const QUrl &folder, const double panSpeed, const double tiltSpeed)
     {
         if (running()) { Q_EMIT logMessage(QStringLiteral("任务正在进行中")); return false; }
         // 先按身份查登记，只对已登记的活对象交叉转换：调用方可能交来已退场设备的旧指针。
@@ -98,9 +98,7 @@ public Q_SLOTS:
         if (!gmb) {
             Q_EMIT logMessage(QStringLiteral("没有可用的已登记转台")); return false;
         }
-        // 停稳与速度在启动时固定；协程逐束以目标位形和它们经官邸 paramsFor 构造运动参数。
-        const auto speeds = GMBParameters::speedsFromQml(movement);
-        if (!speeds) { Q_EMIT logMessage(QStringLiteral("转台运动参数无效，任务未启动")); return false; }
+        // 停稳与速度在启动时固定；协程逐束以目标位形和它们经官邸 paramsFor 构造运动参数（不带速度的型号忽略速度）。
         Cards picked;
         QStringList scope{gmb->device().displayName + QStringLiteral(" · ") + gmb->device().subtitle};
         for (auto *object : cards)
@@ -141,7 +139,7 @@ public Q_SLOTS:
         // DeviceCoro 不可移动，同类型 prvalue 直接构造；不能用 make_unique 转发。
         starting_ = true;
         coro_.reset(new DeviceCoro(run(std::move(request), *gmb, std::move(picked), std::move(worldAzimuths),
-                                      worldElevation, accumSec, std::chrono::seconds(settleSec), *speeds, std::move(saveRoot))));
+                                      worldElevation, accumSec, std::chrono::seconds(settleSec), GMBParameters::Speeds{panSpeed, tiltSpeed}, std::move(saveRoot))));
         starting_ = false;
         const bool acquired = coro_->locked();
         refreshRunState();

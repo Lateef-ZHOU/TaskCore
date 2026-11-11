@@ -146,15 +146,10 @@ public:
     // 设备页手动前往：模板层完成 QML 值到强类型的边界转换，末端仅提供同名 Qt 槽。参数经 paramsFor 造出后
     // 走与任务相同的运行槽（看门狗按型号时限重发），不需要结局，故完成回调为空；不持锁，设备被占用时拒收。
     // 失败由发现原因的层记录并返回 false（paramsFor / Device::start 各自记录），成功只返 true，由 QML 记日志。
-    bool issueGoTo(const double pan, const double tilt, const QVariantMap &values)
+    // 两轴速度由页面直接给出；定位不带速度的型号在 paramsFor 中忽略它们。
+    bool issueGoTo(const double pan, const double tilt, const double panSpeed, const double tiltSpeed)
     {
-        const auto speeds = GMBParameters::speedsFromQml(values);
-        if (!speeds)
-        {
-            Q_EMIT this->logMessage(QStringLiteral("转台运动参数无效，未下发"));
-            return false;
-        }
-        const auto parameters = this->paramsFor(PanTiltModel(pan, tilt), {}, *speeds);
+        const auto parameters = this->paramsFor(PanTiltModel(pan, tilt), {}, GMBParameters::Speeds{panSpeed, tiltSpeed});
         return parameters && DeviceT::start(std::make_shared<CollectorT>(*parameters), {}, nullptr);
     }
 
