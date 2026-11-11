@@ -93,7 +93,7 @@ protected:
     RxTime frameTime_{};
 
 private:
-    void onFeed(const std::optional<QByteArray> &item, RxTime at) final { channels_ = assemble(*item, at); }
+    void onFeed(const QByteArray &item, RxTime at) final { channels_ = assemble(item, at); }
 
     // [worker] 型号凑帧：校验并放置这一口字节；未凑齐返回空，凑齐的那一口按协议解析为各通道（构造即处理）。
     [[nodiscard]] virtual std::optional<std::vector<DAQChannel>> assemble(QByteArrayView bytes, RxTime at) = 0;
