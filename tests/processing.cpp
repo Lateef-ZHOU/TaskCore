@@ -96,8 +96,7 @@ public:
 Q_SIGNALS:
     void lockChanged(HandleCore::ResourcePhase) override;
     void spectrumReady(int channel, const LinearArray2D<double> &spectrum) override;
-    void radialReady(int channel, const LinearArray<double> &speeds,
-                     const LinearArray<double> &cnr, bool calibrated) override;
+    void radialReady(int channel, const LinearArray<double> &speeds, const LinearArray<double> &cnr) override;
     void profileReady(int channel, VerticalWindProfilePtr profile) override;
 private:
     void PreDestruction() noexcept final
@@ -129,8 +128,8 @@ int main(int argc, char **argv)
         ++spectra;
     });
     QObject::connect(&device, &TestDevice::radialReady, &app,
-                     [&](int channel, const LinearArray<double> &speeds, const LinearArray<double> &cnr, bool calibrated) {
-        if (channel != 0 || speeds.size() != 2 || speeds.start != 100 || speeds.step != 30 || !cnr.sameAxis(speeds) || cnr.size() != 2 || !calibrated
+                     [&](int channel, const LinearArray<double> &speeds, const LinearArray<double> &cnr) {
+        if (channel != 0 || speeds.size() != 2 || speeds.start != 100 || speeds.step != 30 || !cnr.sameAxis(speeds) || cnr.size() != 2
             || std::abs(speeds[0] - 0.5) > 0.05)
             qFatal("standard radial processing differs");
         ++radials;

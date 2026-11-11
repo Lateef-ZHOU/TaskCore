@@ -1,3 +1,4 @@
+#include <limits>
 #include "AcqSaver.h"
 #include <chrono>
 #include <cstdlib>
@@ -47,7 +48,8 @@ private:
     {
         frameTime_ = at;
         std::vector<DAQChannel> channels;
-        for (const auto &[name, zero] : {std::pair{"A", 1.5}, std::pair{"B", 99.0}}) {
+        // B 以 NaN 参考造出缺测风速，检查缺测写成 null。
+        for (const auto &[name, zero] : {std::pair{"A", 1.5}, std::pair{"B", std::numeric_limits<double>::quiet_NaN()}}) {
             LinearArray2D<double> spectrum(2, 4, 0, 15, 0, 1);
             static_cast<std::vector<double> &>(spectrum) = {1, 2, 9, 2, 1, 3, 8, 3};
             channels.emplace_back(QString::fromLatin1(name), std::move(spectrum), zero, wavelengthM());
@@ -89,8 +91,8 @@ int main(int argc, char **argv)
     const auto spectrum = a.value("spectrum").toArray();
     check(spectrum.size() == 2 && spectrum[0].toArray().size() == 4 && spectrum[1].toArray()[2].toDouble() == 8,
           "spectrum rows differ");
-    check(a.value("radialWind").toArray().size() == 2 && !a.value("radialWind").toArray()[0].isNull(), "calibrated wind missing");
-    check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "uncalibrated wind not null");
+    check(a.value("radialWind").toArray().size() == 2 && !a.value("radialWind").toArray()[0].isNull(), "wind missing");
+    check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "missing wind not null");
 
     // 风廓线：东风 5 m/s、上升 0.5 m/s → 来向 90°。
     auto unit = std::make_shared<VerticalWindProfileUnit>(VerticalWindProfileUnit{at,

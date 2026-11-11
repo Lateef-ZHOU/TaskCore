@@ -54,7 +54,7 @@ struct DAQChannel
     LinearArray2D<double> spectrum;
     double zeroWindMHz;
     // 逐门产物：轴取功率谱的行轴（斜距）；网格不完整或轴无效时为空。
-    LinearArray<double> radialWind; // m/s；零风速参考不在频带内时为 NaN
+    LinearArray<double> radialWind; // m/s
     LinearArray<double> cnr;        // dB
 
 private:

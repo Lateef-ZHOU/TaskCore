@@ -48,7 +48,7 @@ public:
     // 通知契约：末端在 Q_SIGNALS 中覆写，由 moc 提供实现；均在主线程按通道下标发出。
     virtual void spectrumReady(int channel, const LinearArray2D<double> &spectrum) = 0;
     // 逐门剖面带斜距线性轴；页面原样交给径向风图，图按创建配置核对网格。
-    virtual void radialReady(int channel, const LinearArray<double> &speeds, const LinearArray<double> &cnr, bool calibrated) = 0;
+    virtual void radialReady(int channel, const LinearArray<double> &speeds, const LinearArray<double> &cnr) = 0;
     virtual void profileReady(int channel, VerticalWindProfilePtr profile) = 0;
 };
 
@@ -147,8 +147,7 @@ private:
         {
             const auto &channel = frame->channels()[i];
             Q_EMIT this->spectrumReady(int(i), channel.spectrum);
-            Q_EMIT this->radialReady(int(i), channel.radialWind, channel.cnr,
-                                         RadialWind::inBand(channel.spectrum, channel.zeroWindMHz));
+            Q_EMIT this->radialReady(int(i), channel.radialWind, channel.cnr);
         }
         if (context.saveRoot)
             AcqSaver::saveFrame(frame, this->objectName());
@@ -164,8 +163,7 @@ private:
             for (std::size_t beam = 0; beam < inputs.size(); ++beam)
             {
                 const auto &past = beams_[beam]->channels()[i];
-                usable = usable && RadialWind::inBand(past.spectrum, past.zeroWindMHz)
-                         && past.radialWind.sameAxis(channel.radialWind);
+                usable = usable && past.radialWind.sameAxis(channel.radialWind);
                 inputs[beam] = {beams_[beam]->parameters.pose, past.radialWind};
             }
             if (!usable)
