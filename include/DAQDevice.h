@@ -145,7 +145,7 @@ private:
         const auto &context = frame->parameters;
         for (std::size_t i = 0; i < frame->channels().size(); ++i)
         {
-            const auto &channel = frame->channels()[i];
+            const auto &channel = *frame->channels()[i];
             Q_EMIT this->spectrumReady(int(i), channel.spectrum);
             Q_EMIT this->radialReady(int(i), channel.radialWind, channel.cnr);
         }
@@ -157,12 +157,12 @@ private:
         std::vector<AcqSaver::ProfileChannel> profiles;
         for (std::size_t i = 0; i < frame->channels().size(); ++i)
         {
-            const auto &channel = frame->channels()[i];
+            const auto &channel = *frame->channels()[i];
             std::array<WindProfile::Input, WindProfile::kBeams> inputs;
             bool usable = true;
             for (std::size_t beam = 0; beam < inputs.size(); ++beam)
             {
-                const auto &past = beams_[beam]->channels()[i];
+                const auto &past = *beams_[beam]->channels()[i];
                 usable = usable && past.radialWind.sameAxis(channel.radialWind);
                 inputs[beam] = {beams_[beam]->parameters.pose, past.radialWind};
             }
@@ -172,7 +172,7 @@ private:
             if (!profile)
                 continue;
             Q_EMIT this->profileReady(int(i), profile);
-            profiles.push_back({channel.name, std::move(profile)});
+            profiles.push_back({channel.name(), std::move(profile)});
         }
         if (context.saveRoot)
             AcqSaver::saveWindProfiles(frame, std::move(profiles));

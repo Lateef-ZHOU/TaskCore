@@ -36,25 +36,31 @@ QJsonObject readCompleted(const QString &path)
     return {};
 }
 
-// 两路：A 已标定（零风速参考在频带内），B 未标定（风速 NaN）。
+// 两路：A 正常换算；B 以 NaN 参考造出缺测风速，检查缺测写成 null。
+struct SavedA
+{
+    static constexpr const char *name = "A";
+    static constexpr double wavelengthM = 1.55e-6, zeroWindMHz = 1.5;
+    static constexpr int rows = 2, columns = 4;
+    static constexpr double rangeStartM = 0, rangeStepM = 15, frequencyStartMHz = 0, frequencyStepMHz = 1;
+};
+struct SavedB : SavedA
+{
+    static constexpr const char *name = "B";
+    static constexpr double zeroWindMHz = std::numeric_limits<double>::quiet_NaN();
+};
 class SavedFrame final : public DAQCollector
 {
 public:
-    explicit SavedFrame(const DAQParameters &p) : DAQCollector(p, 1.55e-6) {}
+    explicit SavedFrame(const DAQParameters &p) : DAQCollector(p) {}
     QList<QByteArray> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
-    std::optional<std::vector<DAQChannel>> assemble(QByteArrayView, RxTime at) override
+    std::optional<DAQChannels> assemble(QByteArrayView, RxTime at) override
     {
         frameTime_ = at;
-        std::vector<DAQChannel> channels;
-        // B 以 NaN 参考造出缺测风速，检查缺测写成 null。
-        for (const auto &[name, zero] : {std::pair{"A", 1.5}, std::pair{"B", std::numeric_limits<double>::quiet_NaN()}}) {
-            LinearArray2D<double> spectrum(2, 4, 0, 15, 0, 1);
-            static_cast<std::vector<double> &>(spectrum) = {1, 2, 9, 2, 1, 3, 8, 3};
-            channels.emplace_back(QString::fromLatin1(name), std::move(spectrum), zero, wavelengthM());
-        }
-        return channels;
+        const std::vector<double> values{1, 2, 9, 2, 1, 3, 8, 3};
+        return DAQChannels{std::make_shared<TypedDAQChannel<SavedA>>(values), std::make_shared<TypedDAQChannel<SavedB>>(values)};
     }
 };
 static_assert(DAQCollectorLike<SavedFrame>);

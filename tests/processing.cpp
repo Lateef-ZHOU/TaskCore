@@ -54,27 +54,32 @@ private:
 };
 
 // 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。
+// 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
+struct TestChannelSpec
+{
+    static constexpr const char *name = "T";
+    static constexpr double wavelengthM = 2e-6, zeroWindMHz = 3.5;
+    static constexpr int rows = 2, columns = 8;
+    static constexpr double rangeStartM = 100, rangeStepM = 30, frequencyStartMHz = 0, frequencyStepMHz = 1;
+};
 class TestCollector final : public DAQCollector
 {
 public:
-    // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
-    explicit TestCollector(const DAQParameters &p) : DAQCollector(p, 2e-6) {}
+    explicit TestCollector(const DAQParameters &p) : DAQCollector(p) {}
     QList<QByteArray> buildStart() const override { return {"start"}; }
     int timeoutMs() const override { return 0; }
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
     // 每口料即一整帧：在收包线程解析与处理。
-    std::optional<std::vector<DAQChannel>> assemble(QByteArrayView, RxTime at) override
+    std::optional<DAQChannels> assemble(QByteArrayView, RxTime at) override
     {
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
-        LinearArray2D<double> spectrum(2, 8, 100, 30, 0, 1);
-        for (int row = 0; row < spectrum.rows; ++row)
-            for (int column = 0; column < spectrum.columns; ++column)
-                spectrum.push_back(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
-        std::vector<DAQChannel> channels;
-        channels.emplace_back(QStringLiteral("T"), std::move(spectrum), 3.5, wavelengthM());
-        return channels;
+        std::vector<double> values;
+        for (int row = 0; row < TestChannelSpec::rows; ++row)
+            for (int column = 0; column < TestChannelSpec::columns; ++column)
+                values.push_back(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
+        return DAQChannels{std::make_shared<TypedDAQChannel<TestChannelSpec>>(std::move(values))};
     }
     QThread *processedOn_ = nullptr;
 };

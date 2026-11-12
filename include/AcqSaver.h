@@ -153,16 +153,16 @@ private:
         out.key("channels");
         out.raw("[");
         for (std::size_t i = 0; i < frame->channels().size(); ++i) {
-            const auto &channel = frame->channels()[i];
+            const auto &channel = *frame->channels()[i];
             if (i) out.raw(",");
             out.raw("{");
-            out.key("name"); out.text(channel.name); out.raw(",");
+            out.key("name"); out.text(channel.name()); out.raw(",");
             const auto &spectrum = channel.spectrum;
             out.key("rangeStartM"); out.number(spectrum.rowStart); out.raw(",");
             out.key("rangeStepM"); out.number(spectrum.rowStep); out.raw(",");
             out.key("freqStartMHz"); out.number(spectrum.columnStart); out.raw(",");
             out.key("freqStepMHz"); out.number(spectrum.columnStep); out.raw(",");
-            out.key("zeroWindMHz"); out.number(channel.zeroWindMHz); out.raw(",");
+            out.key("zeroWindMHz"); out.number(channel.zeroWindMHz()); out.raw(",");
             out.key("spectrum");
             out.raw("[");
             for (int row = 0; spectrum.complete() && row < spectrum.rows; ++row) {
