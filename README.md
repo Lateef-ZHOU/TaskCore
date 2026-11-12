@@ -19,7 +19,7 @@
 
 消费者必须在 FetchContent_MakeAvailable 前选择开关。核心目标不反向链接附加模块。界面消费者链接 LidarTaskUIplugin 并显式 `Q_IMPORT_QML_PLUGIN(LidarTaskUIPlugin)`（动态 Qt 下的静态模块也需要）；同时导入 UICore/ChartCore 插件。各模块输出目录的两级父目录用于 QML 工具 IMPORT_PATH。
 
-TaskModule 接收两个 `list<QtObject>`（云台与采集卡设备本身），不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经官邸实现的族接口 paramsFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，锁/完成链同步取消；QObject 销毁通知移除登记，排队收尾保留。
+TaskModule 接收两个 `list<QtObject>`（云台与采集卡设备本身），不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经官邸实现的族接口 paramsFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。任一参与设备被外部促停，整项协程通过锁/完成链取消；TaskBase 的 QObject 销毁通知同样取消任务并移除登记，排队收尾保留。
 
 这些目标均是可选实现，不要求任务官邸继承 TaskBase 或 TaskModule。三个具体计划和协程不在本库，官邸可以只使用核心能力自行编排。核心中的保存继续使用独立线程，不反向访问日志对象，不增加退出排空。
 
@@ -40,7 +40,9 @@ DAQCollector 只提供参数、帧时刻及收集契约；TypedDAQCollector<Chan
 
 末端析构首句执行 PreDestruction；DAQ 先取消本层单卡协程，再接续 Device 同步关闭 Handle、撤运行槽及锁，保护尚在的派生成员。中间层析构不重复调用预析构。处理期间占住收包循环，耗时计入看门狗等待，关闭也要等当前处理结束；大帧、多卡场景的耗时余量尚需实测。
 
-TaskBase 登记族身份，任务结束依靠完成回调与锁取消链，QObject::destroyed 仅移除登记。QML 借用末端设备本身的身份、日志和状态；任务状态仍在协程结束后的排队收尾中回读。普通取消保留已完成帧，退出不新增保存排空。
+TaskBase 登记族身份，任务结束依靠完成回调与锁取消链，QObject::destroyed 还会取消整项任务并移除登记；不在设备退出后切换到另一设备继续编排。QML 借用末端设备本身的身份、日志和状态；任务状态仍在协程结束后的排队收尾中回读。普通取消保留已完成帧，退出不新增保存排空。
+
+单卡 startTest 在 paramsFor 拒绝无效输入后，向私有 runTest 协程按值交入 DAQParameters；协程内不再保存必定有效的 optional。GMBCollector 的目标直接读取 parameters.target，measured() 只返回实测位形。连续驻留的首末时刻用一个 optional<pair> 成组保存：未进圈或出圈即为空，进圈同时创建首末时刻，后续圈内样本推进末时刻；停止回报不会自行完成，重试按参数新建实例。
 
 ## 独立构建和验证
 
@@ -53,7 +55,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Windows 在安装 MSVC 的环境运行以上命令，Qt 选择对应 MSVC 构建；Linux 使用 GCC 与 OpenMP 开发环境。
-测试逐个独立编译公开头、拒绝意外加载 GUI/QML，并运行契约检查。processing_contract 通过实际 Handle/Device 交付四个方位的四帧，检查收包线程完成径向风处理、主线程发结果信号，以及第四帧同步时反演一次风廓线。GitHub Actions 在 Windows/Linux 使用 Qt 6.11.2，分别验证核心、无界面任务业务及可选 QML 组件；最低版本声明与最新验证版本是不同概念。
+测试逐个独立编译公开头、拒绝意外加载 GUI/QML，并运行契约检查。processing_contract 通过实际 Handle/Device 交付四个方位的四帧，检查收包线程处理、主线程发信号、同步反演及单卡参数拒绝/连续采集/取消。gmb_collector_contract 使用当前参数构造接口与真实单调钟（约 4.2 秒），覆盖新重试、出圈再入圈、停止回报、驻留下限和完成冻结；从主程序旧 Collector 测试迁入，不保留原型工厂接口。GitHub Actions 在 Windows/Linux 使用 Qt 6.11.2，分别验证核心、无界面任务业务及可选 QML 组件；最低版本声明与最新验证版本是不同概念。
 
 ## 接入应用
 

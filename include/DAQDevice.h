@@ -97,7 +97,7 @@ public:
             return;
         // 裸 new 刻意：make_unique 走转发必索 move（DeviceCoro 不可动），prvalue 直构保证省略。
         // 锁请求交给准备模块（promise 的构造函数）：本卡只占自己这一台。
-        testCoro_.reset(new DeviceCoro(runTest(LockRequest{QStringLiteral("设备控制"), {*this}}, std::move(parameters))));
+        testCoro_.reset(new DeviceCoro(runTest(LockRequest{QStringLiteral("设备控制"), {*this}}, std::move(*parameters))));
     }
     // 预析构及停止按钮共用；取消时设备各层仍在，等待器可安全撤单。
     void cancelTest() noexcept { testCoro_.reset(); }
@@ -105,7 +105,7 @@ public:
 private:
     // 测试采集协程：取令牌 → 每轮交等待器一份采集参数，经 begin 启动；
     // 完成帧由设备自行消费；会话目录名取自启动时交入的参数，各轮共用。
-    DeviceCoro runTest(LockRequest, const std::optional<DAQParameters> parameters)
+    DeviceCoro runTest(LockRequest, const DAQParameters parameters)
     {
         // 试锁已由**准备模块**（promise 的构造函数）在本行之前做完；这里只取那枚令牌——begin 要出示它。
         const auto lock = co_await HeldLock{};
@@ -117,10 +117,10 @@ private:
         while (true)
         {
             Q_EMIT this->logMessage(QString("开始采集（累积 %1 秒）%2")
-                                 .arg(parameters->accumSec)
-                                 .arg(parameters->saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(parameters->saveRoot->absolutePath())
+                                 .arg(parameters.accumSec)
+                                 .arg(parameters.saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(parameters.saveRoot->absolutePath())
                                                            : QStringLiteral("，不落盘")));
-            const auto framed = co_await RunAwaiter<DAQFamily>{lock, *this, *parameters};
+            const auto framed = co_await RunAwaiter<DAQFamily>{lock, *this, parameters};
             if (framed.empty())
             {
                 Q_EMIT this->logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));

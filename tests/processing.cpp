@@ -159,6 +159,14 @@ int main(int argc, char **argv)
     }
     // 越出型号范围的参数在 paramsFor 处拦下，造不出参数，也就到不了 begin。
     if (device.paramsFor(11, std::nullopt, std::nullopt, {}, false)) return 5;
-    return spectra == 4 ? 0 : 4;
+    if (spectra != 4) return 4;
+    device.startTest(11, false, {}, QStringLiteral("rejected"));
+    if (device.holder()) return 6;
+    // 有效参数进入单卡协程后跨多轮复用；停止仍沿原取消链释放本卡的锁。
+    device.startTest(1, false, {}, QStringLiteral("single-card"));
+    if (!device.holder() || !until([&] { return spectra >= 6; })) return 7;
+    device.cancelTest();
+    if (device.holder() || profiles != 1) return 8;
+    return 0;
 }
 #include "processing.moc"

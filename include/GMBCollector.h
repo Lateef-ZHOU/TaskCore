@@ -60,20 +60,16 @@ protected:
     ~GMBCollector() = default;
 
 public:
-    // 仅由已收到的圈内样本判齐：未进圈或刚出圈时两个时刻为空，停止回报时 lastHitAt_ 不再推进。
+    // 仅由已收到的圈内样本判齐：未进圈或刚出圈时区间为空，停止回报时区间终点不再推进。
     // 此处不读当前时间，避免仅因时间流逝就把缺少新回报的尝试判为完成。
     [[nodiscard]] bool settled() const override
     {
-        return firstHitAt_ && lastHitAt_ && (*lastHitAt_ - *firstHitAt_) >= hold_;
+        return hitInterval_ && (hitInterval_->second - hitInterval_->first) >= hold_;
     }
 
     // 本次尝试的**实测位形**：最近一次采样（进没进圈都记）。判齐之后由编排层读出，交给族基 `worldOf(位形)`
     // 换成世界朝向。**空 = 还没收到过采样**。
     [[nodiscard]] std::optional<PanTiltModel> measured() const { return last_; }
-
-    // 本次 run **被命令去的**位形——运动参数目标的回读（收集器 → 位形）。每只斗都有目标
-    // （扇扫 / 循环 / 方向键不造斗），故不是 optional。
-    [[nodiscard]] PanTiltModel target() const { return parameters.target; }
 
     [[nodiscard]] QList<QByteArray> buildStart() const override { return start_; }
     [[nodiscard]] QList<QByteArray> buildStop() const override { return stop_; }
@@ -83,7 +79,7 @@ public:
 private:
     using Clock = std::chrono::steady_clock;
 
-    // [worker] 每口先记录实测位形；圈外样本（距离大于容差）清空两个时刻，圈内样本首次进圈时记起点、
+    // [worker] 每口先记录实测位形；圈外样本（距离大于容差）清空区间，圈内样本首次进圈时记起点、
     // 每次推进末次时刻。settled 统一判断首末间隔；完成后 Collector::feed 不再调用本口，实测结果也随之冻结。
     // RxTime 是可能被校时调整的墙钟；这里量等待时长，使用处理样本时的单调钟。
     void onFeed(const PanTiltModel &sample, RxTime) override
@@ -91,14 +87,14 @@ private:
         last_ = sample;
         if (PanTiltModel::distance(sample, parameters.target) > tolerance_)
         {
-            firstHitAt_ = std::nullopt;
-            lastHitAt_ = std::nullopt;
+            hitInterval_.reset();
             return;
         }
         const auto now = Clock::now();
-        if (!firstHitAt_)
-            firstHitAt_ = now;
-        lastHitAt_ = now;
+        if (!hitInterval_)
+            hitInterval_.emplace(now, now);
+        else
+            hitInterval_->second = now;
     }
 
     // ── 指示区（const：出生即定，多线程只读）──
@@ -111,8 +107,8 @@ protected:
     // ── 收集区（[仅 worker] 可写；判齐后 worker 不再触斗，主线程只读）──
 private:
     std::optional<PanTiltModel> last_;       // 最近一次采样（给 measured()，与判据无关）
-    std::optional<Clock::time_point> firstHitAt_; // 本段连续在圈内的起点（**空 = 不在圈内**）
-    std::optional<Clock::time_point> lastHitAt_;  // 本段最近一次圈内样本的时刻（与起点同空同有）
+    // 本段连续圈内回报的首末时刻；空 = 尚未进圈或已出圈。
+    std::optional<std::pair<Clock::time_point, Clock::time_point>> hitInterval_;
 };
 
 // 型号标签给出本型号的容差 tolerance（°）、看门狗时限 timeoutMs、按参数成帧的 startOf 与停机 stopOf；
