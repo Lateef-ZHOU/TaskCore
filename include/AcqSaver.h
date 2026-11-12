@@ -1,20 +1,21 @@
 #pragma once
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <memory>
 #include <numbers>
-#include <span>
 #include <thread>
-#include <type_traits>
+#include <tuple>
 #include <utility>
 #include <vector>
+#include <QByteArray>
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
 #include <QFileInfo>
+#include <QIODevice>
 #include <QSaveFile>
 #include <QString>
-#include <QVector>
 
 #include "DAQCollector.h"
 #include "VerticalWindProfile.h"
@@ -55,14 +56,12 @@ public:
         VerticalWindProfilePtr profile;
     };
 
-    // 完成帧落盘；card 为设备的 ASCII 标识（objectName）。
-    template <class C>
-        requires DAQCollectorLike<std::remove_const_t<C>>
-    static void saveFrame(std::shared_ptr<C> frame, QString card)
+    // 完成帧以只读份额交入；card 为设备的 ASCII 标识（objectName）。
+    template <DAQCollectorLike C>
+    static void saveFrame(std::shared_ptr<const C> frame, QString card)
     {
-        using Collector = std::remove_const_t<C>;
         if (!frame || !frame->parameters.saveRoot) return;
-        std::thread(&AcqSaver::writeFrame<Collector>, std::shared_ptr<const Collector>(std::move(frame)), std::move(card)).detach();
+        std::thread(&AcqSaver::writeFrame<C>, std::move(frame), std::move(card)).detach();
     }
 
     // 同步点的一组风廓线落盘；时刻取同步帧，会话取其上下文。

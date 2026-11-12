@@ -1,13 +1,13 @@
 #pragma once
 #include <chrono>
-#include <cmath>
 #include <memory>
 #include <optional>
 #include <utility>
 #include <QByteArray>
+#include <QList>
 #include <QMetaObject>
+#include <QObject>
 #include <QString>
-#include <QVariantMap>
 
 #include "GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
 #include "FamilyBase.h" // FamilyBase / FamilyDevice（族骨架与共同实现）

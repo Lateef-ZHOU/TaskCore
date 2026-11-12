@@ -1,13 +1,26 @@
-#include <limits>
 #include "AcqSaver.h"
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
+#include <QByteArray>
+#include <QByteArrayView>
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QIODevice>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
+#include <QList>
+#include <QString>
 #include <QTemporaryDir>
 #include <QThread>
 
@@ -65,6 +78,13 @@ private:
 };
 static_assert(DAQCollectorLike<SavedFrame>);
 
+template<class T>
+concept SaveFrameAccepted = requires(std::shared_ptr<T> frame) {
+    AcqSaver::saveFrame(std::move(frame), QString{});
+};
+static_assert(SaveFrameAccepted<const SavedFrame>);
+static_assert(!SaveFrameAccepted<SavedFrame>);
+
 // 存盘测试不经设备：自行派生通行证造参数（通行证只防误用，不防刻意派生）。
 struct TestKey : DAQParamsKey { TestKey() {} };
 }
@@ -78,8 +98,9 @@ int main(int argc, char **argv)
     const auto at = std::chrono::system_clock::now();
 
     // 无朝向帧：朝向写 null，未标定通道的风速写 null，CNR 照常。
-    auto frame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 3, std::nullopt, root, QStringLiteral("session"), false));
-    check(frame->feed(QByteArray("x"), at), "frame did not complete");
+    auto collecting = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 3, std::nullopt, root, QStringLiteral("session"), false));
+    check(collecting->feed(QByteArray("x"), at), "frame did not complete");
+    const std::shared_ptr<const SavedFrame> frame = std::move(collecting);
     AcqSaver::saveFrame(frame, QStringLiteral("Card"));
     const auto saved = readCompleted(root.filePath("session/" + AcqSaver::fileStem(at) + ".json"));
     const auto info = saved.value("frame").toObject();
@@ -116,7 +137,7 @@ int main(int argc, char **argv)
           "profile direction or speeds differ");
 
     // 不落盘：saveRoot 为空时入口直接返回。
-    AcqSaver::saveFrame(std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, std::nullopt, {}, false)),
+    AcqSaver::saveFrame(std::make_shared<const SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, std::nullopt, {}, false)),
                         QStringLiteral("Card"));
     std::cout << "saving checks passed: " << checks << '\n';
     return 0;
