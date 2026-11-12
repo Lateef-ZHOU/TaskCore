@@ -25,7 +25,7 @@ public:
     // 同一对象的机制面：族模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
-    // 按请求启动一次 run（等待器在挂起成立后调）。请求只能由官邸 paramsFor 造出、存在即有效；
+    // 等待器在 await_suspend 中提交请求，全部接受后才登记续体和取消铃。请求只能由官邸 paramsFor 造出、存在即有效；
     // FamilyDevice 将请求交 Device::start，由 Device 构造本型号 Collector。返 false = 设备不收（被占 / 未连）。
     [[nodiscard]] virtual bool begin(const Request &request, DoneFn<CollectorBase> done,
                                      const std::shared_ptr<const DeviceLock> &lock) = 0;

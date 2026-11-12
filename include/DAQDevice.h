@@ -142,15 +142,13 @@ private:
             ((Q_EMIT this->spectrumReady(int(I), std::get<I>(frame->channels()).spectrum),
               Q_EMIT this->radialReady(int(I), std::get<I>(frame->channels()).radialWind, std::get<I>(frame->channels()).cnr)), ...);
         }(indices);
-        if (context.saveRoot)
-            AcqSaver::saveFrame(frame, this->objectName());
+        AcqSaver::saveFrame(frame, this->objectName());
         beams_.push_back(frame);
         if (!context.sync || !beams_.full())
             return;
         std::vector<AcqSaver::ProfileChannel> profiles;
         [&]<std::size_t... I>(std::index_sequence<I...>) { (invert<I>(*frame, profiles), ...); }(indices);
-        if (context.saveRoot)
-            AcqSaver::saveWindProfiles(frame, std::move(profiles));
+        AcqSaver::saveWindProfiles(frame, std::move(profiles));
     }
 
     // 第 I 路：四束各取同一路径向风反演；朝向未知或网格不完整时 WindProfile 返回空、不反演。

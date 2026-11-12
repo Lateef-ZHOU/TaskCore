@@ -52,7 +52,7 @@ public:
 protected:
     GMBCollector(const GMBParameters &parameters, const double tolerance, QList<QByteArray> start,
                  QList<QByteArray> stop, const int timeoutMs)
-        : Collector(parameters), tolerance_(tolerance), hold_(std::max(parameters.hold, kMinHold)),
+        : Collector(parameters), tolerance_(tolerance),
           start_(std::move(start)), stop_(std::move(stop)), timeoutMs_(timeoutMs)
     {
     }
@@ -64,7 +64,7 @@ public:
     // 此处不读当前时间，避免仅因时间流逝就把缺少新回报的尝试判为完成。
     [[nodiscard]] bool settled() const override
     {
-        return hitInterval_ && (hitInterval_->second - hitInterval_->first) >= hold_;
+        return hitInterval_ && (hitInterval_->second - hitInterval_->first) >= std::max(parameters.hold, kMinHold);
     }
 
     // 本次尝试的**实测位形**：最近一次采样（进没进圈都记）。判齐之后由编排层读出，交给族基 `worldOf(位形)`
@@ -99,7 +99,6 @@ private:
 
     // 本层独持的不可变配置；型号仅在构造时提供，不直接访问成员。
     const double tolerance_;
-    const std::chrono::milliseconds hold_;
     const QList<QByteArray> start_;
     const QList<QByteArray> stop_;
     const int timeoutMs_;

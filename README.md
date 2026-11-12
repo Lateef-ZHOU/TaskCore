@@ -28,7 +28,7 @@ TaskModule 接收两个 `list<QtObject>`（云台与采集卡设备本身），�
 `AcqSaver` 只有两个入口，均为 detached 线程逐段写 JSON，官邸不参与：`saveFrame` 每帧写 `<保存根>/<会话>/<帧时间>.json`，`saveWindProfiles` 在同步点写 `profile_<同步时间>.json`。每通道写名称、`rangeStartM`/`rangeStepM`、`freqStartMHz`/`freqStepMHz`、零风速参考、功率谱（行 = 门）、径向风与 CNR；风廓线写 `heightStartM`/`heightStepM` 与逐层水平风向、水平风速、垂直风速。非有限值写 `null`。
 
 
-`saveFrame` 只接收 `std::shared_ptr<const C>`，C 满足 DAQCollectorLike；完成帧从消费链到保存线程始终使用只读份额，不再兼容可写份额的模板推导或在入口转换类型。保存格式、独立线程及退出不排空策略不变。
+`saveFrame` 只接收 `std::shared_ptr<const C>`，C 满足 DAQCollectorLike；完成帧从消费链到保存线程始终使用只读份额，不再兼容可写份额的模板推导或在入口转换类型。DAQDevice 直接提交帧与风廓线，由 AcqSaver 的两个入口统一检查 saveRoot；为空时返回，不启动写盘线程。保存格式、独立线程及退出不排空策略不变。
 
 验证：`saving_contract` 编译期检查只读入口，运行时检查帧 JSON 与风廓线 JSON 的字段、通道顺序、null 缺测和风向换算；`processing_contract` 检查收包线程完成标准处理、主线程按通道发信号与四束反演。
 
@@ -46,7 +46,7 @@ TaskBase 登记族身份，任务结束依靠完成回调与锁取消链，QObje
 
 单卡 startTest 在 paramsFor 拒绝无效输入后，向私有 runTest 协程按值交入 DAQParameters；协程内不再保存必定有效的 optional。GMBCollector 的目标直接读取 parameters.target，measured() 只返回实测位形。连续驻留的首末时刻用一个 optional<pair> 成组保存：未进圈或出圈即为空，进圈同时创建首末时刻，后续圈内样本推进末时刻；停止回报不会自行完成，重试按参数新建实例。
 
-GMBCollector 的容差、驻留时间、启动命令、停止命令和看门狗时限均为 private const 配置，型号只在构造时交入，不直接访问成员。公共收集接口和到位、驻留、重试语义保持；`gmb_collector_contract` 验证这些行为。
+GMBCollector 的容差、启动命令、停止命令和看门狗时限均为 private const 配置，型号只在构造时交入，不直接访问成员。驻留时长直接读取 parameters.hold，settled 以 max(parameters.hold, kMinHold) 保留最小驻留约束，不另存 hold_。公共收集接口和到位、驻留、重试语义保持；`gmb_collector_contract` 验证这些行为。
 
 ## 独立构建和验证
 
