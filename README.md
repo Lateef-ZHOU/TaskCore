@@ -38,6 +38,8 @@ GMBFamily / DAQFamily 是纯 C++ 族接口，继承 FamilyBase<Request, Collecto
 
 官邸 paramsFor 校验并返回不可变的 GMBParameters / DAQParameters；协程按设备保存请求，经 begin 交 Device::start。Device 首次启动与看门狗重试都通过 const Params& 构造本型号 Collector，不保留轻量原型或 makeSelf 路径。完成结果以只读族基份额交等待器，具体消费仍保留型号类型。
 
+RunAwaiter 成功汇总时，将设备引用、按值请求参数和只读 Collector 份额复制到结果槽，再移动交给协程；不复制 Collector 内的采集数组。DAQDevice 显式包含族接口与共同实现所在的 FamilyBase.h，不借用等待器的间接包含。
+
 DAQCollector 只提供参数、帧时刻及收集契约；TypedDAQCollector<Channels...> 持有 optional<tuple<Channels...>>。型号 assemble 在收包线程凑齐字节并解析通道，标准 DAQChannel<Spec> 构造时计算径向风/CNR，处理完成后才判齐及 CAS 摘槽。主线程 onConsume 按通道发信号、提交 detached 保存、维护最近四束环，并在同步点反演风廓线；没有独立 DAQ 处理线程、锚点或启动交接。
 
 末端析构首句执行 PreDestruction；DAQ 先取消本层单卡协程，再接续 Device 同步关闭 Handle、撤运行槽及锁，保护尚在的派生成员。中间层析构不重复调用预析构。处理期间占住收包循环，耗时计入看门狗等待，关闭也要等当前处理结束；大帧、多卡场景的耗时余量尚需实测。

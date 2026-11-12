@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <chrono>
 #include <concepts>
-#include <memory>
 #include <optional>
 #include <utility>
 #include <QByteArray>
@@ -10,7 +9,7 @@
 
 
 #include "GimbalModel.h" // PanTiltModel（目标 / 实测位形；distance）
-#include "RunBase.h" // Collector<FeedT> 契约基类
+#include "RunBase.h" // Collector<FeedT, ParamsT> 契约基类
 
 // 一次运动请求的按值参数：云台位形目标、停稳等待及可选两轴速度（无速度表示本型号定位协议不携带速度）。
 // 协程按束保存它并交族口 begin，由模板层据此造出本次 Collector；官邸 paramsFor 负责型号校验与量化。
