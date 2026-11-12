@@ -1,5 +1,9 @@
 # TaskCore
 
+2026-11-12：世界目标换算改用 Algorithm 的 `SO3::inverseRotation()`，转换顺序、安装标定与任务行为不变。
+
+本轮改名验证：使用本地配套依赖，MSVC Release 增量构建及 CTest 5/5 通过。
+
 2026-11-12：风廓线每层改用 std::optional<LinAlg::Vec3>。AcqSaver 对缺测层的风向、水平和垂直风速均写 JSON null，保留高度索引；有效静风仍写数值零。保存入口、文件字段、线程及取消链不变。
 
 本轮验证：本地依赖覆盖的 MSVC Release 增量构建及 CTest 5/5 通过，保存专项区分 null 缺测和数值零静风。

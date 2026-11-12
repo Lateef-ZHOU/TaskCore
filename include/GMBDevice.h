@@ -105,7 +105,7 @@ public:
     // 不是自由量而是被钉死的**：双轴只有两个自由度，换成有朝向的载荷（相机像旋、偏振轴）就要命。
     [[nodiscard]] PanTiltModel gimbalOf(const WorldModel &worldTarget) const
     {
-        return PanTiltModel::fromOrientation(mounting().toOrientation().inverse() * worldTarget.toOrientation());
+        return PanTiltModel::fromOrientation(mounting().toOrientation().inverseRotation() * worldTarget.toOrientation());
     }
 
     // 预览用的型号行程判据；末端以 Q_INVOKABLE 覆写供 QML 调用。
