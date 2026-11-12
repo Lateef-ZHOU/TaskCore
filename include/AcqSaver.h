@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <limits>
 #include <numbers>
 #include <thread>
 #include <tuple>
@@ -206,12 +207,20 @@ private:
             const auto &profile = *channels[i].profile;
             std::vector<double> direction, horizontal, vertical;
             for (const auto &wind : profile.winds) {
-                double from = std::atan2(-wind.x(), -wind.y()) * 180.0 / std::numbers::pi;
+                if (!wind) {
+                    // 数值写出器将非有限值写为 JSON null，保持各高度位置一一对应。
+                    const double missing = std::numeric_limits<double>::quiet_NaN();
+                    direction.push_back(missing);
+                    horizontal.push_back(missing);
+                    vertical.push_back(missing);
+                    continue;
+                }
+                double from = std::atan2(-wind->x(), -wind->y()) * 180.0 / std::numbers::pi;
                 if (from < 0.0) from += 360.0;
                 if (from >= 360.0) from -= 360.0;
                 direction.push_back(from);
-                horizontal.push_back(std::hypot(wind.x(), wind.y()));
-                vertical.push_back(wind.z());
+                horizontal.push_back(std::hypot(wind->x(), wind->y()));
+                vertical.push_back(wind->z());
             }
             if (i) out.raw(",");
             out.raw("{");

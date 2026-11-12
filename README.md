@@ -1,5 +1,9 @@
 # TaskCore
 
+2026-11-12：风廓线每层改用 std::optional<LinAlg::Vec3>。AcqSaver 对缺测层的风向、水平和垂直风速均写 JSON null，保留高度索引；有效静风仍写数值零。保存入口、文件字段、线程及取消链不变。
+
+本轮验证：本地依赖覆盖的 MSVC Release 增量构建及 CTest 5/5 通过，保存专项区分 null 缺测和数值零静风。
+
 协程与等待器、GMB/DAQ 设备族能力、族 Collector、DAQ 通道标准处理与统一落盘。Windows / Linux，C++20，CMake ≥ 3.28。
 
 ## 边界与依赖

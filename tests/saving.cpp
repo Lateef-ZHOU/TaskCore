@@ -123,18 +123,23 @@ int main(int argc, char **argv)
 
     // 风廓线：东风 5 m/s、上升 0.5 m/s → 来向 90°。
     auto unit = std::make_shared<VerticalWindProfileUnit>(VerticalWindProfileUnit{at,
-        LinearArray<LinAlg::Vec3>(10.0, 10.0, {LinAlg::Vec3(-5, 0, 0.5), LinAlg::Vec3(0, -3, 0)})});
+        LinearArray<std::optional<LinAlg::Vec3>>(10.0, 10.0, {LinAlg::Vec3(-5, 0, 0.5), LinAlg::Vec3(0, -3, 0), std::nullopt, LinAlg::Vec3::Zeros()})});
     AcqSaver::saveWindProfiles(frame, {{QStringLiteral("A"), unit}});
     const auto profile = readCompleted(root.filePath("session/profile_" + AcqSaver::fileStem(at) + ".json"));
     const auto first = profile.value("channels").toArray()[0].toObject();
     check(profile.value("frame").toObject().value("session").toString() == "session"
           && first.value("name").toString() == "A" && first.value("heightStartM").toDouble() == 10
-          && first.value("heightStepM").toDouble() == 10 && first.value("horizontalSpeed").toArray().size() == 2, "profile layout differs");
+          && first.value("heightStepM").toDouble() == 10 && first.value("horizontalSpeed").toArray().size() == 4, "profile layout differs");
     check(std::abs(first.value("horizontalDirectionDeg").toArray()[0].toDouble() - 90.0) < 1e-3
           && std::abs(first.value("horizontalSpeed").toArray()[0].toDouble() - 5.0) < 1e-3
           && std::abs(first.value("verticalSpeed").toArray()[0].toDouble() - 0.5) < 1e-3
           && std::abs(first.value("horizontalDirectionDeg").toArray()[1].toDouble() - 0.0) < 1e-3,
           "profile direction or speeds differ");
+
+    for (const auto *key : {"horizontalDirectionDeg", "horizontalSpeed", "verticalSpeed"})
+        check(first.value(key).toArray()[2].isNull(), "missing layer must remain JSON null");
+    check(first.value("horizontalSpeed").toArray()[3].toDouble(-1) == 0
+          && first.value("verticalSpeed").toArray()[3].toDouble(-1) == 0, "calm layer must remain zero");
 
     // 不落盘：saveRoot 为空时入口直接返回。
     AcqSaver::saveFrame(std::make_shared<const SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, std::nullopt, {}, false)),
