@@ -44,6 +44,8 @@ TaskBase 登记族身份，任务结束依靠完成回调与锁取消链，QObje
 
 单卡 startTest 在 paramsFor 拒绝无效输入后，向私有 runTest 协程按值交入 DAQParameters；协程内不再保存必定有效的 optional。GMBCollector 的目标直接读取 parameters.target，measured() 只返回实测位形。连续驻留的首末时刻用一个 optional<pair> 成组保存：未进圈或出圈即为空，进圈同时创建首末时刻，后续圈内样本推进末时刻；停止回报不会自行完成，重试按参数新建实例。
 
+GMBCollector 的容差、驻留时间、启动命令、停止命令和看门狗时限均为 private const 配置，型号只在构造时交入，不直接访问成员。公共收集接口和到位、驻留、重试语义保持；`gmb_collector_contract` 验证这些行为。
+
 ## 独立构建和验证
 
 安装对应 Qt 开发包，然后执行（将路径替换为本机 Qt 前缀）：

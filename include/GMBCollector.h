@@ -97,15 +97,13 @@ private:
             hitInterval_->second = now;
     }
 
-    // ── 指示区（const：出生即定，多线程只读）──
-protected:
+    // 本层独持的不可变配置；型号仅在构造时提供，不直接访问成员。
     const double tolerance_;
     const std::chrono::milliseconds hold_;
     const QList<QByteArray> start_;
     const QList<QByteArray> stop_;
     const int timeoutMs_;
     // ── 收集区（[仅 worker] 可写；判齐后 worker 不再触斗，主线程只读）──
-private:
     std::optional<PanTiltModel> last_;       // 最近一次采样（给 measured()，与判据无关）
     // 本段连续圈内回报的首末时刻；空 = 尚未进圈或已出圈。
     std::optional<std::pair<Clock::time_point, Clock::time_point>> hitInterval_;
