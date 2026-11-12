@@ -13,7 +13,7 @@
 #include <QVector>
 
 #include "AcqSaver.h"             // 采集卡族唯一落盘入口
-#include "DAQCollector.h"          // 通道数组与不可变消费上下文
+#include "DAQCollector.h"          // 通道元组与不可变请求参数
 #include "DeviceCoro.h"           // DeviceCoro / LockRequest / HeldLock / RunAwaiter（测试采集协程）
 #include "DeviceBase.h" // DeviceBase / Device<H,C>
 #include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
@@ -21,23 +21,16 @@
 
 // 采集卡族定义标准能力；纯 C++ 旁支，不继承 QObject（唯一 QObject 来自末端继承的 Handle）。
 // 模板层同时继承具体 Device 与本类；编排只持族引用，通过 device() 使用锁，不认识具体 Handle 或 Collector。
-// 没有处理线程：Collector 在收包线程收齐末包时完成标准处理，完成帧在主线程显示、落盘并参与风廓线反演。
+// Collector 在收包线程收齐末包时完成标准处理；主线程发显示信号、提交独立线程保存，并反演风廓线。
 // 请求为采集参数（协程按卡保存），账本元素为 DAQCollector；begin / stop / device() 由 FamilyBase 声明。
 class DAQFamily : public FamilyBase<DAQParameters, DAQCollector>, protected DAQParamsKey
 {
 public:
 
-    // ── pcap 读取政策：**族级常量** ────────
-    // 住族基而不是型号宪法：这两个数由**本族的流量形状**决定——帧是成批爆发的，
-    // 一帧上百个包、二三十万字节（各卡的帧常量见各自的 RunSide），且**判齐后整帧才有意义**，丢一个包
-    // 整帧作废。与云台族恰好相反的取舍：**可以慢，不能丢**。
-    //
-    //   · **100 ms 唤醒**：成批交付正合适，本族的时间戳按帧算、不按包算，批量无害。
-    //     （实际上多半是 mintocopy 先到——16 KB 在线速下瞬间攒满，这个数很少真用上。）
-    //   · **4 MB 缓冲**：十帧以上的余量。**真约束是爆发**：一帧线速打出，硬下限是一帧。
-    //     收末包后的处理占住收包线程期间，迟到包同样由它兜住（下一次 START 要等本帧完成）。
-    //
-    // 100 ms 是长期实跑过的值，缓冲比当时的 1 MB 更宽——用户据此认为本族无需再验。
+    // pcap 读取政策：批量收谱采用 100 ms 读取超时与 4 MB 内核缓冲，具体帧尺寸由型号定义。
+    // 缓冲可容纳的帧数随型号变化，不保证固定帧数或不丢包。末包解析与拟合占住收包线程期间，
+    // 新到报文仍需缓冲；正常等待链在完成后才发下一请求，但看门狗可能在处理期间重试。
+    // 因此时限需要涵盖收包及处理耗时，大帧、多卡下的余量需实测。
     static constexpr std::chrono::milliseconds kPcapReadTimeout{100};
     static constexpr int kPcapKernelBufferBytes = 4 * 1024 * 1024;
 
@@ -53,7 +46,7 @@ public:
     virtual void profileReady(int channel, VerticalWindProfilePtr profile) = 0;
 };
 
-// 模板层继承具体 Device 与族基：按参数造斗、主线程消费（显示、落盘、四束环与风廓线）及单卡测试协程。
+// 模板层继承具体 Device 与族基：Device 按参数造斗；本层在主线程显示、提交保存、维护四束环与反演，并提供单卡测试。
 // 型号只给通道规格并按协议整理功率谱，不写处理或落盘代码。
 template <HandleLike HandleT, DAQCollectorLike CollectorT>
 class DAQDevice : public FamilyDevice<HandleT, CollectorT, DAQFamily>
@@ -111,7 +104,7 @@ public:
 
 private:
     // 测试采集协程：取令牌 → 每轮交等待器一份采集参数，经 begin 启动；
-    // 完成帧由设备自行消费；启动时固定带 "Test" 后缀的会话目录名，各轮共用。
+    // 完成帧由设备自行消费；会话目录名取自启动时交入的参数，各轮共用。
     DeviceCoro runTest(LockRequest, const std::optional<DAQParameters> parameters)
     {
         // 试锁已由**准备模块**（promise 的构造函数）在本行之前做完；这里只取那枚令牌——begin 要出示它。
@@ -136,10 +129,10 @@ private:
         }
     }
 
-    // [Handle 收包线程] 采集卡的一口上行原样交给收集器，按协议整理归型号的 onFeed。
+    // [Handle 收包线程] 一口上行原样交给收集器；TypedDAQCollector 的 onFeed 调用型号 assemble 凑帧并构造通道。
     std::optional<QByteArray> onStream(const QByteArray &raw, RxTime) final { return raw; }
 
-    // [主] 完成帧：按通道发功率谱与径向风、整帧落盘，进四束环；同步位为真时逐通道反演风廓线。
+    // [主] 完成帧：按通道发功率谱与径向风、提交整帧保存，进四束环；同步位为真时逐通道反演风廓线。
     // 四束是同一收集器类型的帧，第 I 路在每帧都是同一类型（同一规格、同一距离轴），无须运行时核对。
     void onConsume(const std::shared_ptr<const CollectorT> &frame) override
     {

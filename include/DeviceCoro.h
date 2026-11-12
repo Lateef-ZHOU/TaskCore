@@ -308,7 +308,7 @@ struct RunOrder
     using ColT = typename FamilyT::CollectorBase;
 
     FamilyT &dev; // 借用 QML 官邸持有的后端；设备关闭前经运行结果/锁取消铃同步结束等待。
-    typename FamilyT::Request request; // 交族口 begin 的请求（GMB：运动参数；DAQ：只读原型）。
+    typename FamilyT::Request request; // 交族口 begin 的请求（GMB：运动参数；DAQ：采集参数）。
     std::shared_ptr<const ColT> result{}; // 空 = 尚未完成；只由完成回调填入。
 };
 

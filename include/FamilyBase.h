@@ -25,8 +25,8 @@ public:
     // 同一对象的机制面：族模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
-    // 按请求启动一次 run（等待器在挂起成立后调）。请求只能由官邸 paramsFor 造出、存在即有效，FamilyDevice 以它
-    // 直接构造本型号的具体 Collector 交 Device。返 false = 设备不收（被占 / 未连）。
+    // 按请求启动一次 run（等待器在挂起成立后调）。请求只能由官邸 paramsFor 造出、存在即有效；
+    // FamilyDevice 将请求交 Device::start，由 Device 构造本型号 Collector。返 false = 设备不收（被占 / 未连）。
     [[nodiscard]] virtual bool begin(const Request &request, DoneFn<CollectorBase> done,
                                      const std::shared_ptr<const DeviceLock> &lock) = 0;
 
@@ -39,7 +39,7 @@ public:
 template <typename T>
 concept FamilyLike = std::derived_from<T, FamilyBase<typename T::Request, typename T::CollectorBase>>;
 
-// 族模板层的共同实现：同时继承具体 Device 与族基，device() / stop() 统一落到机制层；begin 与族特有逻辑归各族模板。
+// 族模板层的共同实现：同时继承具体 Device 与族基，统一实现 device() / begin() / stop()；族特有逻辑归各族模板。
 template <HandleLike HandleT, typename CollectorT, FamilyLike FamilyT>
 class FamilyDevice : public Device<HandleT, CollectorT>, public FamilyT
 {
@@ -58,7 +58,7 @@ public:
     // 与协变返回的组合报 C2062；持具体类型者直接在设备对象上使用完整 Device 接口。
     [[nodiscard]] DeviceBase &device() noexcept final { return *this; }
 
-    // 两族同一实现：以请求直接构造本型号收集器交 Device，不再复核（请求存在即有效）。
+    // 两族共用：将已校验的请求交 Device::start，由其构造本次收集器并启动运行槽。
     [[nodiscard]] bool begin(const typename FamilyT::Request &request, DoneFn<typename FamilyT::CollectorBase> done,
                              const std::shared_ptr<const DeviceLock> &lock) final
     {

@@ -1,5 +1,77 @@
 # TaskCore
 
+协程与等待器、GMB/DAQ 设备族能力、族 Collector、DAQ 通道标准处理与统一落盘。Windows / Linux，C++20，CMake ≥ 3.28。
+
+## 边界与依赖
+
+- Qt ≥ 6.8.3；Qt 由使用环境提供，不在仓库中打包。
+- 上游：[Algorithm](https://github.com/Lateef-ZHOU/Algorithm), [DeviceCore](https://github.com/Lateef-ZHOU/DeviceCore)。已有同名 CMake 目标时复用；否则 FetchContent 拉取固定完整提交。
+- 本仓库不依赖 LiDAR_DataACQ 源码、应用目录或设备型号；不包含第三方二进制。
+- 核心提供协程、设备族标准能力、通道处理及 AcqSaver 统一保存；任务共用业务与族专用界面作为可选参考目标。三种具体编排、具体页面及协议凑帧由官邸实现。安装姿态等状态归设备实例。
+- 默认仅 Qt Core/OpenMP；保留主线程取消、收包完成消费和 Handle 同步关闭契约，不提供退出保存排空。
+
+## 可选模块
+
+| 开关（默认 OFF） | 目标 | 内容 |
+|---|---|---|
+| TASKCORE_WITH_TASK_SUPPORT | Lidar::TaskSupport | TaskBase，登记族对象、启动校验、状态和取消，无 QML |
+| TASKCORE_WITH_QML | Lidar::TaskUI / Lidar.TaskUI | 可选族控件和任务参考页面；带 TaskSupport、UICore、ChartCore，要求 Qt 6.11.2 |
+
+消费者必须在 FetchContent_MakeAvailable 前选择开关。核心目标不反向链接附加模块。界面消费者链接 LidarTaskUIplugin 并显式 `Q_IMPORT_QML_PLUGIN(LidarTaskUIPlugin)`（动态 Qt 下的静态模块也需要）；同时导入 UICore/ChartCore 插件。各模块输出目录的两级父目录用于 QML 工具 IMPORT_PATH。
+
+TaskModule 接收两个 `list<QtObject>`（云台与采集卡设备本身），不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经官邸实现的族接口 paramsFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，锁/完成链同步取消；QObject 销毁通知移除登记，排队收尾保留。
+
+这些目标均是可选实现，不要求任务官邸继承 TaskBase 或 TaskModule。三个具体计划和协程不在本库，官邸可以只使用核心能力自行编排。核心中的保存继续使用独立线程，不反向访问日志对象，不增加退出排空。
+
+### 采集卡数据的保存
+
+`AcqSaver` 只有两个入口，均为 detached 线程逐段写 JSON，官邸不参与：`saveFrame` 每帧写 `<保存根>/<会话>/<帧时间>.json`，`saveWindProfiles` 在同步点写 `profile_<同步时间>.json`。每通道写名称、`rangeStartM`/`rangeStepM`、`freqStartMHz`/`freqStepMHz`、零风速参考、功率谱（行 = 门）、径向风与 CNR；风廓线写 `heightStartM`/`heightStepM` 与逐层水平风向、水平风速、垂直风速。非有限值写 `null`。
+
+
+验证：`saving_contract` 检查帧 JSON 与风廓线 JSON 的字段、通道顺序、null 缺测和风向换算；`processing_contract` 检查收包线程完成标准处理、主线程按通道发信号与四束反演。
+
+## 继承、请求与线程契约
+
+GMBFamily / DAQFamily 是纯 C++ 族接口，继承 FamilyBase<Request, CollectorBase>。FamilyDevice 同时继承具体 Device 与族接口，统一实现 device() / begin() / stop()；GMBDevice / DAQDevice 实现各族业务，具体官邸为 final Qt 末端。唯一 QObject 来自 Handle，不再另持 Core，也没有 onStream/onConsume 回调成员。
+
+官邸 paramsFor 校验并返回不可变的 GMBParameters / DAQParameters；协程按设备保存请求，经 begin 交 Device::start。Device 首次启动与看门狗重试都通过 const Params& 构造本型号 Collector，不保留轻量原型或 makeSelf 路径。完成结果以只读族基份额交等待器，具体消费仍保留型号类型。
+
+DAQCollector 只提供参数、帧时刻及收集契约；TypedDAQCollector<Channels...> 持有 optional<tuple<Channels...>>。型号 assemble 在收包线程凑齐字节并解析通道，标准 DAQChannel<Spec> 构造时计算径向风/CNR，处理完成后才判齐及 CAS 摘槽。主线程 onConsume 按通道发信号、提交 detached 保存、维护最近四束环，并在同步点反演风廓线；没有独立 DAQ 处理线程、锚点或启动交接。
+
+末端析构首句执行 PreDestruction；DAQ 先取消本层单卡协程，再接续 Device 同步关闭 Handle、撤运行槽及锁，保护尚在的派生成员。中间层析构不重复调用预析构。处理期间占住收包循环，耗时计入看门狗等待，关闭也要等当前处理结束；大帧、多卡场景的耗时余量尚需实测。
+
+TaskBase 登记族身份，任务结束依靠完成回调与锁取消链，QObject::destroyed 仅移除登记。QML 借用末端设备本身的身份、日志和状态；任务状态仍在协程结束后的排队收尾中回读。普通取消保留已完成帧，退出不新增保存排空。
+
+## 独立构建和验证
+
+安装对应 Qt 开发包，然后执行（将路径替换为本机 Qt 前缀）：
+
+```sh
+cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt/6.8.3/platform -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --parallel 2
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Windows 在安装 MSVC 的环境运行以上命令，Qt 选择对应 MSVC 构建；Linux 使用 GCC 与 OpenMP 开发环境。
+测试逐个独立编译公开头、拒绝意外加载 GUI/QML，并运行契约检查。processing_contract 通过实际 Handle/Device 交付四个方位的四帧，检查收包线程完成径向风处理、主线程发结果信号，以及第四帧同步时反演一次风廓线。GitHub Actions 在 Windows/Linux 使用 Qt 6.11.2，分别验证核心、无界面任务业务及可选 QML 组件；最低版本声明与最新验证版本是不同概念。
+
+## 接入应用
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(lidar_taskcore
+    GIT_REPOSITORY https://github.com/Lateef-ZHOU/TaskCore.git
+    GIT_TAG <经过验证的完整提交号>)
+FetchContent_MakeAvailable(lidar_taskcore)
+target_link_libraries(my_app PRIVATE Lidar::TaskCore)
+```
+
+从仓库提交列表选择固定版本；示例占位值必须替换，不使用浮动分支保证可复现。多个模块共用已有上游目标，应用若需覆盖上游版本应先统一声明并创建它们。标准 `FETCHCONTENT_SOURCE_DIR_LIDAR_模块名`（模块名大写无分隔）可用于本地开发，发布验证应取消覆盖并实际拉取远端。
+
+## 近期结构变更记录（历史）
+
+以下为改造过程中的阶段记录，包含已被后续提交替代的接口；现行用法以本文前面的契约及源码为准。
+
 2026-11-11 用户定：GMBMoveParameters 改名 GMBParameters；云台到位判据改为须连续在圈内：距离大于容差即清空起点与末次时刻、重新计时，落在容差边界上算在圈内。
 
 2026-11-11 用户定：停机不再以“有 run”为前提：Device<HandleT, CollectorT> 要求子类实现 stopCommands()；teardown 在连接打开时无条件发停机命令（有 run 用其 buildStop，否则用 stopCommands），断联（AboutToRelease）促停由 DeviceCore 负责。完成回调允许为空（空 = 调用方不关心结局）。云台族删除型号的 issueGoTo(optional) 与 issueStop 虚函数：设备页前往经 paramsFor 后走 Device::start（空回调、看门狗重发），停止即撤 run。
@@ -29,76 +101,6 @@
 2026-11-10 用户定（DAQ 参数）：DAQContext 并入 `DAQParameters{accumSec, pose, saveRoot, sessionDir, sync}`，形制对齐 GMBMoveParameters，Collector 只存 `parameters()`。官邸 `paramsFor(accumSec, pose, saveRoot, sessionDir, sync)` 做型号校验，累积时间越界记录原因并返回空；族口 `begin` 以同一判据复核后经 `create` 造完整 Collector；单卡测试与 TaskBase::start 发令前预验。
 
 2026-11-09 用户定：GMBDeviceBase 改为纯 C++ 旁支，不继承 QObject；`GMBDevice<HandleT, CollectorT>` 同时继承 `Device<HandleT, CollectorT>` 与族基，`device()` 协变返回自身的 Device 基类，族基保留纯虚 `device()` 供编排取 DeviceBase。mountingChanged/anglesReady 改为纯虚契约，由末端以 Q_SIGNALS 覆写；删除 `device` Q_PROPERTY、`deviceObject()` 与 GMBDeviceBase 的 QML 登记。TaskBase 的 addGimbal/start 接收 QObject* 并交叉转换验族，非云台拒收；TaskModule/SimOnlyTaskModule 的云台类型改为 QtObject。DAQ 族本轮不变。task_ui_smoke 改为触发按钮实际绑定的 Action（原先只发 clicked，Action 不执行，测试此前已失败）。验证：Windows 全选项独立构建零警告、CTest 4/4。
-
-协程与等待器、GMB/DAQ 设备族能力、族 Collector、DAQ 通道标准处理与统一落盘。Windows / Linux，C++20，CMake ≥ 3.28。
-
-## 边界与依赖
-
-- Qt ≥ 6.8.3；Qt 由使用环境提供，不在仓库中打包。
-- 上游：[Algorithm](https://github.com/Lateef-ZHOU/Algorithm), [DeviceCore](https://github.com/Lateef-ZHOU/DeviceCore)。已有同名 CMake 目标时复用；否则 FetchContent 拉取固定完整提交。
-- 本仓库不依赖 LiDAR_DataACQ 源码、应用目录或设备型号；不包含第三方二进制。
-- 核心只提供设备族的标准能力。保存格式、任务共用业务与族专用界面作为可选参考目标；三种具体编排、具体页面及型号处理仍由官邸实现。安装姿态等状态归设备实例。
-- 默认仅 Qt Core/OpenMP；保留主线程取消、收包完成消费和线程 quit/wait 契约，不提供退出保存排空。
-
-## 可选模块
-
-| 开关（默认 OFF） | 目标 | 内容 |
-|---|---|---|
-| TASKCORE_WITH_TASK_SUPPORT | Lidar::TaskSupport | TaskBase，登记族对象、启动校验、状态和取消；自动带保存目标，无 QML |
-| TASKCORE_WITH_QML | Lidar::TaskUI / Lidar.TaskUI | 可选族控件和任务参考页面；带 TaskSupport、UICore、ChartCore，要求 Qt 6.11.2 |
-
-消费者必须在 FetchContent_MakeAvailable 前选择开关。核心目标不反向链接附加模块。界面消费者链接 LidarTaskUIplugin 并显式 `Q_IMPORT_QML_PLUGIN(LidarTaskUIPlugin)`（动态 Qt 下的静态模块也需要）；同时导入 UICore/ChartCore 插件。各模块输出目录的两级父目录用于 QML 工具 IMPORT_PATH。
-
-TaskModule 接收两个 `list<QtObject>`（云台与采集卡设备本身），不认识具体设备页面。任务自己的速度、时间及保存设置在启动时形成快照，经族基 collectorFor 造请求；不读取设备页速度或累积范围。预览只调用族的 withinTravel/mounting。TaskBase 只登记族身份，锁/完成链同步取消；QObject 销毁通知移除登记，排队收尾保留。
-
-这些目标均是可选实现，不要求任务官邸继承 TaskBase 或 TaskModule。三个具体计划和协程不在本库，官邸可以只使用核心能力自行编排。附加保存继续使用独立线程，不反向访问日志对象，不增加退出排空。
-
-### 采集卡数据的保存
-
-`AcqSaver` 只有两个入口，均为 detached 线程逐段写 JSON，官邸不参与：`saveFrame` 每帧写 `<保存根>/<会话>/<帧时间>.json`，`saveWindProfiles` 在同步点写 `profile_<同步时间>.json`。每通道写名称、`rangeStartM`/`rangeStepM`、`freqStartMHz`/`freqStepMHz`、零风速参考、功率谱（行 = 门）、径向风与 CNR；风廓线写 `heightStartM`/`heightStepM` 与逐层水平风向、水平风速、垂直风速。非有限值写 `null`。
-
-
-验证：`saving_contract` 检查帧 JSON 与风廓线 JSON 的字段、通道顺序、null 缺测和风向换算；`processing_contract` 检查收包线程完成标准处理、主线程按通道发信号与四束反演。
-
-## 组合与线程契约
-
-2026-11-03 用户定：Handle 上传改为纯虚 `onData(const QByteArray &, RxTime)`。`Device<HandleT, CollectorT>` 同时继承具体 Handle 和纯 C++ DeviceBase，直接重写上传；删除 Handle 的上传回调参数/成员与 Device 的 handle_、makeDispatch。唯一 QObject 来自 Handle，具体 Core 末端以信号实现 lockChanged 并提供原只读属性；族层和官邸仍组合拥有 Core，onStream/onConsume 仍是原业务回调。本轮不改协议、收包线程、CAS、重试、取消或消费次序。
-
-族模板以最终 Core 为参数，并从 Core::CollectorType 约束 GMB/DAQ 的 Collector 族归属。DeviceBase 不再登记为 QML 类型；只读属性与锁信号在具体 Core 末端提供，无第二个 QObject 或信号转发。
-
-2026-10-26 用户定：GMB/DAQ 族改为组合持有 Device。GMBDeviceBase 继承 QObject，DAQDeviceBase 继承 QThread，只有官邸实现处理线程 run。Device 独持 onStream/onConsume 回调，删除 onCompleted 虚转发；完成帧仍在主线程先提交消费、再通知等待器。DAQWorker、各型号 QObject worker、sink_、独立 QThread 成员和 moveToThread 全部删除。
-
-每个 DAQ run 在工作线程创建局部 QObject 锚点及唯一的型号处理 lambda，排队消息只携只读 Collector 份额，不复制有状态的 lambda。风廓线环及写位置随该闭包在线程内构造、使用和销毁；闭包对官邸只发结果信号，不访问其主线程业务成员。QML 在主线程接收，跨线程 C++ 使用者也必须指定接收上下文。启动用一次 QSemaphore 交接，回调安装后才允许首帧提交，不维护运行/关闭状态位。
-
-末端 Core 析构首句执行 PreDestruction：同步停止 Handle，撤运行槽、释放锁，再销毁派生状态。非 final 传输类和 Device 模板不在析构中调用预析构。DAQ 仍先 quit/wait 处理线程、取消单卡协程，再销毁 Core。任务由完成回调和锁取消链结束；删除 retiring，QObject::destroyed 仅负责移除登记与虚拟卡借用，此时族对象仍存活。
-
-族层的 device 属性以 QObject* 借出具体 Core 的元对象机制面，无状态缓存和逐方法转发。QML 名称与日志由该机制面提供，状态在资源完成阶段回读；安装姿态、信号、型号规格与 objectName 仍归官邸。任务标识与历史查询边界保持。TaskBase 不订阅设备状态判断任务结束；具体协程退出时排队调用 refreshRunState，待帧退出后回读 done 并通知任务页，销毁通知仅移除登记引用。锁、CAS、重试、取消、已完成帧保留和退出不排空政策不变。
-
-## 独立构建和验证
-
-安装对应 Qt 开发包，然后执行（将路径替换为本机 Qt 前缀）：
-
-```sh
-cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt/6.8.3/platform -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release --parallel 2
-ctest --test-dir build -C Release --output-on-failure
-```
-
-Windows 在安装 MSVC 的环境运行以上命令，Qt 选择对应 MSVC 构建；Linux 使用 GCC 与 OpenMP 开发环境。
-测试逐个独立编译公开头、拒绝意外加载 GUI/QML，并运行契约检查。processing_contract 通过实际 Handle/Device 连续交付三帧，检查处理闭包状态延续、结果信号排队返回所属线程，以及关闭后不再引用线程内锚点。GitHub Actions 在 Windows/Linux 使用 Qt 6.11.2，分别验证核心、无界面任务业务及可选 QML 组件；最低版本声明与最新验证版本是不同概念。
-
-## 接入应用
-
-```cmake
-include(FetchContent)
-FetchContent_Declare(lidar_taskcore
-    GIT_REPOSITORY https://github.com/Lateef-ZHOU/TaskCore.git
-    GIT_TAG <经过验证的完整提交号>)
-FetchContent_MakeAvailable(lidar_taskcore)
-target_link_libraries(my_app PRIVATE Lidar::TaskCore)
-```
-
-从仓库提交列表选择固定版本；示例占位值必须替换，不使用浮动分支保证可复现。多个模块共用已有上游目标，应用若需覆盖上游版本应先统一声明并创建它们。标准 `FETCHCONTENT_SOURCE_DIR_LIDAR_模块名`（模块名大写无分隔）可用于本地开发，发布验证应取消覆盖并实际拉取远端。
 
 ## 来源与许可
 

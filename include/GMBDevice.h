@@ -96,10 +96,10 @@ public:
         std::chrono::milliseconds hold, const std::optional<GMBParameters::Speeds> &speeds) const = 0;
 
     // 世界角 → 云台位形（反解）：R_云台 = R_安装⁻¹ · R_世界(目标)，再由 `PanTiltModel::fromOrientation`
-    // 解出。`worldOf` 的去程，**不造斗**（设备页的"前往世界角"只要位形、直发即可，不需要结果）。
+    // 解出。`worldOf` 的去程，只做坐标换算，不构造 Collector 或发令。
     // 交出的是位形（水平 [0°,360°)、俯仰 [−90°,90°]）：目标的翻滚被忽略（用户定）。
-    // **不查本台行程**：行程是型号的事，官邸造斗 / 组包时验这个位形在不在自己的范围内（"小解耦"：
-    // 两边不互抄数）。**住族基**：它不碰 HandleT，只读安装标定，而标定是族级事实。
+    // **不查本台行程**：定位请求由型号 paramsFor 校验，任务预览使用型号 withinTravel，不在换算处复制行程。
+    // **住族基**：它不碰 HandleT，只读安装标定，而标定是族级事实。
     // **目标翻滚忽略、恒取 |俯仰| ≤ 90° 那支**（用户定 10-08）：(p,t) 与 (p+180°,180°−t) 指向相同、朝向差一个
     // 绕光轴的 180°，对一束激光无所谓（光没有翻滚）；倒装也因此照样落在两台的行程里。**云台自己的翻滚
     // 不是自由量而是被钉死的**：双轴只有两个自由度，换成有朝向的载荷（相机像旋、偏振轴）就要命。
@@ -116,7 +116,8 @@ public:
     virtual void anglesReady(RxTime at, double pan, double tilt, double azimuth, double elevation) = 0;
 };
 
-// 模板层经 FamilyDevice 继承具体 Device 与族基，完成造斗及收包接入；型号只解析协议、检查行程和组装命令。
+// 模板层经 FamilyDevice 继承具体 Device 与族基，负责标定、定位请求与收包接入；Collector 由 Device 按参数构造。
+// 型号负责解析协议、检查行程和组装命令。
 // 本层没有需要单独清理的线程源，不声明预析构；末端析构首句调用 Device 的预析构链。
 template <HandleLike HandleT, GMBCollectorLike CollectorT>
 class GMBDevice : public FamilyDevice<HandleT, CollectorT, GMBFamily>
