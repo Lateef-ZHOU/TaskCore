@@ -5,6 +5,7 @@
 #include <numbers>
 #include <span>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 #include <QDateTime>
@@ -19,8 +20,8 @@
 #include "VerticalWindProfile.h"
 
 // ============================================================
-// AcqSaver —— 采集卡族唯一的落盘格式与路径政策。写出只由本类负责：入参是族基 DAQCollector（通道数组
-// 与上下文）和风廓线结果，官邸不参与；以后改写法只改这里。
+// AcqSaver —— 采集卡族唯一的落盘格式与路径政策。写出只由本类负责：入参是具体收集器（通道元组与上下文）
+// 和风廓线结果，官邸不参与；以后改写法只改这里。
 //
 //   · 每帧一个 JSON：<root>/<会话>/<帧时间>.json，功率谱、径向风与 CNR 合并；
 //   · 风廓线同构：  <root>/<会话>/profile_<同步帧时间>.json。
@@ -55,10 +56,13 @@ public:
     };
 
     // 完成帧落盘；card 为设备的 ASCII 标识（objectName）。
-    static void saveFrame(std::shared_ptr<const DAQCollector> frame, QString card)
+    template <class C>
+        requires DAQCollectorLike<std::remove_const_t<C>>
+    static void saveFrame(std::shared_ptr<C> frame, QString card)
     {
+        using Collector = std::remove_const_t<C>;
         if (!frame || !frame->parameters.saveRoot) return;
-        std::thread(&AcqSaver::writeFrame, std::move(frame), std::move(card)).detach();
+        std::thread(&AcqSaver::writeFrame<Collector>, std::shared_ptr<const Collector>(std::move(frame)), std::move(card)).detach();
     }
 
     // 同步点的一组风廓线落盘；时刻取同步帧，会话取其上下文。
@@ -136,8 +140,9 @@ private:
         out.key("accumSec"); out.number(context.accumSec);
     }
 
-    // [独立线程] 每帧一个 JSON。
-    static void writeFrame(const std::shared_ptr<const DAQCollector> frame, const QString card)
+    // [独立线程] 每帧一个 JSON；通道按元组顺序写出。
+    template <DAQCollectorLike C>
+    static void writeFrame(const std::shared_ptr<const C> frame, const QString card)
     {
         const auto &context = frame->parameters;
         Writer out(context.saveRoot->filePath(context.sessionDir + "/" + fileStem(frame->frameTime()) + ".json"));
@@ -152,30 +157,36 @@ private:
         out.raw("},");
         out.key("channels");
         out.raw("[");
-        for (std::size_t i = 0; i < frame->channels().size(); ++i) {
-            const auto &channel = *frame->channels()[i];
-            if (i) out.raw(",");
-            out.raw("{");
-            out.key("name"); out.text(channel.name()); out.raw(",");
-            const auto &spectrum = channel.spectrum;
-            out.key("rangeStartM"); out.number(spectrum.rowStart); out.raw(",");
-            out.key("rangeStepM"); out.number(spectrum.rowStep); out.raw(",");
-            out.key("freqStartMHz"); out.number(spectrum.columnStart); out.raw(",");
-            out.key("freqStepMHz"); out.number(spectrum.columnStep); out.raw(",");
-            out.key("zeroWindMHz"); out.number(channel.zeroWindMHz()); out.raw(",");
-            out.key("spectrum");
-            out.raw("[");
-            for (int row = 0; spectrum.complete() && row < spectrum.rows; ++row) {
-                if (row) out.raw(",");
-                out.numbers(spectrum.row(row));
-            }
-            out.raw("],");
-            out.key("radialWind"); out.numbers(channel.radialWind); out.raw(",");
-            out.key("cnr"); out.numbers(channel.cnr);
-            out.raw("}");
-        }
+        bool first = true;
+        std::apply([&](const auto &...channel) { (writeChannel(out, channel, first), ...); }, frame->channels());
         out.raw("]}");
         out.commit();
+    }
+
+    // 一路通道：规格、功率谱、径向风与 CNR。
+    template <DAQChannelLike Channel>
+    static void writeChannel(Writer &out, const Channel &channel, bool &first)
+    {
+        if (!first) out.raw(",");
+        first = false;
+        out.raw("{");
+        out.key("name"); out.text(QString::fromUtf8(Channel::name)); out.raw(",");
+        const auto &spectrum = channel.spectrum;
+        out.key("rangeStartM"); out.number(spectrum.rowStart); out.raw(",");
+        out.key("rangeStepM"); out.number(spectrum.rowStep); out.raw(",");
+        out.key("freqStartMHz"); out.number(spectrum.columnStart); out.raw(",");
+        out.key("freqStepMHz"); out.number(spectrum.columnStep); out.raw(",");
+        out.key("zeroWindMHz"); out.number(Channel::zeroWindMHz); out.raw(",");
+        out.key("spectrum");
+        out.raw("[");
+        for (int row = 0; spectrum.complete() && row < spectrum.rows; ++row) {
+            if (row) out.raw(",");
+            out.numbers(spectrum.row(row));
+        }
+        out.raw("],");
+        out.key("radialWind"); out.numbers(channel.radialWind); out.raw(",");
+        out.key("cnr"); out.numbers(channel.cnr);
+        out.raw("}");
     }
 
     // [独立线程] 同步点一份风廓线 JSON；风向为气象来向，0–360°。

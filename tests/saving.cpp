@@ -49,18 +49,18 @@ struct SavedB : SavedA
     static constexpr const char *name = "B";
     static constexpr double zeroWindMHz = std::numeric_limits<double>::quiet_NaN();
 };
-class SavedFrame final : public DAQCollector
+class SavedFrame final : public TypedDAQCollector<DAQChannel<SavedA>, DAQChannel<SavedB>>
 {
 public:
-    explicit SavedFrame(const DAQParameters &p) : DAQCollector(p) {}
+    explicit SavedFrame(const DAQParameters &p) : TypedDAQCollector(p) {}
     QList<QByteArray> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
-    std::optional<DAQChannels> assemble(QByteArrayView, RxTime at) override
+    std::optional<Frame> assemble(QByteArrayView, RxTime at) override
     {
         frameTime_ = at;
         const std::vector<double> values{1, 2, 9, 2, 1, 3, 8, 3};
-        return DAQChannels{std::make_shared<TypedDAQChannel<SavedA>>(values), std::make_shared<TypedDAQChannel<SavedB>>(values)};
+        return Frame{DAQChannel<SavedA>(values), DAQChannel<SavedB>(values)};
     }
 };
 static_assert(DAQCollectorLike<SavedFrame>);

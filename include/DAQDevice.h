@@ -3,6 +3,7 @@
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <tuple>
 #include <utility>
 #include <vector>
 #include <boost/circular_buffer.hpp>
@@ -139,43 +140,39 @@ private:
     std::optional<QByteArray> onStream(const QByteArray &raw, RxTime) final { return raw; }
 
     // [主] 完成帧：按通道发功率谱与径向风、整帧落盘，进四束环；同步位为真时逐通道反演风廓线。
-    // 一组四束须是同一通道、同一距离轴且均已换算风速；任一束朝向未知则不反演。
+    // 四束是同一收集器类型的帧，第 I 路在每帧都是同一类型（同一规格、同一距离轴），无须运行时核对。
     void onConsume(const std::shared_ptr<const CollectorT> &frame) override
     {
+        constexpr auto indices = std::make_index_sequence<std::tuple_size_v<typename CollectorT::Frame>>{};
         const auto &context = frame->parameters;
-        for (std::size_t i = 0; i < frame->channels().size(); ++i)
-        {
-            const auto &channel = *frame->channels()[i];
-            Q_EMIT this->spectrumReady(int(i), channel.spectrum);
-            Q_EMIT this->radialReady(int(i), channel.radialWind, channel.cnr);
-        }
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            ((Q_EMIT this->spectrumReady(int(I), std::get<I>(frame->channels()).spectrum),
+              Q_EMIT this->radialReady(int(I), std::get<I>(frame->channels()).radialWind, std::get<I>(frame->channels()).cnr)), ...);
+        }(indices);
         if (context.saveRoot)
             AcqSaver::saveFrame(frame, this->objectName());
         beams_.push_back(frame);
         if (!context.sync || !beams_.full())
             return;
         std::vector<AcqSaver::ProfileChannel> profiles;
-        for (std::size_t i = 0; i < frame->channels().size(); ++i)
-        {
-            const auto &channel = *frame->channels()[i];
-            std::array<WindProfile::Input, WindProfile::kBeams> inputs;
-            bool usable = true;
-            for (std::size_t beam = 0; beam < inputs.size(); ++beam)
-            {
-                const auto &past = *beams_[beam]->channels()[i];
-                usable = usable && past.radialWind.sameAxis(channel.radialWind);
-                inputs[beam] = {beams_[beam]->parameters.pose, past.radialWind};
-            }
-            if (!usable)
-                continue;
-            auto profile = WindProfile::Calc(inputs, frame->frameTime());
-            if (!profile)
-                continue;
-            Q_EMIT this->profileReady(int(i), profile);
-            profiles.push_back({channel.name(), std::move(profile)});
-        }
+        [&]<std::size_t... I>(std::index_sequence<I...>) { (invert<I>(*frame, profiles), ...); }(indices);
         if (context.saveRoot)
             AcqSaver::saveWindProfiles(frame, std::move(profiles));
+    }
+
+    // 第 I 路：四束各取同一路径向风反演；朝向未知或网格不完整时 WindProfile 返回空、不反演。
+    template <std::size_t I>
+    void invert(const CollectorT &frame, std::vector<AcqSaver::ProfileChannel> &profiles)
+    {
+        using Channel = std::tuple_element_t<I, typename CollectorT::Frame>;
+        std::array<WindProfile::Input, WindProfile::kBeams> inputs;
+        for (std::size_t beam = 0; beam < inputs.size(); ++beam)
+            inputs[beam] = {beams_[beam]->parameters.pose, std::get<I>(beams_[beam]->channels()).radialWind};
+        auto profile = WindProfile::Calc(inputs, frame.frameTime());
+        if (!profile)
+            return;
+        Q_EMIT this->profileReady(int(I), profile);
+        profiles.push_back({QString::fromUtf8(Channel::name), std::move(profile)});
     }
 
     // 最近四束完成帧（主线程独写），满后新帧覆盖最旧一帧。

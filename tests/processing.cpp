@@ -62,16 +62,16 @@ struct TestChannelSpec
     static constexpr int rows = 2, columns = 8;
     static constexpr double rangeStartM = 100, rangeStepM = 30, frequencyStartMHz = 0, frequencyStepMHz = 1;
 };
-class TestCollector final : public DAQCollector
+class TestCollector final : public TypedDAQCollector<DAQChannel<TestChannelSpec>>
 {
 public:
-    explicit TestCollector(const DAQParameters &p) : DAQCollector(p) {}
+    explicit TestCollector(const DAQParameters &p) : TypedDAQCollector(p) {}
     QList<QByteArray> buildStart() const override { return {"start"}; }
     int timeoutMs() const override { return 0; }
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
     // 每口料即一整帧：在收包线程解析与处理。
-    std::optional<DAQChannels> assemble(QByteArrayView, RxTime at) override
+    std::optional<Frame> assemble(QByteArrayView, RxTime at) override
     {
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
@@ -79,7 +79,7 @@ private:
         for (int row = 0; row < TestChannelSpec::rows; ++row)
             for (int column = 0; column < TestChannelSpec::columns; ++column)
                 values.push_back(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
-        return DAQChannels{std::make_shared<TypedDAQChannel<TestChannelSpec>>(std::move(values))};
+        return Frame{DAQChannel<TestChannelSpec>(std::move(values))};
     }
     QThread *processedOn_ = nullptr;
 };
