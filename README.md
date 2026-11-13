@@ -1,3 +1,11 @@
+## 2026-11-14：FamilyDevice 类型与回调契约（用户定）
+
+FamilyDevice 在模板入口要求 CollectorLike、Collector 派生自本族 CollectorBase，且 Params 与族 Request 完全一致；删除构造体中的延后断言。编译期验证覆盖合法接入、同参数异族、同族异请求、抽象收集器及无关类型，错误在命名模板时拒绝。
+
+begin/stop 均由主线程调用，提交期间不泵事件。begin 返回 true 仅表示接受请求；完成通知排队回主线程，在 await_suspend 返回后交付。stop 验锁失败不撤单，通过后可同步交回空结果。验锁、重试、取消链和运行状态不变。本轮不推送；实际验证见主程序维护操作。
+
+验证：build-family 的 Windows/MSVC Release module_smoke（含正反类型断言）、public_headers 构建通过，CTest module_smoke 1/1 通过。证据：family-contract-build.log、family-contract-test-rebuild.log、family-contract-test.log。
+
 ## 2026-11-14：GMB 标定与模型析构契约注释（用户定）
 
 标定写入只验锁：空令牌在设备未被锁占用时可写入，不以是否存在手动定位 run 为条件。GimbalModel 的析构说明只描述自身受保护、非虚析构及禁止外部经基类指针删除的约束。仅纠正注释与说明，坐标换算、标定、重试和取消链未改；不推送。

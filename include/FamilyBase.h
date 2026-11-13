@@ -25,13 +25,14 @@ public:
     // 同一对象的机制面：族模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。
     [[nodiscard]] virtual DeviceBase &device() noexcept = 0;
 
-    // 等待器在 await_suspend 中提交请求，全部接受后才登记续体和取消铃。请求只能由官邸 paramsFor 造出、存在即有效；
-    // FamilyDevice 将请求交 Device::start，由 Device 构造本型号 Collector。返 false = 设备不收（被占 / 未连）。
+    // [主线程] 请求由官邸 paramsFor 校验生成；提交期间不泵事件。true 仅表示接受请求，false 表示被占或未连接。
+    // 接受后的完成通知须排队到主线程，在 await_suspend 返回后交付，不得在 begin 内同步完成；
+    // 等待器在全部请求被接受后才登记续体和取消铃。FamilyDevice 交 Device::start 构造本型号 Collector。
     [[nodiscard]] virtual bool begin(const Request &request, DoneFn<CollectorBase> done,
                                      const std::shared_ptr<const DeviceLock> &lock) = 0;
 
-    // 停机 / 撤单（等待器析构时对未结的单调）。与 begin 同一笔账：编排只认族基，停机的实现住机制层
-    // Device<>，由 FamilyDevice 转过去。可反复调用（幂等）：对交付 / 取消 / 拒收回滚三条出路一视同仁。
+    // [主线程] 停机 / 撤单：FamilyDevice 交 Device 验锁，失败不撤单；通过后可同步以空结果通知等待者。
+    // 等待器析构沿此口撤销未完成请求；允许重复调用，族口不返回验锁结果。
     virtual void stop(const std::shared_ptr<const DeviceLock> &lock) = 0;
 };
 
@@ -40,18 +41,16 @@ template <typename T>
 concept FamilyLike = std::derived_from<T, FamilyBase<typename T::Request, typename T::CollectorBase>>;
 
 // 族模板层的共同实现：同时继承具体 Device 与族基，统一实现 device() / begin() / stop()；族特有逻辑归各族模板。
-template <HandleLike HandleT, typename CollectorT, FamilyLike FamilyT>
+template <HandleLike HandleT, CollectorLike CollectorT, FamilyLike FamilyT>
+    requires std::derived_from<CollectorT, typename FamilyT::CollectorBase>
+          && std::same_as<typename CollectorT::Params, typename FamilyT::Request>
 class FamilyDevice : public Device<HandleT, CollectorT>, public FamilyT
 {
 protected:
     using DeviceT = Device<HandleT, CollectorT>;
 
     FamilyDevice(QString name, QString subtitle, QObject *parent)
-        : DeviceT(std::move(name), std::move(subtitle), parent)
-    {
-        static_assert(std::same_as<typename CollectorT::Params, typename FamilyT::Request>,
-                      "型号收集器的参数类型必须就是本族的请求类型");
-    }
+        : DeviceT(std::move(name), std::move(subtitle), parent) {}
 
 public:
     // 返回自身的 DeviceBase 基类。不用协变返回 DeviceT&：MSVC 对结构体非类型模板实参（如国耀规格）

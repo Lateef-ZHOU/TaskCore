@@ -3,12 +3,55 @@
 #include <type_traits>
 #include <QMetaType>
 #include <QCoreApplication>
+#include <QByteArray>
+#include <QList>
 #include "DeviceCoro.h"
+#include "FamilyBase.h"
+#include "HandleBase.h"
+#include "RunBase.h"
 #include "DAQFamily/DAQDevice.h"
 #include "GMBFamily/GMBDevice.h"
 #include "DAQFamily/WindProfile.h"
 static_assert(AwaitableDevice<GMBFamily>);
 static_assert(AwaitableDevice<DAQFamily>);
+namespace {
+// 在不构造设备或调用 begin 的情况下检查模板入口，避免错误延后到构造体或回调转换。
+class ContractCollectorBase : public Collector<int, int>
+{
+protected:
+    explicit ContractCollectorBase(const int &value) : Collector(value) {}
+};
+class OtherCollectorBase : public Collector<int, int>
+{
+protected:
+    explicit OtherCollectorBase(const int &value) : Collector(value) {}
+};
+template<class Base>
+class ContractCollector : public Base
+{
+public:
+    explicit ContractCollector(const int &value) : Base(value) {}
+    bool settled() const override { return false; }
+    QList<QByteArray> buildStart() const override { return {}; }
+    int timeoutMs() const override { return 1; }
+private:
+    void onFeed(const int &, RxTime) override {}
+};
+using MatchingCollector = ContractCollector<ContractCollectorBase>;
+using ForeignCollector = ContractCollector<OtherCollectorBase>;
+using ContractFamily = FamilyBase<int, ContractCollectorBase>;
+using WrongRequestFamily = FamilyBase<long, ContractCollectorBase>;
+template<class C, class F>
+concept CanNameFamilyDevice = requires { typename FamilyDevice<Handle<int, int>, C, F>; };
+static_assert(CollectorLike<MatchingCollector> && CollectorLike<ForeignCollector>);
+static_assert(CanNameFamilyDevice<MatchingCollector, ContractFamily>);
+// 相同 Params 不能替代族归属；相同族归属也不能替代精确请求类型。
+static_assert(!CanNameFamilyDevice<ForeignCollector, ContractFamily>);
+static_assert(!CanNameFamilyDevice<MatchingCollector, WrongRequestFamily>);
+static_assert(!CanNameFamilyDevice<ContractCollectorBase, ContractFamily>);
+static_assert(!CanNameFamilyDevice<int, ContractFamily>);
+static_assert(!CanNameFamilyDevice<MatchingCollector, int>);
+}
 struct ProbeSpec {
     static constexpr const char *name = "test";
     static constexpr int rangeGateCount = 1, frequencyBinCount = 1;
