@@ -159,7 +159,9 @@ private:
         std::array<WindProfile::Input, WindProfile::kBeams> inputs;
         for (std::size_t beam = 0; beam < inputs.size(); ++beam)
             inputs[beam] = {beams_[beam]->parameters.pose, std::get<I>(beams_[beam]->channels()).radialWind};
-        auto profile = WindProfile::Calc(inputs, frame.frameTime());
+        auto profile = [&]<DAQChannelSpec Spec>(const DAQChannel<Spec> &) {
+            return shareWindProfile(WindProfile::Calc<Spec>(inputs, frame.frameTime()));
+        }(std::get<I>(frame.channels()));
         if (!profile)
             return;
         Q_EMIT this->profileReady(int(I), profile);

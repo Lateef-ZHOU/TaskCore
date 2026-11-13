@@ -237,3 +237,10 @@ GimbalSection 的四角定位复用 UICore ReadoutField，将标题、实测读�
 TaskPlanView 的状态行复用 UICore FieldRow，统一名称列与列间距，保留原标签颜色、状态圆点、阶段文字及运行分组留白；业务逻辑不变。
 
 验证：Windows 主程序 Release 增量构建、四窗装配和八秒桌面冒烟通过，运行 stderr 为空；UICore CTest 3/3通过。未连接硬件，未推送。
+
+
+## 2026-11-13：不可变墙钟风廓线（用户定）
+
+DAQ 按每个 DAQChannel 的具体 Spec 调用 WindProfile::Calc<Spec>，计算完成后发布不可变静态帧。异构通道绘图及保存列表持有保活原帧的只读视图；原保存字段、反演、处理线程和取消链保持。
+
+本轮使用本地源码覆盖验证，尚未推送；具体集成验证见主程序维护操作。
