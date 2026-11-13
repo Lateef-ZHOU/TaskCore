@@ -1,3 +1,9 @@
+## 2026-11-14：协程下移与设备族更名（用户定）
+
+原 TaskCore 本地仓库、CMake 主目标及配置开关改名为 FamilyCore、Lidar::FamilyCore、FAMILYCORE_WITH_*；DeviceCoro.h 移入 DeviceCore。FamilyBase/FamilyLike、GMB/DAQ、保存与可选任务参考业务/UI 仍在本库。TaskSupport/TaskUI 的用途及名称保持。本地联调须覆盖配套 DeviceCore、Algorithm 及本库源码。GitHub 仓库尚未改名或推送，远端 URL 暂保留 TaskCore.git；发布时再改远端名称并更新所有固定提交，当前旧提交不能单独构建本轮新接口。
+
+Windows/MSVC Release 新目录配置与构建通过：build-core 核心 CTest 4/4，build-family 的 QML/网口表单配置 CTest 5/5；公开头独立编译通过，GMB/DAQ 族均满足 DeviceCore 的 AwaitableDevice 契约。使用相邻源码覆盖，运行、保存和取消逻辑未改。
+
 ## 2026-11-14：删除旧风场测试依赖
 
 Windows/MSVC Release 与公开头编译通过，CTest 5/5。
@@ -22,7 +28,7 @@ Windows/MSVC Release 增量构建、公开头独立编译及 CTest 5/5 通过；
 
 DAQDevice 按 Collector 通道规格生成 Profiles 元组，每项是 shared_ptr<const VerticalWindProfileUnit<Spec>>；模板虚接口由具体官邸直接实现为 profilesReady 信号，删除族基的旧 profileReady。元组只传原帧份额，失败通道为空。AcqSaver 直接接收该元组，通道名称来自 Spec，跳过空通道；文件路径、JSON 字段、缺测 null 与数值转换保持。最近四束 Collector 历史、反演、保存线程与取消链保持。Windows/MSVC Release 构建及公开头编译通过，CTest 5/5，覆盖四束处理及空首通道后的 JSON 输出。 本轮不推送。
 
-# TaskCore
+# FamilyCore
 
 ## 风廓线类型入口（2026-11-13 用户定）
 
@@ -49,7 +55,7 @@ AcqSaver 直接从 Algorithm 的 `DAQChannelSpec.h` 引入 `VerticalWindProfileU
 
 本轮验证：本地依赖覆盖的 MSVC Release 增量构建及 CTest 5/5 通过，保存专项区分 null 缺测和数值零静风。
 
-协程与等待器、GMB/DAQ 设备族能力、族 Collector、DAQ 通道标准处理与统一落盘。Windows / Linux，C++20，CMake ≥ 3.28。
+GMB/DAQ 设备族能力、族 Collector、DAQ 通道标准处理与统一落盘；协程与等待器由 DeviceCore 提供。Windows / Linux，C++20，CMake ≥ 3.28。
 
 验证：MSVC Release、公开头编译与 CTest 5/5 通过；保存、处理、GMB 收集器与任务界面冒烟通过。 使用本地依赖覆盖，未推送。
 
@@ -65,8 +71,8 @@ AcqSaver 直接从 Algorithm 的 `DAQChannelSpec.h` 引入 `VerticalWindProfileU
 
 | 开关（默认 OFF） | 目标 | 内容 |
 |---|---|---|
-| TASKCORE_WITH_TASK_SUPPORT | Lidar::TaskSupport | TaskBase，登记族对象、启动校验、状态和取消，无 QML |
-| TASKCORE_WITH_QML | Lidar::TaskUI / Lidar.TaskUI | 可选族控件和任务参考页面；带 TaskSupport、UICore、ChartCore，要求 Qt 6.11.2 |
+| FAMILYCORE_WITH_TASK_SUPPORT | Lidar::TaskSupport | TaskBase，登记族对象、启动校验、状态和取消，无 QML |
+| FAMILYCORE_WITH_QML | Lidar::TaskUI / Lidar.TaskUI | 可选族控件和任务参考页面；带 TaskSupport、UICore、ChartCore，要求 Qt 6.11.2 |
 
 消费者必须在 FetchContent_MakeAvailable 前选择开关。核心目标不反向链接附加模块。界面消费者链接 LidarTaskUIplugin 并显式 `Q_IMPORT_QML_PLUGIN(LidarTaskUIPlugin)`（动态 Qt 下的静态模块也需要）；同时导入 UICore/ChartCore 插件。各模块输出目录的两级父目录用于 QML 工具 IMPORT_PATH。
 
@@ -118,11 +124,11 @@ Windows 在安装 MSVC 的环境运行以上命令，Qt 选择对应 MSVC 构建
 
 ```cmake
 include(FetchContent)
-FetchContent_Declare(lidar_taskcore
+FetchContent_Declare(lidar_familycore
     GIT_REPOSITORY https://github.com/Lateef-ZHOU/TaskCore.git
     GIT_TAG <经过验证的完整提交号>)
-FetchContent_MakeAvailable(lidar_taskcore)
-target_link_libraries(my_app PRIVATE Lidar::TaskCore)
+FetchContent_MakeAvailable(lidar_familycore)
+target_link_libraries(my_app PRIVATE Lidar::FamilyCore)
 ```
 
 从仓库提交列表选择固定版本；示例占位值必须替换，不使用浮动分支保证可复现。多个模块共用已有上游目标，应用若需覆盖上游版本应先统一声明并创建它们。标准 `FETCHCONTENT_SOURCE_DIR_LIDAR_模块名`（模块名大写无分隔）可用于本地开发，发布验证应取消覆盖并实际拉取远端。
@@ -169,7 +175,7 @@ target_link_libraries(my_app PRIVATE Lidar::TaskCore)
 
 ## 可选网口表单适配
 
-`TASKCORE_WITH_PCAP_FORMS=ON` 提供 `Lidar::PcapForms` 与 `<PcapForm.h>`，共用枚举快照、连接参数校验，不保存第二份表单草稿。`connectionParameters()` 无参，仅交网卡选项、提示及默认下标；固定线路参数由型号在连接时交给 `parseParameters`，不再通过此接口交给 QML。需要在首次配置 HandleCore 前开启 `HANDLECORE_WITH_PCAP`，原生依赖要求沿用该库。默认关闭，核心和仿真官邸无需 libpcap。
+`FAMILYCORE_WITH_PCAP_FORMS=ON` 提供 `Lidar::PcapForms` 与 `<PcapForm.h>`，共用枚举快照、连接参数校验，不保存第二份表单草稿。`connectionParameters()` 无参，仅交网卡选项、提示及默认下标；固定线路参数由型号在连接时交给 `parseParameters`，不再通过此接口交给 QML。需要在首次配置 HandleCore 前开启 `HANDLECORE_WITH_PCAP`，原生依赖要求沿用该库。默认关闭，核心和仿真官邸无需 libpcap。
 
 原可选 `PcapCard` 已无使用方并删除。普通串口/网口连接区使用 UICore 的 `ConnectionSection`，只收拢选择项和双按钮布局；枚举、选择值、设备命令及日志仍由官邸提供。`PcapForm` 的枚举、校验和构参职责保持。
 

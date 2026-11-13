@@ -7,6 +7,8 @@
 #include "GMBDevice.h"
 #include "WindProfile.h"
 #include "LidarForward.h"
+static_assert(AwaitableDevice<GMBFamily>);
+static_assert(AwaitableDevice<DAQFamily>);
 struct ProbeSpec {
     static constexpr const char *name = "test";
     static constexpr int rangeGateCount = 1, frequencyBinCount = 1;
