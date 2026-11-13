@@ -1,7 +1,6 @@
 #pragma once
 #include <chrono>
 #include <cmath>
-#include <cstddef>
 #include <memory>
 #include <limits>
 #include <numbers>
@@ -20,6 +19,7 @@
 
 #include "DAQFamily/DAQCollector.h"
 #include "DAQFamily/DAQChannelSpec.h"
+#include "RunBase.h" // RxTime
 
 // ============================================================
 // AcqSaver —— 采集卡族唯一的落盘格式与路径政策。写出只由本类负责：入参是具体收集器（通道元组与上下文）
@@ -87,7 +87,16 @@ private:
         [[nodiscard]] bool open()
         {
             const QDir dir = QFileInfo(file_.fileName()).dir();
-            return dir.mkpath(QStringLiteral(".")) && file_.open(QIODevice::WriteOnly);
+            if (!dir.mkpath(QStringLiteral("."))) {
+                qWarning().noquote() << "Cannot create acquisition directory:" << dir.absolutePath()
+                                     << "for file:" << file_.fileName();
+                return false;
+            }
+            if (!file_.open(QIODevice::WriteOnly)) {
+                qWarning().noquote() << "Cannot open acquisition file:" << file_.fileName() << file_.errorString();
+                return false;
+            }
+            return true;
         }
         void raw(const char *text) { file_.write(text); }
         void key(const char *name)
@@ -98,8 +107,23 @@ private:
         }
         void text(const QString &value)
         {
-            QByteArray escaped = value.toUtf8();
-            escaped.replace("\\", "\\\\").replace("\"", "\\\"");
+            QByteArray escaped;
+            const auto utf8 = value.toUtf8();
+            escaped.reserve(utf8.size());
+            constexpr char hex[] = "0123456789abcdef";
+            for (const char byte : utf8) {
+                const auto code = static_cast<unsigned char>(byte);
+                if (byte == '\\' || byte == '"') {
+                    escaped.append('\\');
+                    escaped.append(byte);
+                } else if (code < 0x20) {
+                    escaped.append("\\u00");
+                    escaped.append(hex[code >> 4]);
+                    escaped.append(hex[code & 0x0f]);
+                } else {
+                    escaped.append(byte);
+                }
+            }
             file_.write("\"" + escaped + "\"");
         }
         void number(const double value)
@@ -146,10 +170,7 @@ private:
         const std::tuple<Channels...> &channels, const QString &card)
     {
         Writer out(context.saveRoot->filePath(context.sessionDir + "/" + fileStem(at) + ".json"));
-        if (!out.open()) {
-            qWarning().noquote() << "Cannot open acquisition frame file under:" << context.saveRoot->path();
-            return;
-        }
+        if (!out.open()) return;
         out.raw("{");
         writeFrameInfo(out, context, at);
         out.raw(",");
@@ -195,10 +216,7 @@ private:
         const std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Specs>>...> &channels)
     {
         Writer out(context.saveRoot->filePath(context.sessionDir + "/profile_" + fileStem(at) + ".json"));
-        if (!out.open()) {
-            qWarning().noquote() << "Cannot open wind profile file under:" << context.saveRoot->path();
-            return;
-        }
+        if (!out.open()) return;
         out.raw("{");
         writeFrameInfo(out, context, at);
         out.raw("},");

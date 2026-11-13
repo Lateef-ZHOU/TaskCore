@@ -1,3 +1,9 @@
+## 2026-11-14：AcqSaver 字符串与失败诊断（用户定）
+
+JSON 字符串写出补齐 U+0000–U+001F 控制字符转义，保留引号、反斜杠转义及 UTF-8 原文；普通字符串、字段顺序、六位有效数字、缺测 null、路径及数据数组格式不变。Writer 在失败现场区分目录创建与文件打开：建目录失败报告目录和目标文件，打开失败报告完整文件名与 QSaveFile 错误原因；调用方不再重复记录笼统日志。后台仍只使用 qWarning，不访问设备或 QML 日志对象。
+
+删除无用的 <cstddef>，直接包含声明 RxTime 的 RunBase.h。线程捕获、只读结果份额和退出不排空行为保持。验证：Windows/MSVC Release saving_contract、public_headers 构建通过，保存专项 70 项检查通过；覆盖全部 32 个控制字符、引号、反斜杠、中文往返，以及普通文件阻挡目录创建、目录占据文件名的两类失败。原格式逐字节比对及 Collector 先释放的生命周期验证保留并通过。证据：build-family/acqsaver-cleanup-{build,test}.log；主程序构建与冒烟见其维护操作。本轮不推送。
+
 ## 2026-11-14：FamilyDevice 类型与回调契约（用户定）
 
 FamilyDevice 在模板入口要求 CollectorLike、Collector 派生自本族 CollectorBase，且 Params 与族 Request 完全一致；删除构造体中的延后断言。编译期验证覆盖合法接入、同参数异族、同族异请求、抽象收集器及无关类型，错误在命名模板时拒绝。

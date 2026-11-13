@@ -4,15 +4,18 @@
 #include <thread>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <utility>
 #include <vector>
 #include <QByteArray>
 #include <QByteArrayView>
+#include <QChar>
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
@@ -23,12 +26,23 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QList>
+#include <QSaveFile>
+#include <QString>
 #include <QString>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QtLogging>
 
 namespace {
 int checks = 0;
+std::mutex diagnosticGate;
+std::vector<QString> diagnostics;
+
+void captureDiagnostic(QtMsgType, const QMessageLogContext &, const QString &message)
+{
+    const std::lock_guard lock(diagnosticGate);
+    diagnostics.push_back(message);
+}
 void check(bool ok, const char *message)
 {
     ++checks;
@@ -49,6 +63,21 @@ QJsonObject readCompleted(const QString &path)
         QThread::msleep(5);
     }
     check(false, "saved JSON did not complete");
+    return {};
+}
+
+QString waitDiagnostic(const std::size_t index)
+{
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < 5000) {
+        {
+            const std::lock_guard lock(diagnosticGate);
+            if (diagnostics.size() > index) return diagnostics[index];
+        }
+        QThread::msleep(5);
+    }
+    check(false, "save failure diagnostic did not arrive");
     return {};
 }
 
@@ -245,6 +274,47 @@ int main(int argc, char **argv)
     // 不落盘：saveRoot 为空时入口直接返回。
     AcqSaver::saveFrame(std::make_shared<const SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, std::nullopt, {}, false)),
                         QStringLiteral("Card"));
+
+    // 字符串字段往返保留全部 JSON 控制字符、引号、反斜杠和 UTF-8；不改变普通帧格式。
+    QString cardName = QString::fromUtf8("采集卡 \"A\" \\");
+    for (ushort code = 0; code < 0x20; ++code) cardName.append(QChar(code));
+    auto escapedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "escaped", false));
+    check(escapedFrame->feed(QByteArray("x"), at), "escape frame did not complete");
+    AcqSaver::saveFrame(std::shared_ptr<const SavedFrame>(std::move(escapedFrame)), cardName);
+    const QString escapedPath = root.filePath("escaped/" + AcqSaver::fileStem(at) + ".json");
+    check(readCompleted(escapedPath).value("frame").toObject().value("card").toString() == cardName,
+          "JSON string controls, quotes, backslashes or UTF-8 did not round-trip");
+    QFile escapedFile(escapedPath);
+    check(escapedFile.open(QIODevice::ReadOnly), "cannot inspect escaped JSON");
+    const auto escapedBytes = escapedFile.readAll();
+    for (char code = 0; code < 0x20; ++code)
+        check(!escapedBytes.contains(code), "raw control character leaked into JSON");
+
+    // 用普通文件阻挡目录创建，用目录占据目标文件名；跨平台稳定触发两种失败，不依赖权限配置。
+    const auto previousHandler = qInstallMessageHandler(captureDiagnostic);
+    QFile obstacle(root.filePath("obstacle"));
+    check(obstacle.open(QIODevice::WriteOnly), "cannot create directory obstacle");
+    obstacle.close();
+    auto blockedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "obstacle/session", false));
+    check(blockedFrame->feed(QByteArray("x"), at), "blocked frame did not complete");
+    AcqSaver::saveFrame(std::shared_ptr<const SavedFrame>(std::move(blockedFrame)), "Card");
+    const auto directoryFailure = waitDiagnostic(0);
+    check(directoryFailure.contains("Cannot create acquisition directory:")
+          && directoryFailure.contains(root.filePath("obstacle/session"))
+          && directoryFailure.contains(AcqSaver::fileStem(at) + ".json"), "directory failure lacks stage or full path");
+
+    const auto occupiedPath = root.filePath("occupied/profile_" + AcqSaver::fileStem(at) + ".json");
+    check(QDir().mkpath(occupiedPath), "cannot create filename obstacle");
+    auto occupiedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "occupied", true));
+    check(occupiedFrame->feed(QByteArray("x"), at), "occupied frame did not complete");
+    // 从同一 QSaveFile 路径取得平台自己的错误文案，不硬编码英文或本地化系统信息。
+    QSaveFile expectedFailure(occupiedPath);
+    check(!expectedFailure.open(QIODevice::WriteOnly), "directory unexpectedly opened as output file");
+    AcqSaver::saveWindProfiles(std::shared_ptr<const SavedFrame>(std::move(occupiedFrame)), std::tuple{unit});
+    const auto fileFailure = waitDiagnostic(1);
+    check(fileFailure.contains("Cannot open acquisition file:") && fileFailure.contains(occupiedPath)
+          && fileFailure.contains(expectedFailure.errorString()), "file failure lacks path or concrete error");
+    qInstallMessageHandler(previousHandler);
     std::cout << "saving checks passed: " << checks << '\n';
     return 0;
 }
