@@ -1,7 +1,9 @@
 #pragma once
 #include "ObjectPolicy.h"
 #include <cmath>
+#include <memory>
 #include <numbers>
+#include <utility>
 #include <vector>
 
 #include "GaussFit.h"

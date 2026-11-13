@@ -325,3 +325,7 @@ DAQChannel 的谱、径向风和 CNR 改为 LinearSpectrumPtr / LinearSeriesPtr�
 
 2026-11-13 本轮验证：Windows/MSVC Release 构建及公开头独立编译通过；build-params 中 CTest 5/5 通过。使用本地源码依赖，未验证 Linux 或远端拉取；暂不推送。
 
+## 2026-11-14：径向风直接依赖整理（用户定）
+
+`DAQFamily/RadialWind.h` 显式包含 `<memory>` 和 `<utility>`，不再间接借用 `LinearArray.h` 的标准库声明。径向风/CNR 算法、数据布局和共享份额传输不变；UICore 依赖拆分仍暂缓。本轮仅本地整理，不推送；验证记录见主程序维护操作。
+
