@@ -1,3 +1,7 @@
+## 2026-11-14 风廓线原帧直接传输（用户定）
+
+DAQDevice 按 Collector 通道规格生成 Profiles 元组，每项是 shared_ptr<const VerticalWindProfileUnit<Spec>>；模板虚接口由具体官邸直接实现为 profilesReady 信号，删除族基的旧 profileReady。元组只传原帧份额，失败通道为空。AcqSaver 直接接收该元组，通道名称来自 Spec，跳过空通道；文件路径、JSON 字段、缺测 null 与数值转换保持。最近四束 Collector 历史、反演、保存线程与取消链保持。Windows/MSVC Release 构建及公开头编译通过，CTest 5/5，覆盖四束处理及空首通道后的 JSON 输出。 本轮不推送。
+
 # TaskCore
 
 ## 风廓线类型入口（2026-11-13 用户定）

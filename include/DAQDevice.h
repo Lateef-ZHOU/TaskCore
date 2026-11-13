@@ -5,7 +5,6 @@
 #include <optional>
 #include <tuple>
 #include <utility>
-#include <vector>
 #include <boost/circular_buffer.hpp>
 #include <QDir>
 #include <QString>
@@ -43,7 +42,6 @@ public:
     virtual void spectrumReady(int channel, const LinearSpectrumPtr &spectrum) = 0;
     // 逐门剖面带斜距线性轴；页面原样交给径向风图，图按创建配置核对网格。
     virtual void radialReady(int channel, const LinearSeriesPtr &speeds, const LinearSeriesPtr &cnr) = 0;
-    virtual void profileReady(int channel, VerticalWindProfilePtr profile) = 0;
 };
 
 // 模板层继承具体 Device 与族基：Device 按参数造斗；本层在主线程显示、提交保存、维护四束环与反演，并提供单卡测试。
@@ -51,6 +49,15 @@ public:
 template <HandleLike HandleT, DAQCollectorLike CollectorT>
 class DAQDevice : public FamilyDevice<HandleT, CollectorT, DAQFamily>
 {
+    // 仅推导各通道结果类型，不构造数据或擦除 Spec。
+    template<DAQChannelSpec... Specs>
+    static auto profileTypes(const std::tuple<DAQChannel<Specs>...> &)
+        -> std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Specs>>...>;
+public:
+    using Profiles = decltype(profileTypes(std::declval<const typename CollectorT::Frame &>()));
+    // Qt 信号由末端实现；元组仅含原帧的只读份额，空项表示该通道未反演成功。
+    virtual void profilesReady(const Profiles &profiles) = 0;
+private:
     using DeviceT = Device<HandleT, CollectorT>;
 protected:
     DAQDevice(QString name, QString subtitle, QObject *parent)
@@ -146,26 +153,23 @@ private:
         beams_.push_back(frame);
         if (!context.sync || !beams_.full())
             return;
-        std::vector<AcqSaver::ProfileChannel> profiles;
-        [&]<std::size_t... I>(std::index_sequence<I...>) { (invert<I>(*frame, profiles), ...); }(indices);
+        auto profiles = [&]<std::size_t... I>(std::index_sequence<I...>) {
+            return Profiles{invert<I>(*frame)...};
+        }(indices);
+        Q_EMIT this->profilesReady(profiles);
         AcqSaver::saveWindProfiles(frame, std::move(profiles));
     }
 
-    // 第 I 路：四束各取同一路径向风反演；朝向未知或网格不完整时 WindProfile 返回空、不反演。
+    // 第 I 路仍从最近四束取同一路径向风；反演直接返回原帧份额。
     template <std::size_t I>
-    void invert(const CollectorT &frame, std::vector<AcqSaver::ProfileChannel> &profiles)
+    auto invert(const CollectorT &frame)
     {
-        using Channel = std::tuple_element_t<I, typename CollectorT::Frame>;
         std::array<WindProfile::Input, WindProfile::kBeams> inputs;
         for (std::size_t beam = 0; beam < inputs.size(); ++beam)
             inputs[beam] = {beams_[beam]->parameters.pose, std::get<I>(beams_[beam]->channels()).radialWind};
-        auto profile = [&]<DAQChannelSpec Spec>(const DAQChannel<Spec> &) {
-            return shareWindProfile(WindProfile::Calc<Spec>(inputs, frame.frameTime()));
+        return [&]<DAQChannelSpec Spec>(const DAQChannel<Spec> &) {
+            return WindProfile::Calc<Spec>(inputs, frame.frameTime());
         }(std::get<I>(frame.channels()));
-        if (!profile)
-            return;
-        Q_EMIT this->profileReady(int(I), profile);
-        profiles.push_back({QString::fromUtf8(Channel::name), std::move(profile)});
     }
 
     // 最近四束完成帧（主线程独写），满后新帧覆盖最旧一帧。

@@ -132,8 +132,8 @@ int main(int argc, char **argv)
     (*filling)[1] = LinAlg::Vec3(0, -3, 0);
     (*filling)[3] = LinAlg::Vec3::Zeros();
     const std::shared_ptr<const VerticalWindProfileUnit<ProfileSpec>> frozen = std::move(filling);
-    const auto unit = shareWindProfile(frozen);
-    AcqSaver::saveWindProfiles(frame, {{QStringLiteral("A"), unit}});
+    const auto unit = frozen;
+    AcqSaver::saveWindProfiles(frame, std::tuple{std::shared_ptr<const VerticalWindProfileUnit<ProfileSpec>>{}, unit});
     const auto profile = readCompleted(root.filePath("session/profile_" + AcqSaver::fileStem(at) + ".json"));
     const auto first = profile.value("channels").toArray()[0].toObject();
     check(profile.value("frame").toObject().value("session").toString() == "session"

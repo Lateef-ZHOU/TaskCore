@@ -102,7 +102,7 @@ Q_SIGNALS:
     void lockChanged(HandleCore::ResourcePhase) override;
     void spectrumReady(int channel, const LinearSpectrumPtr &spectrum) override;
     void radialReady(int channel, const LinearSeriesPtr &speeds, const LinearSeriesPtr &cnr) override;
-    void profileReady(int channel, VerticalWindProfilePtr profile) override;
+    void profilesReady(const Profiles &profiles) override;
 private:
     void PreDestruction() noexcept final
     {
@@ -139,10 +139,11 @@ int main(int argc, char **argv)
             qFatal("standard radial processing differs");
         ++radials;
     });
-    QObject::connect(&device, &TestDevice::profileReady, &app, [&](int channel, VerticalWindProfilePtr profile) {
+    QObject::connect(&device, &TestDevice::profilesReady, &app, [&](const TestDevice::Profiles &result) {
+        const auto &profile = std::get<0>(result);
         // 第 0 束 100 m 起、30 m 门距，60° 仰角：高度起点 100·sin60°、层距 30·sin60°。
-        if (channel != 0 || !profile || profile->winds.size() != 2 || std::abs(profile->winds.start - 100 * std::sin(std::numbers::pi / 3)) > 1e-9
-            || std::abs(profile->winds.step - 30 * std::sin(std::numbers::pi / 3)) > 1e-9) qFatal("wind profile differs");
+        if (!profile || profile->size() != 2 || std::abs(profile->heightStartM() - 100 * std::sin(std::numbers::pi / 3)) > 1e-9
+            || std::abs(profile->heightStepM() - 30 * std::sin(std::numbers::pi / 3)) > 1e-9) qFatal("wind profile differs");
         ++profiles;
     });
     if (!device.open(Parameters{std::make_shared<Transport>()}) || !until([&] { return device.isOpen(); })) return 1;

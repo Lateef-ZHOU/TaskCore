@@ -50,13 +50,6 @@ public:
         return calendarTime(frameTime).toString("yyyy-MM-dd HH:mm:ss.zzz");
     }
 
-    // 一路通道的风廓线结果；名称取自通道规格。
-    struct ProfileChannel
-    {
-        QString name;
-        VerticalWindProfilePtr profile;
-    };
-
     // 完成帧以只读份额交入；card 为设备的 ASCII 标识（objectName）。
     template <DAQCollectorLike C>
     static void saveFrame(std::shared_ptr<const C> frame, QString card)
@@ -66,10 +59,15 @@ public:
     }
 
     // 同步点的一组风廓线落盘；时刻取同步帧，会话取其上下文。
-    static void saveWindProfiles(std::shared_ptr<const DAQCollector> frame, std::vector<ProfileChannel> channels)
+    template<DAQCollectorLike C, DAQChannelSpec... Specs>
+    static void saveWindProfiles(std::shared_ptr<const C> frame,
+        std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Specs>>...> channels)
     {
-        if (!frame || !frame->parameters.saveRoot || channels.empty()) return;
-        std::thread(&AcqSaver::writeWindProfiles, std::move(frame), std::move(channels)).detach();
+        if (!frame || !frame->parameters.saveRoot
+            || !std::apply([](const auto &...p) { return (bool(p) || ...); }, channels)) return;
+        std::thread([frame = std::move(frame), channels = std::move(channels)] {
+            writeWindProfiles(*frame, channels);
+        }).detach();
     }
 
 private:
@@ -190,23 +188,27 @@ private:
     }
 
     // [独立线程] 同步点一份风廓线 JSON；风向为气象来向，0–360°。
-    static void writeWindProfiles(const std::shared_ptr<const DAQCollector> frame, const std::vector<ProfileChannel> channels)
+    template<DAQChannelSpec... Specs>
+    static void writeWindProfiles(const DAQCollector &frame,
+        const std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Specs>>...> &channels)
     {
-        const auto &context = frame->parameters;
-        Writer out(context.saveRoot->filePath(context.sessionDir + "/profile_" + fileStem(frame->frameTime()) + ".json"));
+        const auto &context = frame.parameters;
+        Writer out(context.saveRoot->filePath(context.sessionDir + "/profile_" + fileStem(frame.frameTime()) + ".json"));
         if (!out.open()) {
             qWarning().noquote() << "Cannot open wind profile file under:" << context.saveRoot->path();
             return;
         }
         out.raw("{");
-        writeFrameInfo(out, *frame);
+        writeFrameInfo(out, frame);
         out.raw("},");
         out.key("channels");
         out.raw("[");
-        for (std::size_t i = 0; i < channels.size(); ++i) {
-            const auto &profile = *channels[i].profile;
+        bool first = true;
+        const auto writeChannel = [&]<DAQChannelSpec Spec>(const std::shared_ptr<const VerticalWindProfileUnit<Spec>> &pointer) {
+            if (!pointer) return;
+            const auto &profile = *pointer;
             std::vector<double> direction, horizontal, vertical;
-            for (const auto &wind : profile.winds) {
+            for (const auto &wind : profile.values()) {
                 if (!wind) {
                     // 数值写出器将非有限值写为 JSON null，保持各高度位置一一对应。
                     const double missing = std::numeric_limits<double>::quiet_NaN();
@@ -222,16 +224,18 @@ private:
                 horizontal.push_back(std::hypot(wind->x(), wind->y()));
                 vertical.push_back(wind->z());
             }
-            if (i) out.raw(",");
+            if (!first) out.raw(",");
+            first = false;
             out.raw("{");
-            out.key("name"); out.text(channels[i].name); out.raw(",");
-            out.key("heightStartM"); out.number(profile.winds.start); out.raw(",");
-            out.key("heightStepM"); out.number(profile.winds.step); out.raw(",");
+            out.key("name"); out.text(QString::fromUtf8(Spec::name)); out.raw(",");
+            out.key("heightStartM"); out.number(profile.heightStartM()); out.raw(",");
+            out.key("heightStepM"); out.number(profile.heightStepM()); out.raw(",");
             out.key("horizontalDirectionDeg"); out.numbers(direction); out.raw(",");
             out.key("horizontalSpeed"); out.numbers(horizontal); out.raw(",");
             out.key("verticalSpeed"); out.numbers(vertical);
             out.raw("}");
-        }
+        };
+        std::apply([&](const auto &...p) { (writeChannel(p), ...); }, channels);
         out.raw("]}");
         out.commit();
     }
