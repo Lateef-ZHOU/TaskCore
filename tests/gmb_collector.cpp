@@ -3,6 +3,7 @@
 #include <chrono>
 #include <thread>
 #include <type_traits>
+#include <utility>
 
 namespace {
 void require(bool ok, const char *why) { if (!ok) qFatal("%s", why); }
@@ -20,6 +21,11 @@ using TestCollector = TypedGMBCollector<TestModel>;
 template<class C> concept HasPublicClock = requires { typename C::Clock; };
 template<class C> concept HasTargetGetter = requires(const C &c) { c.target(); };
 template<class C> concept CanFeedConst = requires(const C &c, const PanTiltModel &pose) { c.feed(pose, RxTime{}); };
+template<class C> concept CanBorrowMeasured = requires(C &&c) { std::forward<C>(c).measured(); };
+static_assert(CanBorrowMeasured<TestCollector &> && CanBorrowMeasured<const TestCollector &>);
+static_assert(!CanBorrowMeasured<TestCollector> && !CanBorrowMeasured<const TestCollector>);
+static_assert(std::is_same_v<decltype(std::declval<TestCollector &>().measured()), const std::optional<PanTiltModel> &>);
+static_assert(std::is_same_v<decltype(std::declval<const TestCollector &>().measured()), const std::optional<PanTiltModel> &>);
 static_assert(GMBCollectorLike<TestCollector>);
 static_assert(!HasPublicClock<TestCollector> && !HasTargetGetter<TestCollector> && !CanFeedConst<TestCollector>);
 static_assert(!std::is_copy_constructible_v<TestCollector> && !std::is_move_constructible_v<TestCollector>
@@ -37,9 +43,15 @@ int main()
     TestCollector minimum(GMBParameters(key, target, std::chrono::milliseconds(0), std::nullopt));
     TestCollector longer(GMBParameters(key, target, hold + std::chrono::seconds(1), std::nullopt));
     const RxTime at{std::chrono::seconds(100000)};
+    // 同一存活收集器的借用直接观察原槽；此处在同一线程先写后读，不与 feed 并发。
+    const auto &observation = stopped.measured();
+    require(!observation, "initial borrowed observation is not empty");
     require(!stopped.measured() && !stopped.settled(), "new attempt already has observations");
     require(!stopped.feed(target, at) && !reentered.feed(target, at) && !minimum.feed(target, at)
             && !longer.feed(target, at), "first in-range sample completed before hold elapsed");
+    require(&observation == &std::as_const(stopped).measured() && observation
+            && PanTiltModel::distance(*observation, target) == 0.0,
+            "measured did not borrow the collector observation slot");
     require(!reentered.feed(outside, at), "out-of-range sample completed an unfinished attempt");
 
     std::this_thread::sleep_for(hold + std::chrono::milliseconds(100));
@@ -55,10 +67,10 @@ int main()
     require(!retry.feed(inside, at) && !reentered.feed(inside, at), "retry or reentry retained the old hold interval");
     require(minimum.feed(inside, at) && !longer.feed(inside, at), "minimum or configured hold changed");
     require(stopped.feed(inside, at), "fresh in-range report did not complete elapsed attempt");
-    const auto completed = stopped.measured();
+    const auto &completed = stopped.measured();
     require(completed && PanTiltModel::distance(*completed, inside) == 0.0, "finishing observation was lost");
     require(stopped.feed(outside, at) && stopped.feed(target, at) && stopped.settled()
-            && PanTiltModel::distance(*stopped.measured(), *completed) == 0.0,
+            && completed && PanTiltModel::distance(*completed, inside) == 0.0,
             "completed attempt was reopened or its measured pose was overwritten");
 
     std::this_thread::sleep_for(hold + std::chrono::milliseconds(100));

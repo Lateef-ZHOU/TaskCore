@@ -190,7 +190,8 @@ protected:
     {
         step(beam, Phase::Acquiring, QString("%1 张卡同时采集%2...").arg(static_cast<int>(cards.size()))
              .arg(saveRoot ? QStringLiteral("（落盘）") : QStringLiteral("（不落盘）")));
-        const auto measured = moved[0].result->measured();
+        // moved 的结果份额在本次同步换算期间保活 Collector，measured 不另复制位形。
+        const auto &measured = moved[0].result->measured();
         const auto world = measured ? std::optional{gmb.worldOf(*measured)} : std::nullopt;
         RunAwaiter<DAQFamily>::Orders orders;
         // 族基不是 QObject：会话目录的 ASCII 标识取同一对象上的 objectName（交叉转换必然成功）。

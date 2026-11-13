@@ -68,7 +68,10 @@ public:
 
     // 本次尝试的**实测位形**：最近一次采样（进没进圈都记）。判齐之后由编排层读出，交给族基 `worldOf(位形)`
     // 换成世界朝向。**空 = 还没收到过采样**。
-    [[nodiscard]] std::optional<PanTiltModel> measured() const { return last_; }
+    // 只借用左值收集器，不延长其寿命；调用方须持有该收集器（或其共享份额）。
+    // 收集期间不得与 feed 并发读取；完成交付后结果冻结，可在保活范围内只读使用。
+    [[nodiscard]] const std::optional<PanTiltModel> &measured() const & noexcept { return last_; }
+    const std::optional<PanTiltModel> &measured() const && = delete;
 
     [[nodiscard]] QList<QByteArray> buildStart() const override { return start_; }
     [[nodiscard]] QList<QByteArray> buildStop() const override { return stop_; }

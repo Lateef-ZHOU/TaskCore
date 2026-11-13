@@ -169,6 +169,8 @@ TaskBase 登记族身份，任务结束依靠完成回调与锁取消链，QObje
 
 GMBCollector 的容差、启动命令、停止命令和看门狗时限均为 private const 配置，型号只在构造时交入，不直接访问成员。驻留时长直接读取 parameters.hold，settled 以 max(parameters.hold, kMinHold) 保留最小驻留约束，不另存 hold_。公共收集接口和到位、驻留、重试语义保持；`gmb_collector_contract` 验证这些行为。
 
+`measured()` 仅允许普通或 const 左值调用，返回 `const std::optional<PanTiltModel>&`；两种右值调用均拒绝。借用不保活 Collector，调用方须在整个读取期间保有对象或其共享份额；收集期间不得与 feed 并发读取，完成交付后结果冻结。任务在结果份额保活范围内以 const 引用立即换算世界朝向，不复制关节数组。测试检查返回类型、左右值调用约束、原观察槽借用及完成后的冻结行为。
+
 ## 独立构建和验证
 
 安装对应 Qt 开发包，然后执行（将路径替换为本机 Qt 前缀）：
