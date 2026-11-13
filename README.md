@@ -1,3 +1,7 @@
+## 2026-11-14：DAQ 算法头直接依赖清理（用户定）
+
+RadialWind.h、WindProfile.h 删除未直接使用的 ObjectPolicy.h 包含，WindProfile.h 删除无用的 <utility>；对象约束仍由 DAQChannelSpec.h 自行包含。曲面轴配置和谱页保活范围暂缓，四束历史、算法、保存格式、共享份额与取消链保持不变。本轮不推送；验证见主程序维护操作。
+
 ## 2026-11-14：静态规格与保存保活收尾（用户定）
 
 RadialWindCalculation::Calc 只接受 Spectrum<Spec>，波长和零风速参考统一读取 Spec，不再提供运行时覆盖参数；不同标定的测试使用不同 Spec，拟合与换算公式保持。
