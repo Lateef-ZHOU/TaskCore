@@ -138,7 +138,7 @@ protected:
 
     explicit GimbalModel(std::vector<Joint> joints) noexcept : std::vector<Joint>(std::move(joints)) {}
     // **非虚 + protected**：本类一个虚函数都没有，而位形从不经基类指针删除（它们是被按值造、
-    // 按值传的东西）。protected 顺带封死 `delete (GimbalModel *)p`——同 Collector / GMBFamily。
+    // 按值传的东西）。protected 禁止外部通过 GimbalModel 基类指针删除对象。
     ~GimbalModel() = default;
 };
 

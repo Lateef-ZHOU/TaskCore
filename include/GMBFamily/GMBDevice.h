@@ -57,7 +57,7 @@ public:
     // **为什么要验**：同一束要读标定两次——去程（gimbalOf，造斗之前）与回程（worldOf，交付时换回
     // 世界朝向）。两次之间若被人改掉，去程回程用的是两份标定，风廓线里混进一束错参考系的数据，
     // 而且不响。
-    // 空令牌 = "我不持锁"：云台空闲时照样写得进（没有 run 依赖它），有人持锁时一律拒。
+    // 空令牌 = "我不持锁"：设备未被锁占用时允许写入，即使手动定位的 run 仍在运行；有人持锁时拒绝空令牌。
     [[nodiscard]] virtual bool setMounting(const WorldModel &zeroPose,
                                           const std::shared_ptr<const DeviceLock> &lock) = 0;
 
