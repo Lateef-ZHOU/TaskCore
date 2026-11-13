@@ -1,5 +1,29 @@
 cmake_minimum_required(VERSION 3.28)
 project(LidarFamilyModels LANGUAGES CXX)
+# 两个 FetchContent 入口可以来自不同目录，但不能混用不同的库源码。
+# 比较实际构建输入而非 Git HEAD：源码包无 Git，本地同一提交也可能有修改。
+file(REAL_PATH "${CMAKE_CURRENT_LIST_DIR}/.." family_source)
+file(GLOB_RECURSE family_inputs CONFIGURE_DEPENDS RELATIVE "${family_source}"
+    "${family_source}/include/*.h" "${family_source}/optional/*.h"
+    "${family_source}/optional/*.cpp" "${family_source}/optional/*.qml"
+    "${family_source}/optional/*.js" "${family_source}/optional/*.cmake"
+    "${family_source}/optional/CMakeLists.txt" "${family_source}/cmake/*.cmake")
+list(APPEND family_inputs CMakeLists.txt models/CMakeLists.txt)
+list(SORT family_inputs)
+set(family_signature "")
+foreach(input IN LISTS family_inputs)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${family_source}/${input}")
+    file(SHA256 "${family_source}/${input}" digest)
+    string(APPEND family_signature "${input}:${digest}\n")
+endforeach()
+string(SHA256 family_signature "${family_signature}")
+if(TARGET Lidar::FamilyModels)
+    get_target_property(existing_signature Lidar::FamilyModels FAMILYCORE_SOURCE_SIGNATURE)
+    get_target_property(existing_source Lidar::FamilyModels FAMILYCORE_SOURCE_DIRECTORY)
+    if(NOT "${existing_signature}" STREQUAL "${family_signature}")
+        message(FATAL_ERROR "FamilyCore source mismatch: FamilyModels from '${existing_source}' cannot be mixed with '${family_source}'. Use the same FamilyCore source version for both entries.")
+    endif()
+endif()
 include("${CMAKE_CURRENT_LIST_DIR}/../cmake/AlgorithmDependency.cmake")
 if(NOT TARGET Lidar::FamilyModels)
     add_library(LidarFamilyModels INTERFACE)
@@ -7,6 +31,9 @@ if(NOT TARGET Lidar::FamilyModels)
     target_compile_features(LidarFamilyModels INTERFACE cxx_std_20)
     target_include_directories(LidarFamilyModels INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../include")
     target_link_libraries(LidarFamilyModels INTERFACE Lidar::Algorithm)
+    set_target_properties(LidarFamilyModels PROPERTIES
+        FAMILYCORE_SOURCE_SIGNATURE "${family_signature}"
+        FAMILYCORE_SOURCE_DIRECTORY "${family_source}")
 endif()
 if(PROJECT_IS_TOP_LEVEL)
     include(CTest)

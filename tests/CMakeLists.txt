@@ -1,3 +1,4 @@
+include(entry-consistency/Register.cmake)
 add_executable(module_smoke smoke.cpp)
 target_link_libraries(module_smoke PRIVATE Lidar::FamilyCore)
 add_executable(processing_contract processing.cpp)
