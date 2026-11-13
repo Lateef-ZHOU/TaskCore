@@ -100,8 +100,8 @@ public:
     QList<QByteArray> stopCommands() const override { return {}; }
 Q_SIGNALS:
     void lockChanged(HandleCore::ResourcePhase) override;
-    void spectrumReady(int channel, const LinearArray2D<double> &spectrum) override;
-    void radialReady(int channel, const LinearArray<double> &speeds, const LinearArray<double> &cnr) override;
+    void spectrumReady(int channel, const LinearSpectrumPtr &spectrum) override;
+    void radialReady(int channel, const LinearSeriesPtr &speeds, const LinearSeriesPtr &cnr) override;
     void profileReady(int channel, VerticalWindProfilePtr profile) override;
 private:
     void PreDestruction() noexcept final
@@ -128,14 +128,14 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     TestDevice device;
     int spectra = 0, radials = 0, profiles = 0, completed = 0;
-    QObject::connect(&device, &TestDevice::spectrumReady, &app, [&](int channel, const LinearArray2D<double> &values) {
-        if (channel != 0 || values.size() != 16 || QThread::currentThread() != app.thread()) qFatal("spectrum signal differs");
+    QObject::connect(&device, &TestDevice::spectrumReady, &app, [&](int channel, const LinearSpectrumPtr &values) {
+        if (channel != 0 || values->size() != 16 || QThread::currentThread() != app.thread()) qFatal("spectrum signal differs");
         ++spectra;
     });
     QObject::connect(&device, &TestDevice::radialReady, &app,
-                     [&](int channel, const LinearArray<double> &speeds, const LinearArray<double> &cnr) {
-        if (channel != 0 || speeds.size() != 2 || speeds.start != 100 || speeds.step != 30 || !cnr.sameAxis(speeds) || cnr.size() != 2
-            || std::abs(speeds[0] - 0.5) > 0.05)
+                     [&](int channel, const LinearSeriesPtr &speeds, const LinearSeriesPtr &cnr) {
+        if (channel != 0 || speeds->size() != 2 || speeds->start != 100 || speeds->step != 30 || !cnr->sameAxis(*speeds) || cnr->size() != 2
+            || std::abs((*speeds)[0] - 0.5) > 0.05)
             qFatal("standard radial processing differs");
         ++radials;
     });

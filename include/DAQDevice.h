@@ -40,9 +40,9 @@ public:
         std::optional<QDir> saveRoot, QString sessionDir, bool sync) const = 0;
 
     // 通知契约：末端在 Q_SIGNALS 中覆写，由 moc 提供实现；均在主线程按通道下标发出。
-    virtual void spectrumReady(int channel, const LinearArray2D<double> &spectrum) = 0;
+    virtual void spectrumReady(int channel, const LinearSpectrumPtr &spectrum) = 0;
     // 逐门剖面带斜距线性轴；页面原样交给径向风图，图按创建配置核对网格。
-    virtual void radialReady(int channel, const LinearArray<double> &speeds, const LinearArray<double> &cnr) = 0;
+    virtual void radialReady(int channel, const LinearSeriesPtr &speeds, const LinearSeriesPtr &cnr) = 0;
     virtual void profileReady(int channel, VerticalWindProfilePtr profile) = 0;
 };
 

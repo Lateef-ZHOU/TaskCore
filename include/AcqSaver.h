@@ -171,7 +171,7 @@ private:
         first = false;
         out.raw("{");
         out.key("name"); out.text(QString::fromUtf8(Channel::name)); out.raw(",");
-        const auto &spectrum = channel.spectrum;
+        const auto &spectrum = *channel.spectrum;
         out.key("rangeStartM"); out.number(spectrum.rowStart); out.raw(",");
         out.key("rangeStepM"); out.number(spectrum.rowStep); out.raw(",");
         out.key("freqStartMHz"); out.number(spectrum.columnStart); out.raw(",");
@@ -184,8 +184,8 @@ private:
             out.numbers(spectrum.row(row));
         }
         out.raw("],");
-        out.key("radialWind"); out.numbers(channel.radialWind); out.raw(",");
-        out.key("cnr"); out.numbers(channel.cnr);
+        out.key("radialWind"); out.numbers(*channel.radialWind); out.raw(",");
+        out.key("cnr"); out.numbers(*channel.cnr);
         out.raw("}");
     }
 

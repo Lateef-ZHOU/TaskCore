@@ -49,9 +49,9 @@ concept DAQChannelLike = requires(const C c) {
     { C::name } -> std::convertible_to<const char *>;
     { C::wavelengthM } -> std::convertible_to<double>;
     { C::zeroWindMHz } -> std::convertible_to<double>;
-    { c.spectrum } -> std::same_as<const LinearArray2D<double> &>;
-    { c.radialWind } -> std::same_as<const LinearArray<double> &>;
-    { c.cnr } -> std::same_as<const LinearArray<double> &>;
+    { c.spectrum } -> std::same_as<const LinearSpectrumPtr &>;
+    { c.radialWind } -> std::same_as<const LinearSeriesPtr &>;
+    { c.cnr } -> std::same_as<const LinearSeriesPtr &>;
 };
 
 // 标准通道：继承规格的静态常量；型号只交本帧数值（行优先，rows × columns 个），两条轴取自规格，
@@ -60,19 +60,19 @@ template <DAQChannelSpec Spec>
 struct DAQChannel : Spec
 {
     explicit DAQChannel(std::vector<double> values)
-        : DAQChannel(LinearArray2D<double>(Spec::rangeGateCount, Spec::frequencyBinCount, Spec::rangeStartM, Spec::rangeStepM,
+        : DAQChannel(std::make_shared<const LinearArray2D<double>>(Spec::rangeGateCount, Spec::frequencyBinCount, Spec::rangeStartM, Spec::rangeStepM,
                                            Spec::frequencyStartMHz, Spec::frequencyStepMHz, std::move(values))) {}
 
-    LinearArray2D<double> spectrum;
-    LinearArray<double> radialWind; // m/s；网格不完整时为空
-    LinearArray<double> cnr;        // dB
+    LinearSpectrumPtr spectrum;
+    LinearSeriesPtr radialWind; // m/s；网格不完整时为空
+    LinearSeriesPtr cnr;        // dB
 
 private:
-    explicit DAQChannel(LinearArray2D<double> &&spectrum)
-        : DAQChannel(RadialWindCalculation::Calc(spectrum, RadialWindCalculation::metersPerSecondPerMHz(Spec::wavelengthM), Spec::zeroWindMHz),
-                     std::move(spectrum)) {}
-    // 功率谱按右值引用收：拟合结果先于功率谱移入成员算出，不依赖实参求值顺序。
-    DAQChannel(RadialWindCalculation::Result wind, LinearArray2D<double> &&spectrum)
+    explicit DAQChannel(LinearSpectrumPtr spectrum)
+        : DAQChannel(RadialWindCalculation::Calc(*spectrum, RadialWindCalculation::metersPerSecondPerMHz(Spec::wavelengthM), Spec::zeroWindMHz),
+                     spectrum) {}
+    // 功率谱按只读共享份额收：拟合结果先于份额移入成员算出，不依赖实参求值顺序。
+    DAQChannel(RadialWindCalculation::Result wind, LinearSpectrumPtr spectrum)
         : spectrum(std::move(spectrum)), radialWind(std::move(wind.ws)), cnr(std::move(wind.cnr)) {}
 };
 
