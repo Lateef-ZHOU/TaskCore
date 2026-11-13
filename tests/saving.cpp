@@ -1,5 +1,7 @@
 #include "AcqSaver.h"
 #include <array>
+#include <atomic>
+#include <thread>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -149,6 +151,40 @@ int main(int argc, char **argv)
         check(first.value(key).toArray()[2].isNull(), "missing layer must remain JSON null");
     check(first.value("horizontalSpeed").toArray()[3].toDouble(-1) == 0
           && first.value("verticalSpeed").toArray()[3].toDouble(-1) == 0, "calm layer must remain zero");
+
+    // 原 Collector 的最后份额应在调用线程释放；保存线程只持上下文、同步时间和结果。
+    // 用销毁线程身份验证，避免以写盘速度推断生命周期。
+    const auto caller = std::this_thread::get_id();
+    std::atomic<bool> destroyedHere = false;
+    std::shared_ptr<SavedFrame> source(new SavedFrame(DAQParameters(TestKey(), 7,
+        WorldModel(12, 30, 0), root, QStringLiteral("released"), true)),
+        [caller, &destroyedHere](SavedFrame *value) {
+            destroyedHere.store(std::this_thread::get_id() == caller);
+            delete value;
+        });
+    check(source->feed(QByteArray("x"), at), "lifetime frame did not complete");
+    std::shared_ptr<const SavedFrame> sourceFrame = std::move(source);
+    const std::weak_ptr<const SavedFrame> sourceWeak = sourceFrame;
+    auto result = std::make_shared<VerticalWindProfileUnit<ProfileSpec>>(at + std::chrono::seconds(10), 90.0);
+    (*result)[0] = LinAlg::Vec3(-5, 0, 0.5);
+    (*result)[1] = LinAlg::Vec3(0, -3, 0);
+    (*result)[3] = LinAlg::Vec3::Zeros();
+    std::shared_ptr<const VerticalWindProfileUnit<ProfileSpec>> onlyResult = std::move(result);
+    AcqSaver::saveWindProfiles(std::move(sourceFrame), std::tuple{std::move(onlyResult)});
+    check(sourceWeak.expired() && destroyedHere.load(), "profile saver retained Collector or destroyed it off-thread");
+    const auto independent = readCompleted(root.filePath("released/profile_" + AcqSaver::fileStem(at) + ".json"));
+    const auto independentInfo = independent.value("frame").toObject();
+    check(independentInfo.size() == 6 && independentInfo.value("session").toString() == "released"
+          && independentInfo.value("frameTime").toString() == AcqSaver::timeStem(at)
+          && independentInfo.value("azimuthDeg").toDouble() == 12
+          && independentInfo.value("elevationDeg").toDouble() == 30
+          && independentInfo.value("sync").toBool() && independentInfo.value("accumSec").toInt() == 7,
+          "profile saver lost acquisition context or used result time instead of synchronization time");
+    check(independent.value("channels") == profile.value("channels"), "direct profile traversal changed saved values");
+    QFile exact(root.filePath("released/profile_" + AcqSaver::fileStem(at) + ".json"));
+    check(exact.open(QIODevice::ReadOnly), "cannot read exact saved profile");
+    check(exact.readAll().endsWith("\"horizontalDirectionDeg\":[90,0,null,180],\"horizontalSpeed\":[5,3,null,0],\"verticalSpeed\":[0.5,0,null,0]}]}"),
+          "profile JSON field order, numeric format or missing/calm values changed");
 
     // 不落盘：saveRoot 为空时入口直接返回。
     AcqSaver::saveFrame(std::make_shared<const SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, std::nullopt, {}, false)),

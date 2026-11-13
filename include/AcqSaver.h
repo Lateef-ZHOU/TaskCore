@@ -8,7 +8,7 @@
 #include <thread>
 #include <tuple>
 #include <utility>
-#include <vector>
+#include <ranges>
 #include <QByteArray>
 #include <QDateTime>
 #include <QDebug>
@@ -19,7 +19,7 @@
 #include <QString>
 
 #include "DAQCollector.h"
-#include "WindProfile.h"
+#include "DAQChannelSpec.h"
 
 // ============================================================
 // AcqSaver —— 采集卡族唯一的落盘格式与路径政策。写出只由本类负责：入参是具体收集器（通道元组与上下文）
@@ -58,15 +58,15 @@ public:
         std::thread(&AcqSaver::writeFrame<C>, std::move(frame), std::move(card)).detach();
     }
 
-    // 同步点的一组风廓线落盘；时刻取同步帧，会话取其上下文。
+    // 同步点的一组风廓线落盘；线程只保留上下文、同步帧时刻和结果份额，不延长 Collector 寿命。
     template<DAQCollectorLike C, DAQChannelSpec... Specs>
     static void saveWindProfiles(std::shared_ptr<const C> frame,
         std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Specs>>...> channels)
     {
         if (!frame || !frame->parameters.saveRoot
             || !std::apply([](const auto &...p) { return (bool(p) || ...); }, channels)) return;
-        std::thread([frame = std::move(frame), channels = std::move(channels)] {
-            writeWindProfiles(*frame, channels);
+        std::thread([context = frame->parameters, at = frame->frameTime(), channels = std::move(channels)] {
+            writeWindProfiles(context, at, channels);
         }).detach();
     }
 
@@ -125,13 +125,12 @@ private:
     };
 
     // 帧级公共信息（与通道无关）。
-    static void writeFrameInfo(Writer &out, const DAQCollector &frame)
+    static void writeFrameInfo(Writer &out, const DAQParameters &context, const RxTime at)
     {
-        const auto &context = frame.parameters;
         out.key("frame");
         out.raw("{");
         out.key("session"); out.text(context.sessionDir); out.raw(",");
-        out.key("frameTime"); out.text(timeStem(frame.frameTime())); out.raw(",");
+        out.key("frameTime"); out.text(timeStem(at)); out.raw(",");
         out.key("azimuthDeg"); out.number(context.pose ? context.pose->azimuth() : std::nan("")); out.raw(",");
         out.key("elevationDeg"); out.number(context.pose ? context.pose->elevation() : std::nan("")); out.raw(",");
         out.key("sync"); out.raw(context.sync ? "true" : "false"); out.raw(",");
@@ -149,7 +148,7 @@ private:
             return;
         }
         out.raw("{");
-        writeFrameInfo(out, *frame);
+        writeFrameInfo(out, context, frame->frameTime());
         out.raw(",");
         out.key("card"); out.text(card);
         out.raw("},");
@@ -189,17 +188,16 @@ private:
 
     // [独立线程] 同步点一份风廓线 JSON；风向为气象来向，0–360°。
     template<DAQChannelSpec... Specs>
-    static void writeWindProfiles(const DAQCollector &frame,
+    static void writeWindProfiles(const DAQParameters &context, const RxTime at,
         const std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Specs>>...> &channels)
     {
-        const auto &context = frame.parameters;
-        Writer out(context.saveRoot->filePath(context.sessionDir + "/profile_" + fileStem(frame.frameTime()) + ".json"));
+        Writer out(context.saveRoot->filePath(context.sessionDir + "/profile_" + fileStem(at) + ".json"));
         if (!out.open()) {
             qWarning().noquote() << "Cannot open wind profile file under:" << context.saveRoot->path();
             return;
         }
         out.raw("{");
-        writeFrameInfo(out, frame);
+        writeFrameInfo(out, context, at);
         out.raw("},");
         out.key("channels");
         out.raw("[");
@@ -207,32 +205,25 @@ private:
         const auto writeChannel = [&]<DAQChannelSpec Spec>(const std::shared_ptr<const VerticalWindProfileUnit<Spec>> &pointer) {
             if (!pointer) return;
             const auto &profile = *pointer;
-            std::vector<double> direction, horizontal, vertical;
-            for (const auto &wind : profile.values()) {
-                if (!wind) {
-                    // 数值写出器将非有限值写为 JSON null，保持各高度位置一一对应。
-                    const double missing = std::numeric_limits<double>::quiet_NaN();
-                    direction.push_back(missing);
-                    horizontal.push_back(missing);
-                    vertical.push_back(missing);
-                    continue;
-                }
-                double from = std::atan2(-wind->x(), -wind->y()) * 180.0 / std::numbers::pi;
-                if (from < 0.0) from += 360.0;
-                if (from >= 360.0) from -= 360.0;
-                direction.push_back(from);
-                horizontal.push_back(std::hypot(wind->x(), wind->y()));
-                vertical.push_back(wind->z());
-            }
             if (!first) out.raw(",");
             first = false;
             out.raw("{");
             out.key("name"); out.text(QString::fromUtf8(Spec::name)); out.raw(",");
             out.key("heightStartM"); out.number(profile.heightStartM()); out.raw(",");
             out.key("heightStepM"); out.number(profile.heightStepM()); out.raw(",");
-            out.key("horizontalDirectionDeg"); out.numbers(direction); out.raw(",");
-            out.key("horizontalSpeed"); out.numbers(horizontal); out.raw(",");
-            out.key("verticalSpeed"); out.numbers(vertical);
+            out.key("horizontalDirectionDeg"); out.numbers(profile.values() | std::views::transform([](const auto &wind) {
+                if (!wind) return std::numeric_limits<double>::quiet_NaN();
+                double from = std::atan2(-wind->x(), -wind->y()) * 180.0 / std::numbers::pi;
+                if (from < 0.0) from += 360.0;
+                if (from >= 360.0) from -= 360.0;
+                return from;
+            })); out.raw(",");
+            out.key("horizontalSpeed"); out.numbers(profile.values() | std::views::transform([](const auto &wind) {
+                return wind ? std::hypot(wind->x(), wind->y()) : std::numeric_limits<double>::quiet_NaN();
+            })); out.raw(",");
+            out.key("verticalSpeed"); out.numbers(profile.values() | std::views::transform([](const auto &wind) {
+                return wind ? wind->z() : std::numeric_limits<double>::quiet_NaN();
+            }));
             out.raw("}");
         };
         std::apply([&](const auto &...p) { (writeChannel(p), ...); }, channels);

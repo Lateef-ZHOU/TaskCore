@@ -1,3 +1,11 @@
+## 2026-11-14 风廓线保存收尾（用户定）
+
+AcqSaver 保存风廓线时直接遍历原帧，按字段即时计算风向、水平速度、垂直速度，不分配三组中间数组。线程仅捕获已有 DAQParameters、同步帧时间和原结果份额元组，不再保活 Collector 及其原谱。公共帧信息写入接受上下文和时间；直接包含 DAQChannelSpec.h。文件路径、字段顺序、6 位有效数字、缺测 null 和静风值不变；四束历史、算法和 detached 退出边界不变。
+
+专项验证覆盖 Collector 在调用线程释放、结果独立完成保存、同步帧时间与结果时间不同、完整上下文、空通道跳过，以及原字段顺序和缺测/静风格式。
+
+Windows/MSVC Release 增量构建、公开头独立编译及 CTest 5/5 通过；saving_contract 共 21 项断言通过。 本轮不推送。
+
 ## 2026-11-14 风廓线原帧直接传输（用户定）
 
 DAQDevice 按 Collector 通道规格生成 Profiles 元组，每项是 shared_ptr<const VerticalWindProfileUnit<Spec>>；模板虚接口由具体官邸直接实现为 profilesReady 信号，删除族基的旧 profileReady。元组只传原帧份额，失败通道为空。AcqSaver 直接接收该元组，通道名称来自 Spec，跳过空通道；文件路径、JSON 字段、缺测 null 与数值转换保持。最近四束 Collector 历史、反演、保存线程与取消链保持。Windows/MSVC Release 构建及公开头编译通过，CTest 5/5，覆盖四束处理及空首通道后的 JSON 输出。 本轮不推送。
@@ -6,7 +14,7 @@ DAQDevice 按 Collector 通道规格生成 Profiles 元组，每项是 shared_pt
 
 ## 风廓线类型入口（2026-11-13 用户定）
 
-AcqSaver 改从 Algorithm 的 `WindProfile.h` 引入 `VerticalWindProfileUnit`，独立旧头已删除。保存结构、四束编排环、消费和取消链不变；墙钟窗口历史由 Algorithm 的公共模板提供，不用于替换任务束序。
+AcqSaver 直接从 Algorithm 的 `DAQChannelSpec.h` 引入 `VerticalWindProfileUnit`，独立旧头已删除。保存结构、四束编排环、消费和取消链不变；墙钟窗口历史由 Algorithm 的公共模板提供，不用于替换任务束序。
 
 
 2026-11-13：适配 Algorithm 的 RadialWindCalculation 计算命名空间，为同级 RadialWind<Spec> 静态数据类型让出名称；现有计算公式、传输与保存链路不变。
