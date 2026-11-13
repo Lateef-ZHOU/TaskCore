@@ -175,7 +175,8 @@ protected:
                           std::chrono::milliseconds hold, std::optional<GMBParameters::Speeds> speeds,
                           std::optional<QDir>) = 0;
 
-    // 不发业务状态通知，不调用虚函数；末端析构在自己的成员拆除前调用。
+    // 本函数只重置协程持有者，不额外发通知；取消链可同步恢复协程收尾、撤单并产生日志或通知。
+    // 末端析构在自己的成员拆除前调用。
     // 仅在协程已挂起或结束时调用，不得从协程执行中的同步通知槽进入。
     void cancelRun() noexcept { coro_.reset(); }
     [[nodiscard]] QDateTime beginSession() { return startedAt_ = QDateTime::currentDateTime(); }
