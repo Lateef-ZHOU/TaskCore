@@ -10,10 +10,10 @@
 // ============================================================
 // RadialWindCalculation — 功率谱 → 逐距离门的径向风速 + CNR
 //
-// 一帧谱是 rows × cols 的行主序矩阵（**row = 距离门、col = 频率 bin**）：每一行是该门上的
-// 一条频谱，高斯拟合出峰位 x0（bin）即多普勒频移，线性换算成径向风速；峰的能量与基线之比
-// 即 CNR。
-//   信号功率 = sqrt(2π)·|A·w|；噪声 = |d|·cols；CNR = 10·log10(signal/noise)。
+// 一帧谱是距离门数 × 频点数的行主序矩阵，每一行是该距离门的一条频谱。
+// 拟合峰位 x0 是频点坐标；多普勒频移（MHz）为
+// frequencyStartMHz + x0·frequencyStepMHz - zeroWindMHz，再按 λ/2 换算成径向风速。
+// 信号功率 = sqrt(2π)·|A·w|；噪声 = |d|·频点数；CNR = 10·log10(signal/noise)。
 //
 // 功率谱、径向风和 CNR 全程保留 Spec；Qt 登记由具体型号边界负责。
 // ============================================================
@@ -39,19 +39,17 @@ template<DAQChannelSpec Spec>
 [[nodiscard]] Result<Spec> Calc(const Spectrum<Spec> &spectrum)
 {
     if constexpr (Spec::frequencyBinCount < 2) return {};
-    constexpr int rangeGateCount = Spec::rangeGateCount, frequencyBinCount = Spec::frequencyBinCount;
-    constexpr double frequencyStartMHz = Spec::frequencyStartMHz, frequencyStepMHz = Spec::frequencyStepMHz;
     const double velocityPerMHz = metersPerSecondPerMHz(Spec::wavelengthM);
-    const double slope = frequencyStepMHz * velocityPerMHz;
-    const double intercept = (frequencyStartMHz - Spec::zeroWindMHz) * velocityPerMHz;
+    const double slope = Spec::frequencyStepMHz * velocityPerMHz;
+    const double intercept = (Spec::frequencyStartMHz - Spec::zeroWindMHz) * velocityPerMHz;
     auto ws = std::make_shared<RadialWind<Spec>>();
     auto cnr = std::make_shared<CNR<Spec>>();
 #pragma omp parallel for
-    for (int row = 0; row < rangeGateCount; ++row)
+    for (int row = 0; row < Spec::rangeGateCount; ++row)
     {
         const GaussFit::Params p = GaussFit(spectrum.row(row)).params; // 借用谱行，不复制数据
         const double signal = std::sqrt(2.0 * std::numbers::pi) * std::abs(p.A * p.w);
-        const double noise = std::abs(p.d) * frequencyBinCount;
+        const double noise = std::abs(p.d) * Spec::frequencyBinCount;
         (*ws)[row] = p.x0 * slope + intercept;
         (*cnr)[row] = noise > 1e-30 ? 10.0 * std::log10(signal / noise) : 0.0;
     }

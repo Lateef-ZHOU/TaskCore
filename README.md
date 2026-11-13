@@ -1,3 +1,9 @@
+## 2026-11-14：径向风规格读取与峰位说明（用户定）
+
+RadialWindCalculation::Calc 直接读取 Spec 的距离门数、频点数、频率起点及步进，删除四个仅转写字段的局部常量；保留循环外的风速换算系数、斜率和截距。拟合峰位 x0 表示频点坐标，多普勒频移为 frequencyStartMHz + x0 × frequencyStepMHz − zeroWindMHz，再按波长换算风速。现有计算顺序、拟合算法、阈值、缺测语义、结果分配及 OpenMP 分行写入保持不变。
+
+验证：Windows/MSVC Release family_spectrum、family_family_algorithms 增量构建及 CTest 2/2 通过，覆盖规格换算、频带外参考频率及单频点空结果。证据：build-family/radial-spec-cleanup-{build,test}.log；主程序增量构建与冒烟见其维护操作。本轮不推送。
+
 ## 2026-11-14：AcqSaver 字符串与失败诊断（用户定）
 
 JSON 字符串写出补齐 U+0000–U+001F 控制字符转义，保留引号、反斜杠转义及 UTF-8 原文；普通字符串、字段顺序、六位有效数字、缺测 null、路径及数据数组格式不变。Writer 在失败现场区分目录创建与文件打开：建目录失败报告目录和目标文件，打开失败报告完整文件名与 QSaveFile 错误原因；调用方不再重复记录笼统日志。后台仍只使用 qWarning，不访问设备或 QML 日志对象。
