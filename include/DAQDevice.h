@@ -162,7 +162,7 @@ private:
 
     // 第 I 路仍从最近四束取同一路径向风；反演直接返回原帧份额。
     template <std::size_t I>
-    auto invert(const CollectorT &frame)
+    auto invert(const CollectorT &frame) const
     {
         std::array<WindProfile::Input, WindProfile::kBeams> inputs;
         for (std::size_t beam = 0; beam < inputs.size(); ++beam)
