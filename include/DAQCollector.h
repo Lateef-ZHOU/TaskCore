@@ -69,10 +69,10 @@ struct DAQChannel : Spec
 
 private:
     explicit DAQChannel(LinearArray2D<double> &&spectrum)
-        : DAQChannel(RadialWind::Calc(spectrum, RadialWind::metersPerSecondPerMHz(Spec::wavelengthM), Spec::zeroWindMHz),
+        : DAQChannel(RadialWindCalculation::Calc(spectrum, RadialWindCalculation::metersPerSecondPerMHz(Spec::wavelengthM), Spec::zeroWindMHz),
                      std::move(spectrum)) {}
     // 功率谱按右值引用收：拟合结果先于功率谱移入成员算出，不依赖实参求值顺序。
-    DAQChannel(RadialWind::Result wind, LinearArray2D<double> &&spectrum)
+    DAQChannel(RadialWindCalculation::Result wind, LinearArray2D<double> &&spectrum)
         : spectrum(std::move(spectrum)), radialWind(std::move(wind.ws)), cnr(std::move(wind.cnr)) {}
 };
 

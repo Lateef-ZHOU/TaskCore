@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-13：适配 Algorithm 的 RadialWindCalculation 计算命名空间，为同级 RadialWind<Spec> 静态数据类型让出名称；现有计算公式、传输与保存链路不变。
+
 2026-11-13 用户定：算法层删除 SpectrumLike，族层改为直接包含 DAQChannelSpec.h。当前 DAQChannel 继续使用明确类型的二维传输谱计算入口；不改变收集、处理、保存或取消链。
 
 2026-11-13 用户定：通道规格的距离门数量与频点数量分别命名为 `rangeGateCount`、`frequencyBinCount`，取代 `rows`、`columns`。同步规格使用方，数值与数据布局不变；通用二维传输对象的行列接口保持。
