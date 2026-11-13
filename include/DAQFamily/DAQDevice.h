@@ -16,7 +16,7 @@
 #include "DeviceBase.h" // DeviceBase / Device<H,C>
 #include "FamilyBase.h" // FamilyBase / FamilyDevice（族接口与共同实现）
 #include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
-#include "WindProfile.h"          // 四束反演（标准方法）
+#include "DAQFamily/WindProfile.h"          // 四束反演（标准方法）
 
 // 采集卡族定义标准能力；纯 C++ 旁支，不继承 QObject（唯一 QObject 来自末端继承的 Handle）。
 // 模板层同时继承具体 Device 与本类；编排只持族引用，通过 device() 使用锁，不认识具体 Handle 或 Collector。

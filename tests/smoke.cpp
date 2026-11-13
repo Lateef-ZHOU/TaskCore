@@ -1,12 +1,12 @@
 #include <optional>
 #include <chrono>
 #include <type_traits>
+#include <QMetaType>
 #include <QCoreApplication>
 #include "DeviceCoro.h"
 #include "DAQFamily/DAQDevice.h"
 #include "GMBFamily/GMBDevice.h"
-#include "WindProfile.h"
-#include "LidarForward.h"
+#include "DAQFamily/WindProfile.h"
 static_assert(AwaitableDevice<GMBFamily>);
 static_assert(AwaitableDevice<DAQFamily>);
 struct ProbeSpec {
@@ -22,6 +22,8 @@ static_assert(!std::is_copy_constructible_v<DeviceLock>);
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+    if (!QMetaType::fromType<WorldModel>().isValid()
+        || !QMetaType::fromType<PanTiltModel>().isValid()) return 37;
     const auto now = std::chrono::system_clock::now();
     Frame frame{now, 90.0};
     frame[0] = LinAlg::Vec3{1,2,3};

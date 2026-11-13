@@ -60,3 +60,16 @@ if(TARGET Lidar::TaskUI)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=null"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 endif()
+
+# 迁自 Algorithm 的族模型、反演与标定验证；不需要 Qt 链接。
+foreach(test family_algorithms spectrum immutable_profile model_contract)
+    add_executable(family_${test} ${test}.cpp)
+    target_link_libraries(family_${test} PRIVATE Lidar::FamilyModels OpenMP::OpenMP_CXX)
+    if(MSVC)
+        target_compile_options(family_${test} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(family_${test} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+    add_test(NAME family_${test} COMMAND family_${test})
+    set_tests_properties(family_${test} PROPERTIES TIMEOUT 30)
+endforeach()

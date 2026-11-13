@@ -12,6 +12,12 @@ jobs:
         os: [ubuntu-24.04, windows-2022]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Configure models without Qt or device runtime
+        run: cmake -S models -B build-models -DCMAKE_BUILD_TYPE=Release
+      - name: Build and test models
+        run: |
+          cmake --build build-models --config Release --parallel 2
+          ctest --test-dir build-models -C Release --output-on-failure
       - name: Install Linux Qt runtime dependencies
         if: runner.os == 'Linux'
         run: |
@@ -51,6 +57,7 @@ jobs:
         with:
           name: ${{ matrix.os }}-diagnostics
           path: |
+            build-models/Testing/Temporary/LastTest.log
             build/junit.xml
             build/Testing/Temporary/LastTest.log
             build/CMakeFiles/CMakeConfigureLog.yaml

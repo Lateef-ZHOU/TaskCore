@@ -7,12 +7,7 @@ if(NOT TARGET Lidar::HandleCore)
     FetchContent_MakeAvailable(lidar_handle_core)
 endif()
 # 消费方已提供目标时直接复用；否则拉取经过验证的固定提交，不启用 Handle 可选模块。
-if(NOT TARGET Lidar::Algorithm)
-    FetchContent_Declare(lidar_algorithm
-        GIT_REPOSITORY https://github.com/Lateef-ZHOU/Algorithm.git
-        GIT_TAG 001c3250b393ea32cb919591b2fbfb5ec421eedf)
-    FetchContent_MakeAvailable(lidar_algorithm)
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/AlgorithmDependency.cmake")
 # 采集卡族的四束环用 Boost.CircularBuffer；先复用消费方目标或已装包，再取固定哈希的官方归档。
 if(NOT TARGET Boost::circular_buffer)
     find_package(Boost 1.88 QUIET CONFIG COMPONENTS circular_buffer)

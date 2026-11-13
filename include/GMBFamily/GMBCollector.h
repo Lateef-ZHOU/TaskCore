@@ -8,7 +8,7 @@
 #include <QList>
 
 
-#include "GimbalModel.h" // PanTiltModel（目标 / 实测位形；distance）
+#include "GMBFamily/GimbalModel.h" // PanTiltModel（目标 / 实测位形；distance）
 #include "RunBase.h" // Collector<FeedT, ParamsT> 契约基类
 
 // 一次运动请求的按值参数：云台位形目标、停稳等待及可选两轴速度（无速度表示本型号定位协议不携带速度）。

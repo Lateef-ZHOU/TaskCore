@@ -10,10 +10,10 @@
 #include <QDir>
 #include <QString>
 
-#include "GimbalModel.h"
+#include "GMBFamily/GimbalModel.h"
 #include "LinearArray.h"
-#include "RadialWind.h" // 标准径向风 / CNR 算法（各卡共用）
-#include "DAQChannelSpec.h" // 算法层的静态通道规格契约
+#include "DAQFamily/RadialWind.h" // 标准径向风 / CNR 算法（各卡共用）
+#include "DAQFamily/DAQChannelSpec.h" // 算法层的静态通道规格契约
 #include "RunBase.h" // Collector 契约基类
 
 // 采集参数的通行证：构造与析构受保护，族外造不出来。DAQFamily 以 protected 方式继承它，

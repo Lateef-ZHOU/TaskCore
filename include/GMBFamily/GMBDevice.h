@@ -9,7 +9,7 @@
 #include <QObject>
 #include <QString>
 
-#include "GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
+#include "GMBFamily/GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
 #include "FamilyBase.h" // FamilyBase / FamilyDevice（族骨架与共同实现）
 #include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
 #include "GMBFamily/GMBCollector.h"          // 云台族读口、运动参数与型号收集器（喂位形、判到位 + 驻留）

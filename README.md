@@ -1,3 +1,25 @@
+## 2026-11-14：族数据契约和算法（用户定）
+
+- DAQFamily：DAQChannelSpec（含 Spectrum、RadialWind、VerticalWindProfileUnit）、RadialWindCalculation、WindProfile，以及原有族业务与保存。
+- GMBFamily：GimbalModel（含 WorldModel、PanTiltModel）与 SiteCalibration，以及原有族业务。
+- 通用矩阵、旋转、拟合、数组和墙钟历史仍来自 Algorithm；LidarForward 属于 SimCardDevice。本轮只迁移归属与依赖，公式、阈值、四束历史、共享份额及文件格式不变。
+
+`Lidar::FamilyModels` 是轻量 INTERFACE 目标，只传递本库 include 和 `Lidar::Algorithm`。它不查找 Qt、DeviceCore、HandleCore 或 OpenMP，适合绘图与模型消费者。独立入口：
+
+```sh
+cmake -S models -B build-models -DFETCHCONTENT_SOURCE_DIR_LIDAR_ALGORITHM=/path/to/Algorithm
+cmake --build build-models --config Release
+ctest --test-dir build-models -C Release --output-on-failure
+```
+
+引用时用 `<DAQFamily/DAQChannelSpec.h>`、`<GMBFamily/GimbalModel.h>` 等族路径。RadialWind/WindProfile 的并行计算入口仍由完整 `Lidar::FamilyCore` 传递 OpenMP；轻量模型目标不负责执行并行计算。
+
+完整入口会先创建相同的 FamilyModels 目标，再引入 Qt Core、DeviceCore 和 OpenMP。绘图库可以先按 `SOURCE_SUBDIR models` 加载同一仓库，随后应用仍可加载完整族运行层；两处必须选择同一提交或同一源码目录。ChartCore 使用 fetch 名 `lidar_familymodels`，完整层使用 `lidar_familycore`，避免仅加载 models 后把完整库误判为已加载。
+
+本轮暂不推送，GitHub URL 仍为 TaskCore.git；联调使用配套相邻源码覆盖，不能用旧远端提交构建新接口。旧记录中的目录归属以本节为准。
+
+验证：Windows/MSVC Release 公开头构建通过；build-models 独立无 Qt 入口 CTest 1/1，build-family 族算法、保存、处理与 QML CTest 9/9 通过。新增模型入口已接入 Windows/Linux 工作流，但本轮没有执行线上或 Linux 验证。
+
 ## 2026-11-14：头文件按设备族归类（用户定）
 
 `include/FamilyBase.h` 保留公共族骨架；`include/DAQFamily/` 收纳 DAQDevice.h、DAQCollector.h 与 AcqSaver.h；`include/GMBFamily/` 收纳 GMBDevice.h、GMBCollector.h。消费者使用带族目录的头路径，如 `<DAQFamily/DAQDevice.h>`。公共包含根仍为 `include`，不提供旧路径转发头或额外搜索目录。可选模块位置、类型名称与运行逻辑保持。
@@ -70,7 +92,7 @@ GMB/DAQ 设备族能力、族 Collector、DAQ 通道标准处理与统一落盘�
 - Qt ≥ 6.8.3；Qt 由使用环境提供，不在仓库中打包。
 - 上游：[Algorithm](https://github.com/Lateef-ZHOU/Algorithm), [DeviceCore](https://github.com/Lateef-ZHOU/DeviceCore)。已有同名 CMake 目标时复用；否则 FetchContent 拉取固定完整提交。
 - 本仓库不依赖 LiDAR_DataACQ 源码、应用目录或设备型号；不包含第三方二进制。
-- 核心提供协程、设备族标准能力、通道处理及 AcqSaver 统一保存；任务共用业务与族专用界面作为可选参考目标。三种具体编排、具体页面及协议凑帧由官邸实现。安装姿态等状态归设备实例。
+- 核心提供设备族标准能力、通道处理及 AcqSaver 统一保存；协程由 DeviceCore 提供；任务共用业务与族专用界面作为可选参考目标。三种具体编排、具体页面及协议凑帧由官邸实现。安装姿态等状态归设备实例。
 - 默认仅 Qt Core/OpenMP；保留主线程取消、收包完成消费和 Handle 同步关闭契约，不提供退出保存排空。
 
 ## 可选模块

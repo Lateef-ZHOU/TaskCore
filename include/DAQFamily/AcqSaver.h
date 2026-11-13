@@ -19,7 +19,7 @@
 #include <QString>
 
 #include "DAQFamily/DAQCollector.h"
-#include "DAQChannelSpec.h"
+#include "DAQFamily/DAQChannelSpec.h"
 
 // ============================================================
 // AcqSaver —— 采集卡族唯一的落盘格式与路径政策。写出只由本类负责：入参是具体收集器（通道元组与上下文）
