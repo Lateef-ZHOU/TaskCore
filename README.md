@@ -1,5 +1,10 @@
 # TaskCore
 
+## 风廓线类型入口（2026-11-13 用户定）
+
+AcqSaver 改从 Algorithm 的 `WindProfile.h` 引入 `VerticalWindProfileUnit`，独立旧头已删除。保存结构、四束编排环、消费和取消链不变；墙钟窗口历史由 Algorithm 的公共模板提供，不用于替换任务束序。
+
+
 2026-11-13：适配 Algorithm 的 RadialWindCalculation 计算命名空间，为同级 RadialWind<Spec> 静态数据类型让出名称；现有计算公式、传输与保存链路不变。
 
 2026-11-13 用户定：算法层删除 SpectrumLike，族层改为直接包含 DAQChannelSpec.h。当前 DAQChannel 继续使用明确类型的二维传输谱计算入口；不改变收集、处理、保存或取消链。
@@ -21,6 +26,8 @@
 本轮验证：本地依赖覆盖的 MSVC Release 增量构建及 CTest 5/5 通过，保存专项区分 null 缺测和数值零静风。
 
 协程与等待器、GMB/DAQ 设备族能力、族 Collector、DAQ 通道标准处理与统一落盘。Windows / Linux，C++20，CMake ≥ 3.28。
+
+验证：MSVC Release、公开头编译与 CTest 5/5 通过；保存、处理、GMB 收集器与任务界面冒烟通过。 使用本地依赖覆盖，未推送。
 
 ## 边界与依赖
 
