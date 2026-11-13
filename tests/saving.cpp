@@ -127,9 +127,12 @@ int main(int argc, char **argv)
     check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "missing wind not null");
 
     // 风廓线：东风 5 m/s、上升 0.5 m/s → 来向 90°。
-    const auto unit = shareWindProfile(std::make_shared<const VerticalWindProfileUnit<ProfileSpec>>(at, 90.0,
-        std::array<std::optional<LinAlg::Vec3>, 4>{LinAlg::Vec3(-5, 0, 0.5), LinAlg::Vec3(0, -3, 0),
-                                                std::nullopt, LinAlg::Vec3::Zeros()}));
+    auto filling = std::make_shared<VerticalWindProfileUnit<ProfileSpec>>(at, 90.0);
+    (*filling)[0] = LinAlg::Vec3(-5, 0, 0.5);
+    (*filling)[1] = LinAlg::Vec3(0, -3, 0);
+    (*filling)[3] = LinAlg::Vec3::Zeros();
+    const std::shared_ptr<const VerticalWindProfileUnit<ProfileSpec>> frozen = std::move(filling);
+    const auto unit = shareWindProfile(frozen);
     AcqSaver::saveWindProfiles(frame, {{QStringLiteral("A"), unit}});
     const auto profile = readCompleted(root.filePath("session/profile_" + AcqSaver::fileStem(at) + ".json"));
     const auto first = profile.value("channels").toArray()[0].toObject();
