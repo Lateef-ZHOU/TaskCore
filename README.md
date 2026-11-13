@@ -373,3 +373,9 @@ DAQChannel 的谱、径向风和 CNR 改为 LinearSpectrumPtr / LinearSeriesPtr�
 
 `DAQFamily/RadialWind.h` 显式包含 `<memory>` 和 `<utility>`，不再间接借用 `LinearArray.h` 的标准库声明。径向风/CNR 算法、数据布局和共享份额传输不变；UICore 依赖拆分仍暂缓。本轮仅本地整理，不推送；验证记录见主程序维护操作。
 
+## 2026-11-14：TaskBase 线程与同步通知契约（用户定）
+
+TaskBase 及登记设备归主线程，登记、启停与销毁在主线程执行，调用期间不泵事件。协程中的日志和进度通知可能同步交付，接收槽不得直接重入启停或销毁当前任务；需要时排队执行，确保取消发生在协程挂起或结束后。末端任务仍在析构首句 cancelRun。
+
+删除 TaskBase 多余的默认析构声明，补齐 QList、QString 的直接包含。设备登记、验锁、取消链和运行状态保持，不新增状态；验证见主程序维护操作。本轮仅本地提交，不推送。
+

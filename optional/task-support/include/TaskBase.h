@@ -9,7 +9,9 @@
 #include <vector>
 #include <QDateTime>
 #include <QDir>
+#include <QList>
 #include <QObject>
+#include <QString>
 #include <QStringList>
 #include <QUrl>
 #include <QVariantMap>
@@ -21,6 +23,9 @@
 // 任务族基只管理设备登记、启动校验、协程及运行状态。
 // 可编辑设置由 QML 官邸持有，启动时一次传入；运行期间不回读界面。
 // 设备退出时同步收回协程并移出候选；任务末端析构首句 cancelRun()。
+// 任务及登记设备均归主线程；登记、启停和销毁在主线程执行，调用期间不泵事件。
+// 协程执行中会同步发出日志和进度通知；接收槽不得直接重入启停或销毁当前任务，
+// 需要这些操作时应排队到主线程，待当前调用返回、协程挂起或结束后执行。
 class TaskBase : public QObject
 {
     Q_OBJECT
@@ -39,7 +44,6 @@ class TaskBase : public QObject
 public:
     using Cards = std::vector<std::reference_wrapper<DAQFamily>>;
     explicit TaskBase(QObject *parent = nullptr) : QObject(parent) {}
-    ~TaskBase() override = default;
 
     [[nodiscard]] virtual QString displayName() const = 0;
     [[nodiscard]] virtual QString subtitle() const = 0;
@@ -172,6 +176,7 @@ protected:
                           std::optional<QDir>) = 0;
 
     // 不发业务状态通知，不调用虚函数；末端析构在自己的成员拆除前调用。
+    // 仅在协程已挂起或结束时调用，不得从协程执行中的同步通知槽进入。
     void cancelRun() noexcept { coro_.reset(); }
     [[nodiscard]] QDateTime beginSession() { return startedAt_ = QDateTime::currentDateTime(); }
     void completeBeam() noexcept { ++delivered_; }
