@@ -54,7 +54,7 @@ struct SavedA
 {
     static constexpr const char *name = "A";
     static constexpr double wavelengthM = 1.55e-6, zeroWindMHz = 1.5;
-    static constexpr int rows = 2, columns = 4;
+    static constexpr int rangeGateCount = 2, frequencyBinCount = 4;
     static constexpr double rangeStartM = 0, rangeStepM = 15, frequencyStartMHz = 0, frequencyStepMHz = 1;
 };
 struct SavedB : SavedA

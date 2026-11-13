@@ -1,5 +1,7 @@
 # TaskCore
 
+2026-11-13 用户定：通道规格的距离门数量与频点数量分别命名为 `rangeGateCount`、`frequencyBinCount`，取代 `rows`、`columns`。同步规格使用方，数值与数据布局不变；通用二维传输对象和 SpectrumLike 的行列接口保持。
+
 2026-11-13：`DAQChannelSpec` 移到 Algorithm 的 SpectrumLike.h，删除本层重复定义；通道规格要求无实例状态、参数可常量求值。现有 DAQChannel 传输、处理、保存和取消链保持。Algorithm 同时提供固定数组 `Spectrum<Spec>`，本轮尚未将各型号的原始缓冲、DAQChannel 传输及 Qt 登记改为该类型。
 
 本地验证需使用配套 Algorithm 工作树（配置 `FETCHCONTENT_SOURCE_DIR_LIDAR_ALGORITHM`）；暂未推送或更新远端固定版本。

@@ -60,7 +60,7 @@ template <DAQChannelSpec Spec>
 struct DAQChannel : Spec
 {
     explicit DAQChannel(std::vector<double> values)
-        : DAQChannel(LinearArray2D<double>(Spec::rows, Spec::columns, Spec::rangeStartM, Spec::rangeStepM,
+        : DAQChannel(LinearArray2D<double>(Spec::rangeGateCount, Spec::frequencyBinCount, Spec::rangeStartM, Spec::rangeStepM,
                                            Spec::frequencyStartMHz, Spec::frequencyStepMHz, std::move(values))) {}
 
     LinearArray2D<double> spectrum;

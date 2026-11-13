@@ -59,7 +59,7 @@ struct TestChannelSpec
 {
     static constexpr const char *name = "T";
     static constexpr double wavelengthM = 2e-6, zeroWindMHz = 3.5;
-    static constexpr int rows = 2, columns = 8;
+    static constexpr int rangeGateCount = 2, frequencyBinCount = 8;
     static constexpr double rangeStartM = 100, rangeStepM = 30, frequencyStartMHz = 0, frequencyStepMHz = 1;
 };
 class TestCollector final : public TypedDAQCollector<DAQChannel<TestChannelSpec>>
@@ -76,8 +76,8 @@ private:
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
         std::vector<double> values;
-        for (int row = 0; row < TestChannelSpec::rows; ++row)
-            for (int column = 0; column < TestChannelSpec::columns; ++column)
+        for (int row = 0; row < TestChannelSpec::rangeGateCount; ++row)
+            for (int column = 0; column < TestChannelSpec::frequencyBinCount; ++column)
                 values.push_back(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
         return Frame{DAQChannel<TestChannelSpec>(std::move(values))};
     }
