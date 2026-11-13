@@ -34,17 +34,17 @@ struct Result
     std::shared_ptr<const CNR<Spec>> cnr;
 };
 
-// 每行借用原谱。频点不足两点仍拒绝拟合；其他尺寸和轴由 Spec 保证。
+// 每行借用原谱；波长与零风速参考统一读取 Spec，计算结果与保存的规格一致。
+// 频点不足两点仍拒绝拟合；其他尺寸和轴由 Spec 保证。
 template<DAQChannelSpec Spec>
-[[nodiscard]] Result<Spec> Calc(const Spectrum<Spec> &spectrum,
-    const double metersPerSecondPerMHz = RadialWindCalculation::metersPerSecondPerMHz(Spec::wavelengthM),
-    const double zeroWindMHz = Spec::zeroWindMHz)
+[[nodiscard]] Result<Spec> Calc(const Spectrum<Spec> &spectrum)
 {
     if constexpr (Spec::frequencyBinCount < 2) return {};
     constexpr int rangeGateCount = Spec::rangeGateCount, frequencyBinCount = Spec::frequencyBinCount;
     constexpr double frequencyStartMHz = Spec::frequencyStartMHz, frequencyStepMHz = Spec::frequencyStepMHz;
-    const double slope = frequencyStepMHz * metersPerSecondPerMHz;
-    const double intercept = (frequencyStartMHz - zeroWindMHz) * metersPerSecondPerMHz;
+    const double velocityPerMHz = metersPerSecondPerMHz(Spec::wavelengthM);
+    const double slope = frequencyStepMHz * velocityPerMHz;
+    const double intercept = (frequencyStartMHz - Spec::zeroWindMHz) * velocityPerMHz;
     auto ws = std::make_shared<RadialWind<Spec>>();
     auto cnr = std::make_shared<CNR<Spec>>();
 #pragma omp parallel for

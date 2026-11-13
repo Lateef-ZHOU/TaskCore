@@ -137,7 +137,7 @@ private:
     // [Handle 收包线程] 一口上行原样交给收集器；TypedDAQCollector 的 onFeed 调用型号 assemble 凑帧并构造通道。
     std::optional<QByteArray> onStream(const QByteArray &raw, RxTime) final { return raw; }
 
-    // [主] 完成帧：按通道发功率谱与径向风、提交整帧保存，进四束环；同步位为真时逐通道反演风廓线。
+    // [主] 完成帧：发送只读通道结果元组、提交整帧保存，进四束环；同步位为真时逐通道反演风廓线。
     // 四束是同一收集器类型的帧，第 I 路在每帧都是同一类型（同一规格、同一距离轴），无须运行时核对。
     void onConsume(const std::shared_ptr<const CollectorT> &frame) override
     {

@@ -150,29 +150,34 @@ struct UnrelatedSpectrum
     }
 };
 template<class T>
-concept CanCalculate = requires(const T &value) { RadialWindCalculation::Calc(value, 0.775, 18.0); };
+concept CanCalculate = requires(const T &value) { RadialWindCalculation::Calc(value); };
 static_assert(CanCalculate<Spectrum<ChannelSpec>> && !CanCalculate<LinearArray2D<double>>);
 static_assert(!CanCalculate<UnrelatedSpectrum> && !CanCalculate<LinearArray2D<float>>);
 static_assert(!CanCalculate<std::array<double, 34>> && !CanCalculate<std::span<const double>>);
+template<class T>
+concept CanOverrideCalibration = requires(const T &value) { RadialWindCalculation::Calc(value, 0.8, 16.0); };
+static_assert(!CanOverrideCalibration<Spectrum<ChannelSpec>>);
 
 static_assert(StationaryObject<Spectrum<ChannelSpec>> && StationaryObject<RadialWind<ChannelSpec>>
     && StationaryObject<CNR<ChannelSpec>>);
 static_assert(!std::same_as<RadialWind<ChannelSpec>, CNR<ChannelSpec>>);
 struct NarrowSpec : ChannelSpec { static constexpr int frequencyBinCount = 1; };
+struct ShiftedSpec : ChannelSpec { static constexpr double wavelengthM = 1.6e-6, zeroWindMHz = 16; };
 
 int main()
 {
     Spectrum<ChannelSpec> fixed{};
+    Spectrum<ShiftedSpec> shiftedSpectrum{};
     // 不同门用不同峰位及幅度，验证行列布局没有颠倒。
     for (int gate = 0; gate < fixed.rangeGateCount; ++gate)
         for (int bin = 0; bin < fixed.frequencyBinCount; ++bin)
         {
             const double center = gate == 0 ? 6.0 : 10.0;
-            fixed[gate * fixed.frequencyBinCount + bin] = 3 + (gate + 1) * 100
+            fixed[gate * fixed.frequencyBinCount + bin] = shiftedSpectrum[gate * fixed.frequencyBinCount + bin] = 3 + (gate + 1) * 100
                 * std::exp(-(bin - center) * (bin - center) / 2.0);
         }
     const auto baseline = RadialWindCalculation::Calc(fixed);
-    const auto shifted = RadialWindCalculation::Calc(fixed, 0.8, 16.0);
+    const auto shifted = RadialWindCalculation::Calc(shiftedSpectrum);
     if (fixed.row(1).data() != fixed.row(0).data() + ChannelSpec::frequencyBinCount) return 9;
     if (std::abs((*shifted.ws)[0] - 4.8) > 0.01 || std::abs((*shifted.ws)[1] - 11.2) > 0.01) return 8;
     for (int gate = 0; gate < fixed.rangeGateCount; ++gate)

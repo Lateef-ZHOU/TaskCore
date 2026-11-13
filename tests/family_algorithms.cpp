@@ -106,9 +106,11 @@ struct ProfileSpec {
     static constexpr double wavelengthM = 1.55e-6, zeroWindMHz = 80;
 };
 
+template<int ZeroWind>
 struct SpectrumSpec : ProfileSpec<2, 30> {
     static constexpr int frequencyBinCount = 9;
     static constexpr double frequencyStartMHz = 10, frequencyStepMHz = 2;
+    static constexpr double zeroWindMHz = ZeroWind;
 };
 template<class Spec> auto wind(std::initializer_list<double> values)
 {
@@ -154,17 +156,20 @@ int main()
     // 不同网格不能装入同一输入；缺失实测份额仍拒绝反演。
     beams[3].ws.reset();
     if (WindProfile::Calc<ProfileSpec<3>>(beams, now)) return 8;
-    Spectrum<SpectrumSpec> spectrum;
+    Spectrum<SpectrumSpec<18>> spectrum;
+    Spectrum<SpectrumSpec<16>> shiftedSpectrum;
+    Spectrum<SpectrumSpec<80>> outOfBandSpectrum;
     for (int gate = 0; gate < 2; ++gate)
         for (int bin = 0; bin < 9; ++bin)
-            spectrum[gate * 9 + bin] = 1.0 + 100.0 * std::exp(-(bin - 4.0) * (bin - 4.0) / 2.0);
-    const auto calm = RadialWindCalculation::Calc(spectrum, 0.775, 18.0);
+            spectrum[gate * 9 + bin] = shiftedSpectrum[gate * 9 + bin] = outOfBandSpectrum[gate * 9 + bin]
+                = 1.0 + 100.0 * std::exp(-(bin - 4.0) * (bin - 4.0) / 2.0);
+    const auto calm = RadialWindCalculation::Calc(spectrum);
     if (calm.ws->size() != 2 || calm.ws->rangeStartM != 30.0 || calm.ws->rangeStepM != 15.0
         || std::abs((*calm.ws)[0]) > 0.01) return 11;
-    const auto shifted = RadialWindCalculation::Calc(spectrum, 0.775, 16.0);
+    const auto shifted = RadialWindCalculation::Calc(shiftedSpectrum);
     if (std::abs((*shifted.ws)[1] - 2.0 * 0.775) > 0.01) return 12;
     // 参考频率在不在频带内是硬件配置的事，算法照常换算。
-    const auto outOfBand = RadialWindCalculation::Calc(spectrum, 0.775, 80.0);
+    const auto outOfBand = RadialWindCalculation::Calc(outOfBandSpectrum);
     if (std::abs((*outOfBand.ws)[0] - (18.0 - 80.0) * 0.775) > 0.01 || (*outOfBand.cnr)[0] != (*calm.cnr)[0]) return 13;
     const auto zero = [](const LinAlg::Vec3 &v) { return v.x() == 0 && v.y() == 0 && v.z() == 0; };
     const LinAlg::Vec3 a(1, 2, 3), b(4, 5, 6);

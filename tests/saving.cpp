@@ -217,6 +217,31 @@ int main(int argc, char **argv)
     check(exact.readAll().endsWith("\"horizontalDirectionDeg\":[90,0,null,180],\"horizontalSpeed\":[5,3,null,0],\"verticalSpeed\":[0.5,0,null,0]}]}"),
           "profile JSON field order, numeric format or missing/calm values changed");
 
+    // 整帧保存也只捕获结果份额；Collector 在调用线程释放后，原数组仍可写出。
+    std::atomic<bool> frameDestroyedHere = false;
+    std::shared_ptr<SavedFrame> savingSource(new SavedFrame(DAQParameters(TestKey(), 3,
+        std::nullopt, root, QStringLiteral("released-frame"), false)),
+        [caller, &frameDestroyedHere](SavedFrame *value) {
+            frameDestroyedHere.store(std::this_thread::get_id() == caller);
+            delete value;
+        });
+    check(savingSource->feed(QByteArray("x"), at), "independent save frame did not complete");
+    std::shared_ptr<const SavedFrame> savingFrame = std::move(savingSource);
+    const std::weak_ptr<const SavedFrame> savingWeak = savingFrame;
+    AcqSaver::saveFrame(std::move(savingFrame), QStringLiteral("Card"));
+    check(savingWeak.expired() && frameDestroyedHere.load(), "frame saver retained Collector or destroyed it off-thread");
+    const auto savedIndependent = readCompleted(root.filePath("released-frame/" + AcqSaver::fileStem(at) + ".json"));
+    auto expectedInfo = info;
+    expectedInfo.insert("session", "released-frame");
+    check(savedIndependent.value("frame").toObject() == expectedInfo
+          && savedIndependent.value("channels") == saved.value("channels"),
+          "frame saver lost context, channel order or original result values");
+    QFile originalFile(root.filePath("session/" + AcqSaver::fileStem(at) + ".json"));
+    QFile independentFile(root.filePath("released-frame/" + AcqSaver::fileStem(at) + ".json"));
+    check(originalFile.open(QIODevice::ReadOnly) && independentFile.open(QIODevice::ReadOnly), "cannot compare saved frame bytes");
+    check(originalFile.readAll().replace("\"session\":\"session\"", "\"session\":\"released-frame\"") == independentFile.readAll(),
+          "frame JSON field order, numeric format or missing values changed");
+
     // 不落盘：saveRoot 为空时入口直接返回。
     AcqSaver::saveFrame(std::make_shared<const SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, std::nullopt, {}, false)),
                         QStringLiteral("Card"));

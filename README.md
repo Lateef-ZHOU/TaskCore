@@ -1,3 +1,9 @@
+## 2026-11-14：静态规格与保存保活收尾（用户定）
+
+RadialWindCalculation::Calc 只接受 Spectrum<Spec>，波长和零风速参考统一读取 Spec，不再提供运行时覆盖参数；不同标定的测试使用不同 Spec，拟合与换算公式保持。
+
+AcqSaver::saveFrame 仍接受只读 Collector 份额，启动保存线程前捕获 DAQParameters、帧时间、设备标识和通道元组。元组只复制结果共享指针，线程不再持有 Collector，也不复制数组。四束完整 Collector 历史、JSON 字段及顺序、六位有效数字、缺测和单频点行为、取消与退出不排空约定保持。不推送；验证见主程序维护操作。
+
 ## 2026-11-14：静态功率谱、径向风与 CNR（用户定）
 
 功率谱、径向风和 CNR 分别使用 Spectrum<Spec>、RadialWind<Spec>、CNR<Spec>，固定数组禁止复制和移动。DAQChannel 只接收已填满的非空 unique_ptr<Spectrum<Spec>>，计算后发布三种只读份额；DAQChannelLike 只接受这一精确类型，不能用字段相似但不一致的对象混入。径向风与四束反演全程保留 Spec，删除动态轴副本、动态谱兼容入口及类型已保证的尺寸/同轴检查；数值、空份额和朝向检查保留。

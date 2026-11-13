@@ -50,12 +50,15 @@ public:
         return calendarTime(frameTime).toString("yyyy-MM-dd HH:mm:ss.zzz");
     }
 
-    // 完成帧以只读份额交入；card 为设备的 ASCII 标识（objectName）。
+    // 完成帧以只读份额交入；线程只持上下文、帧时刻、设备标识与结果份额，不延长 Collector 寿命。
     template <DAQCollectorLike C>
     static void saveFrame(std::shared_ptr<const C> frame, QString card)
     {
         if (!frame || !frame->parameters.saveRoot) return;
-        std::thread(&AcqSaver::writeFrame<C>, std::move(frame), std::move(card)).detach();
+        std::thread([context = frame->parameters, at = frame->frameTime(),
+                     channels = frame->channels(), card = std::move(card)] {
+            writeFrame(context, at, channels, card);
+        }).detach();
     }
 
     // 同步点的一组风廓线落盘；线程只保留上下文、同步帧时刻和结果份额，不延长 Collector 寿命。
@@ -138,24 +141,24 @@ private:
     }
 
     // [独立线程] 每帧一个 JSON；通道按元组顺序写出。
-    template <DAQCollectorLike C>
-    static void writeFrame(const std::shared_ptr<const C> frame, const QString card)
+    template <DAQChannelLike... Channels>
+    static void writeFrame(const DAQParameters &context, const RxTime at,
+        const std::tuple<Channels...> &channels, const QString &card)
     {
-        const auto &context = frame->parameters;
-        Writer out(context.saveRoot->filePath(context.sessionDir + "/" + fileStem(frame->frameTime()) + ".json"));
+        Writer out(context.saveRoot->filePath(context.sessionDir + "/" + fileStem(at) + ".json"));
         if (!out.open()) {
             qWarning().noquote() << "Cannot open acquisition frame file under:" << context.saveRoot->path();
             return;
         }
         out.raw("{");
-        writeFrameInfo(out, context, frame->frameTime());
+        writeFrameInfo(out, context, at);
         out.raw(",");
         out.key("card"); out.text(card);
         out.raw("},");
         out.key("channels");
         out.raw("[");
         bool first = true;
-        std::apply([&](const auto &...channel) { (writeChannel(out, channel, first), ...); }, frame->channels());
+        std::apply([&](const auto &...channel) { (writeChannel(out, channel, first), ...); }, channels);
         out.raw("]}");
         out.commit();
     }
