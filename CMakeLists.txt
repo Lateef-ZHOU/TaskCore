@@ -10,9 +10,9 @@ if(NOT TARGET Lidar::DeviceCore OR NOT TARGET Lidar::Algorithm)
     message(FATAL_ERROR "FamilyCore requires Lidar::DeviceCore and Lidar::Algorithm")
 endif()
 add_library(LidarFamilyCore STATIC
-    include/AcqSaver.h
-    include/DAQDevice.h
-    include/GMBDevice.h)
+    include/DAQFamily/AcqSaver.h
+    include/DAQFamily/DAQDevice.h
+    include/GMBFamily/GMBDevice.h)
 set_target_properties(LidarFamilyCore PROPERTIES AUTOMOC ON)
 qt_extract_metatypes(LidarFamilyCore)
 if(MSVC)

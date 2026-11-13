@@ -14,9 +14,9 @@
 #include <QUrl>
 #include <QVariantMap>
 #include "DeviceCoro.h"
-#include "AcqSaver.h"
-#include "DAQDevice.h"
-#include "GMBDevice.h"
+#include "DAQFamily/AcqSaver.h"
+#include "DAQFamily/DAQDevice.h"
+#include "GMBFamily/GMBDevice.h"
 
 // 任务族基只管理设备登记、启动校验、协程及运行状态。
 // 可编辑设置由 QML 官邸持有，启动时一次传入；运行期间不回读界面。

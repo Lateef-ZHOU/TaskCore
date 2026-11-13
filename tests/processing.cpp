@@ -2,7 +2,7 @@
 #include <cmath>
 #include <numbers>
 #include <functional>
-#include "DAQDevice.h"
+#include "DAQFamily/DAQDevice.h"
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QSemaphore>

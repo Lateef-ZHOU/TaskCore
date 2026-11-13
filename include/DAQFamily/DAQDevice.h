@@ -10,8 +10,8 @@
 #include <QString>
 #include <QUrl>
 
-#include "AcqSaver.h"             // 采集卡族唯一落盘入口
-#include "DAQCollector.h"          // 通道元组与不可变请求参数
+#include "DAQFamily/AcqSaver.h"             // 采集卡族唯一落盘入口
+#include "DAQFamily/DAQCollector.h"          // 通道元组与不可变请求参数
 #include "DeviceCoro.h"           // DeviceCoro / LockRequest / HeldLock / RunAwaiter（测试采集协程）
 #include "DeviceBase.h" // DeviceBase / Device<H,C>
 #include "FamilyBase.h" // FamilyBase / FamilyDevice（族接口与共同实现）

@@ -1,3 +1,9 @@
+## 2026-11-14：头文件按设备族归类（用户定）
+
+`include/FamilyBase.h` 保留公共族骨架；`include/DAQFamily/` 收纳 DAQDevice.h、DAQCollector.h 与 AcqSaver.h；`include/GMBFamily/` 收纳 GMBDevice.h、GMBCollector.h。消费者使用带族目录的头路径，如 `<DAQFamily/DAQDevice.h>`。公共包含根仍为 `include`，不提供旧路径转发头或额外搜索目录。可选模块位置、类型名称与运行逻辑保持。
+
+验证：Windows/MSVC Release 增量构建、公开头独立编译通过，build-family CTest 5/5；证据为 folders-configure.log、folders-build.log 与 Testing/Temporary/LastTest.log。本轮不推送。
+
 ## 2026-11-14：协程下移与设备族更名（用户定）
 
 原 TaskCore 本地仓库、CMake 主目标及配置开关改名为 FamilyCore、Lidar::FamilyCore、FAMILYCORE_WITH_*；DeviceCoro.h 移入 DeviceCore。FamilyBase/FamilyLike、GMB/DAQ、保存与可选任务参考业务/UI 仍在本库。TaskSupport/TaskUI 的用途及名称保持。本地联调须覆盖配套 DeviceCore、Algorithm 及本库源码。GitHub 仓库尚未改名或推送，远端 URL 暂保留 TaskCore.git；发布时再改远端名称并更新所有固定提交，当前旧提交不能单独构建本轮新接口。

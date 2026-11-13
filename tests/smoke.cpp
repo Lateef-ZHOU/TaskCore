@@ -3,8 +3,8 @@
 #include <type_traits>
 #include <QCoreApplication>
 #include "DeviceCoro.h"
-#include "DAQDevice.h"
-#include "GMBDevice.h"
+#include "DAQFamily/DAQDevice.h"
+#include "GMBFamily/GMBDevice.h"
 #include "WindProfile.h"
 #include "LidarForward.h"
 static_assert(AwaitableDevice<GMBFamily>);

@@ -1,4 +1,4 @@
-#include "GMBCollector.h"
+#include "GMBFamily/GMBCollector.h"
 #include <QtLogging>
 #include <chrono>
 #include <thread>

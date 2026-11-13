@@ -1,8 +1,8 @@
 #pragma once
 #include <QtQml/qqmlregistration.h>
 #include "DeviceBase.h"
-#include "GMBDevice.h"
-#include "DAQDevice.h"
+#include "GMBFamily/GMBDevice.h"
+#include "DAQFamily/DAQDevice.h"
 #include "ChartTypes.h"
 #include "TaskBase.h"
 

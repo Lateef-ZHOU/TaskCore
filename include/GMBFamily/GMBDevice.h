@@ -12,7 +12,7 @@
 #include "GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
 #include "FamilyBase.h" // FamilyBase / FamilyDevice（族骨架与共同实现）
 #include "RunBase.h"    // DoneFn<C> / DeviceLock / CollectorLike
-#include "GMBCollector.h"          // 云台族读口、运动参数与型号收集器（喂位形、判到位 + 驻留）
+#include "GMBFamily/GMBCollector.h"          // 云台族读口、运动参数与型号收集器（喂位形、判到位 + 驻留）
 
 // 云台族定义标准能力；纯 C++ 旁支，不继承 QObject（唯一 QObject 来自末端继承的 Handle）。
 // 模板层同时继承具体 Device 与本类，持有唯一安装姿态；编排只持族引用，通过 device() 使用锁，

@@ -18,7 +18,7 @@
 #include <QSaveFile>
 #include <QString>
 
-#include "DAQCollector.h"
+#include "DAQFamily/DAQCollector.h"
 #include "DAQChannelSpec.h"
 
 // ============================================================
