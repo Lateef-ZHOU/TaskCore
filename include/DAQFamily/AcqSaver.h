@@ -169,20 +169,20 @@ private:
         out.raw("{");
         out.key("name"); out.text(QString::fromUtf8(Channel::name)); out.raw(",");
         const auto &spectrum = *channel.spectrum;
-        out.key("rangeStartM"); out.number(spectrum.rowStart); out.raw(",");
-        out.key("rangeStepM"); out.number(spectrum.rowStep); out.raw(",");
-        out.key("freqStartMHz"); out.number(spectrum.columnStart); out.raw(",");
-        out.key("freqStepMHz"); out.number(spectrum.columnStep); out.raw(",");
+        out.key("rangeStartM"); out.number(Channel::rangeStartM); out.raw(",");
+        out.key("rangeStepM"); out.number(Channel::rangeStepM); out.raw(",");
+        out.key("freqStartMHz"); out.number(Channel::frequencyStartMHz); out.raw(",");
+        out.key("freqStepMHz"); out.number(Channel::frequencyStepMHz); out.raw(",");
         out.key("zeroWindMHz"); out.number(Channel::zeroWindMHz); out.raw(",");
         out.key("spectrum");
         out.raw("[");
-        for (int row = 0; spectrum.complete() && row < spectrum.rows; ++row) {
+        for (int row = 0; row < Channel::rangeGateCount; ++row) {
             if (row) out.raw(",");
             out.numbers(spectrum.row(row));
         }
         out.raw("],");
-        out.key("radialWind"); out.numbers(*channel.radialWind); out.raw(",");
-        out.key("cnr"); out.numbers(*channel.cnr);
+        out.key("radialWind"); if (channel.radialWind) out.numbers(*channel.radialWind); else out.raw("[]"); out.raw(",");
+        out.key("cnr"); if (channel.cnr) out.numbers(*channel.cnr); else out.raw("[]");
         out.raw("}");
     }
 

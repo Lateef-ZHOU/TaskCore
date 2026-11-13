@@ -37,11 +37,6 @@ public:
     // 这是造出 DAQParameters 的唯一入口：型号以 *this 出示通行证。任务与单卡测试在发令前调用，为空即拒绝启动。
     [[nodiscard]] virtual std::optional<DAQParameters> paramsFor(int accumSec, std::optional<WorldModel> pose,
         std::optional<QDir> saveRoot, QString sessionDir, bool sync) const = 0;
-
-    // 通知契约：末端在 Q_SIGNALS 中覆写，由 moc 提供实现；均在主线程按通道下标发出。
-    virtual void spectrumReady(int channel, const LinearSpectrumPtr &spectrum) = 0;
-    // 逐门剖面带斜距线性轴；页面原样交给径向风图，图按创建配置核对网格。
-    virtual void radialReady(int channel, const LinearSeriesPtr &speeds, const LinearSeriesPtr &cnr) = 0;
 };
 
 // 模板层继承具体 Device 与族基：Device 按参数造斗；本层在主线程显示、提交保存、维护四束环与反演，并提供单卡测试。
@@ -54,6 +49,9 @@ class DAQDevice : public FamilyDevice<HandleT, CollectorT, DAQFamily>
     static auto profileTypes(const std::tuple<DAQChannel<Specs>...> &)
         -> std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Specs>>...>;
 public:
+    // 元组仅复制小型只读份额；不保活 Collector 的原始收包缓冲。Qt 边界传递此共享元组。
+    using Channels = std::shared_ptr<const typename CollectorT::Frame>;
+    virtual void channelsReady(const Channels &channels) = 0;
     using Profiles = decltype(profileTypes(std::declval<const typename CollectorT::Frame &>()));
     // Qt 信号由末端实现；元组仅含原帧的只读份额，空项表示该通道未反演成功。
     virtual void profilesReady(const Profiles &profiles) = 0;
@@ -145,10 +143,7 @@ private:
     {
         constexpr auto indices = std::make_index_sequence<std::tuple_size_v<typename CollectorT::Frame>>{};
         const auto &context = frame->parameters;
-        [&]<std::size_t... I>(std::index_sequence<I...>) {
-            ((Q_EMIT this->spectrumReady(int(I), std::get<I>(frame->channels()).spectrum),
-              Q_EMIT this->radialReady(int(I), std::get<I>(frame->channels()).radialWind, std::get<I>(frame->channels()).cnr)), ...);
-        }(indices);
+        Q_EMIT this->channelsReady(std::make_shared<const typename CollectorT::Frame>(frame->channels()));
         AcqSaver::saveFrame(frame, this->objectName());
         beams_.push_back(frame);
         if (!context.sync || !beams_.full())
@@ -164,10 +159,10 @@ private:
     template <std::size_t I>
     auto invert(const CollectorT &frame) const
     {
-        std::array<WindProfile::Input, WindProfile::kBeams> inputs;
-        for (std::size_t beam = 0; beam < inputs.size(); ++beam)
-            inputs[beam] = {beams_[beam]->parameters.pose, std::get<I>(beams_[beam]->channels()).radialWind};
         return [&]<DAQChannelSpec Spec>(const DAQChannel<Spec> &) {
+            std::array<WindProfile::Input<Spec>, WindProfile::kBeams> inputs;
+            for (std::size_t beam = 0; beam < inputs.size(); ++beam)
+                inputs[beam] = {beams_[beam]->parameters.pose, std::get<I>(beams_[beam]->channels()).radialWind};
             return WindProfile::Calc<Spec>(inputs, frame.frameTime());
         }(std::get<I>(frame.channels()));
     }

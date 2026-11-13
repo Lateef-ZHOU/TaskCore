@@ -1,3 +1,13 @@
+## 2026-11-14：静态功率谱、径向风与 CNR（用户定）
+
+功率谱、径向风和 CNR 分别使用 Spectrum<Spec>、RadialWind<Spec>、CNR<Spec>，固定数组禁止复制和移动。DAQChannel 只接收已填满的非空 unique_ptr<Spectrum<Spec>>，计算后发布三种只读份额；DAQChannelLike 只接受这一精确类型，不能用字段相似但不一致的对象混入。径向风与四束反演全程保留 Spec，删除动态轴副本、动态谱兼容入口及类型已保证的尺寸/同轴检查；数值、空份额和朝向检查保留。
+
+DAQDevice::channelsReady 交付 shared_ptr<const Frame>，Frame 是通道元组，仅复制小型共享指针，不复制数组或保活 Collector 的原始收包缓冲。Qt 元类型登记及具体绘图入口归型号。四束历史、公式、阈值、重试和取消保持；保存直接遍历原数组，JSON 字段、顺序、六位有效数字、null 及不足两频点的空结果数组保持。
+
+本轮仅本地联调，不推送；与配套 FamilyCore、ChartCore 及官邸源码一起使用。
+
+验证：Windows/MSVC Release 构建、公开头独立编译及 CTest 16/16 通过；覆盖静态类型拒绝、径向风数值、四束反演、共享份额生命周期和保存格式（含单频点空结果）。证据：build-family/static-frames*.log 与 Testing/Temporary/LastTest.log。
+
 ## 2026-11-14：任务 QML 登记依赖整理（用户定）
 
 TaskQmlTypes.h 只直接包含登记所需的 Qt QML、TaskBase.h 和保留的 ChartTypes.h；删除 DeviceBase.h、GMBDevice.h、DAQDevice.h 三条重复包含。任务业务依赖由 TaskBase.h 自己声明。UICore 依赖拆分继续暂缓，算法与共享份额传输保持不变。本轮不推送。

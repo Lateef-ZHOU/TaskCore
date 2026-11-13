@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <vector>
 #include "DAQFamily/RadialWind.h"
+#include "LinearArray.h"
 #include "DAQFamily/WindProfile.h"
 #include "WallClockHistory.h"
 #include "SO3.h"
@@ -105,6 +106,17 @@ struct ProfileSpec {
     static constexpr double wavelengthM = 1.55e-6, zeroWindMHz = 80;
 };
 
+struct SpectrumSpec : ProfileSpec<2, 30> {
+    static constexpr int frequencyBinCount = 9;
+    static constexpr double frequencyStartMHz = 10, frequencyStepMHz = 2;
+};
+template<class Spec> auto wind(std::initializer_list<double> values)
+{
+    auto frame = std::make_shared<RadialWind<Spec>>();
+    std::copy(values.begin(), values.end(), frame->begin());
+    return frame;
+}
+
 int main()
 {
     const auto now = std::chrono::system_clock::now();
@@ -132,34 +144,28 @@ int main()
     const LinearArray<double> axis(10, 15, {0, 0, 0, 0});
     if (axis.positionAt(3) != 55 || !axis.hasValidAxis() || LinearArray<double>(0, 0).hasValidAxis()
         || !axis.sameAxis(LinearArray<int>(10, 15, {1, 2, 3, 4})) || axis.sameAxis(LinearArray<double>(10, 15, {0}))) return 6;
-    std::array<WindProfile::Input, 4> beams;
+    std::array<WindProfile::Input<ProfileSpec<3>>, 4> beams;
     for (int i = 0; i < 4; ++i)
-        beams[i] = {WorldModel(90.0 * i, 30.0), std::make_shared<const LinearArray<double>>(0.0, 15.0, std::vector<double>{1.0, 2.0, 3.0})};
+        beams[i] = {WorldModel(90.0 * i, 30.0), wind<ProfileSpec<3>>({1, 2, 3})};
     // 30° 仰角：高度 = 斜距 / 2；起点 0、门距 15 m。
     const auto column3 = WindProfile::Calc<ProfileSpec<3>>(beams, now);
     if (!column3 || column3->at != now || column3->heightStartM() != 0 || std::abs((column3->heightStartM() + 2 * column3->heightStepM()) - 15) > 1e-9
         || std::abs(column3->values()[2]->z() - 6) > 1e-9) return 7;
-    // 各束斜距网格不一致或门距非正：不反演。
-    beams[3].ws = std::make_shared<const LinearArray<double>>(0, 30, std::vector<double>{1, 2, 3});
+    // 不同网格不能装入同一输入；缺失实测份额仍拒绝反演。
+    beams[3].ws.reset();
     if (WindProfile::Calc<ProfileSpec<3>>(beams, now)) return 8;
-    for (auto &beam : beams) beam.ws = std::make_shared<const LinearArray<double>>(0, 0, std::vector<double>{1, 2, 3});
-    if (WindProfile::Calc<ProfileSpec<3>>(beams, now)) return 9;
-    // 二维谱 → 径向风：两门、九个频点，列轴 10 MHz 起、步长 2 MHz；峰在第 4 列（18 MHz）。
-    std::vector<double> values;
+    Spectrum<SpectrumSpec> spectrum;
     for (int gate = 0; gate < 2; ++gate)
         for (int bin = 0; bin < 9; ++bin)
-            values.push_back(1.0 + 100.0 * std::exp(-(bin - 4.0) * (bin - 4.0) / 2.0));
-    const LinearArray2D<double> spectrum(2, 9, 30.0, 15.0, 10.0, 2.0, values);
-    if (!spectrum.complete() || spectrum.columnPosition(8) != 26.0 || spectrum.row(1).size() != 9) return 10;
+            spectrum[gate * 9 + bin] = 1.0 + 100.0 * std::exp(-(bin - 4.0) * (bin - 4.0) / 2.0);
     const auto calm = RadialWindCalculation::Calc(spectrum, 0.775, 18.0);
-    if (calm.ws->size() != 2 || calm.ws->start != 30.0 || calm.ws->step != 15.0 || !calm.cnr->sameAxis(*calm.ws)
+    if (calm.ws->size() != 2 || calm.ws->rangeStartM != 30.0 || calm.ws->rangeStepM != 15.0
         || std::abs((*calm.ws)[0]) > 0.01) return 11;
     const auto shifted = RadialWindCalculation::Calc(spectrum, 0.775, 16.0);
     if (std::abs((*shifted.ws)[1] - 2.0 * 0.775) > 0.01) return 12;
     // 参考频率在不在频带内是硬件配置的事，算法照常换算。
     const auto outOfBand = RadialWindCalculation::Calc(spectrum, 0.775, 80.0);
     if (std::abs((*outOfBand.ws)[0] - (18.0 - 80.0) * 0.775) > 0.01 || (*outOfBand.cnr)[0] != (*calm.cnr)[0]) return 13;
-    if (!RadialWindCalculation::Calc(LinearArray2D<double>(2, 9, 0, 15, 10, 2, {1, 2}), 0.775, 18).ws->empty()) return 14;
     const auto zero = [](const LinAlg::Vec3 &v) { return v.x() == 0 && v.y() == 0 && v.z() == 0; };
     const LinAlg::Vec3 a(1, 2, 3), b(4, 5, 6);
     VerticalWindProfileUnit<ProfileSpec<3, 0, 10>> hole(now, 90);
@@ -172,10 +178,11 @@ int main()
     VerticalWindProfileUnit<ProfileSpec<2, 0, 10>> ramp(now, 90);
     ramp[0] = a; ramp[1] = b;
     if (!WindProfile::windAt(ramp, 5) || WindProfile::windAt(ramp, 5)->x() != 2.5 || WindProfile::windAt(ramp, 5)->z() != 4.5) return 19;
+    std::array<WindProfile::Input<ProfileSpec<2>>, 4> missingBeams;
     for (int i = 0; i < 4; ++i)
-        beams[i] = {WorldModel(90.0 * i, 30.0), std::make_shared<const LinearArray<double>>(0, 15, std::vector<double>{0, 0})};
-    beams[0].ws = std::make_shared<const LinearArray<double>>(0, 15, std::vector<double>{0, std::numeric_limits<double>::quiet_NaN()});
-    const auto missingLayer = WindProfile::Calc<ProfileSpec<2>>(beams, now);
+        missingBeams[i] = {WorldModel(90.0 * i, 30.0), wind<ProfileSpec<2>>({0, 0})};
+    missingBeams[0].ws = wind<ProfileSpec<2>>({0, std::numeric_limits<double>::quiet_NaN()});
+    const auto missingLayer = WindProfile::Calc<ProfileSpec<2>>(missingBeams, now);
     if (!missingLayer || !missingLayer->values()[0] || !zero(*missingLayer->values()[0]) || missingLayer->values()[1]) return 26;
     // 多轴样本覆盖标定的外积、补秩及朝向求和；单轴保持原退化行为。
     const auto base = SO3::exp(LinAlg::Vec3(0.1, -0.2, 0.3));

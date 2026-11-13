@@ -77,6 +77,9 @@ public:
     DISABLE_COPY_MOVE(Spectrum)
 
     using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount) * Spec::frequencyBinCount>::operator[];
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount) * Spec::frequencyBinCount>::size;
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount) * Spec::frequencyBinCount>::begin;
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount) * Spec::frequencyBinCount>::end;
 
     // 仅从左值借用，视图不保活原谱；越界返回空，先判范围再计算行地址。
     [[nodiscard]] constexpr std::span<const double> row(const std::size_t index) const & noexcept
@@ -102,6 +105,27 @@ public:
     DISABLE_COPY_MOVE(RadialWind)
 
     using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>::operator[];
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>::size;
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>::begin;
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>::end;
+};
+
+// 一帧信噪比：每个距离门一个 double（dB），斜距轴直接取通道规格。
+// 固定数组禁止复制与移动；零初始化；是否已得到测量结果由持有方判断，不在数组内维护完成状态。
+template<DAQChannelSpec Spec>
+class CNR : public Spec,
+                   private std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>
+{
+public:
+    constexpr CNR() noexcept(std::is_nothrow_default_constructible_v<Spec>)
+        : std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>{} {}
+
+    DISABLE_COPY_MOVE(CNR)
+
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>::operator[];
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>::size;
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>::begin;
+    using std::array<double, static_cast<std::size_t>(Spec::rangeGateCount)>::end;
 };
 
 // 通道反演结果：每个距离门一个 ENU 风矢量（m/s）；nullopt 为缺测，零向量为静风。

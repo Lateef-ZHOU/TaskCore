@@ -75,10 +75,10 @@ private:
     {
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
-        std::vector<double> values;
+        auto values = std::make_unique<Spectrum<TestChannelSpec>>();
         for (int row = 0; row < TestChannelSpec::rangeGateCount; ++row)
             for (int column = 0; column < TestChannelSpec::frequencyBinCount; ++column)
-                values.push_back(1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0));
+                (*values)[row * TestChannelSpec::frequencyBinCount + column] = 1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0);
         return Frame{DAQChannel<TestChannelSpec>(std::move(values))};
     }
     QThread *processedOn_ = nullptr;
@@ -100,8 +100,7 @@ public:
     QList<QByteArray> stopCommands() const override { return {}; }
 Q_SIGNALS:
     void lockChanged(HandleCore::ResourcePhase) override;
-    void spectrumReady(int channel, const LinearSpectrumPtr &spectrum) override;
-    void radialReady(int channel, const LinearSeriesPtr &speeds, const LinearSeriesPtr &cnr) override;
+    void channelsReady(const Channels &channels) override;
     void profilesReady(const Profiles &profiles) override;
 private:
     void PreDestruction() noexcept final
@@ -110,6 +109,8 @@ private:
         DAQDevice::PreDestruction();
     }
 };
+struct FakeChannel : TestChannelSpec {};
+static_assert(DAQChannelLike<DAQChannel<TestChannelSpec>> && !DAQChannelLike<FakeChannel>);
 static_assert(!std::derived_from<DAQFamily, QObject> && std::derived_from<TestDevice, TestHandle>);
 
 template<class Predicate> bool until(Predicate predicate)
@@ -128,15 +129,15 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     TestDevice device;
     int spectra = 0, radials = 0, profiles = 0, completed = 0;
-    QObject::connect(&device, &TestDevice::spectrumReady, &app, [&](int channel, const LinearSpectrumPtr &values) {
-        if (channel != 0 || values->size() != 16 || QThread::currentThread() != app.thread()) qFatal("spectrum signal differs");
-        ++spectra;
-    });
-    QObject::connect(&device, &TestDevice::radialReady, &app,
-                     [&](int channel, const LinearSeriesPtr &speeds, const LinearSeriesPtr &cnr) {
-        if (channel != 0 || speeds->size() != 2 || speeds->start != 100 || speeds->step != 30 || !cnr->sameAxis(*speeds) || cnr->size() != 2
-            || std::abs((*speeds)[0] - 0.5) > 0.05)
+    std::weak_ptr<const Spectrum<TestChannelSpec>> notifiedSpectrum;
+    QObject::connect(&device, &TestDevice::channelsReady, &app, [&](const TestDevice::Channels &channels) {
+        const auto &channel = std::get<0>(*channels);
+        if (channel.spectrum->size() != 16 || QThread::currentThread() != app.thread()) qFatal("spectrum signal differs");
+        if (channel.radialWind->size() != 2 || channel.rangeStartM != 100 || channel.rangeStepM != 30
+            || channel.cnr->size() != 2 || std::abs((*channel.radialWind)[0] - 0.5) > 0.05)
             qFatal("standard radial processing differs");
+        notifiedSpectrum = channel.spectrum;
+        ++spectra;
         ++radials;
     });
     QObject::connect(&device, &TestDevice::profilesReady, &app, [&](const TestDevice::Profiles &result) {
@@ -154,6 +155,7 @@ int main(int argc, char **argv)
             const auto typed = std::dynamic_pointer_cast<const TestCollector>(frame);
             if (!typed || !typed->settled() || typed->processedOn() == app.thread() || QThread::currentThread() != app.thread())
                 qFatal("frame was not processed on the receive thread before completion");
+            if (std::get<0>(typed->channels()).spectrum != notifiedSpectrum.lock()) qFatal("signal copied the spectrum");
             ++completed;
         }, {}) || !until([&] { return completed == i + 1 && radials == i + 1; })) return 2;
         if (profiles != (i == 3 ? 1 : 0)) return 3;

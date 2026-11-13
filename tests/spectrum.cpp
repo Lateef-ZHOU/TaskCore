@@ -2,6 +2,7 @@
 #include "DAQFamily/DAQChannelSpec.h"
 
 #include <array>
+#include "LinearArray.h"
 #include <cmath>
 #include <cstdio>
 #include <numbers>
@@ -26,6 +27,7 @@ static_assert(!DAQChannelSpec<FinalSpec> && !DAQChannelSpec<NoDefaultSpec>
 template<class S> concept CanUseFrames = requires {
     typename Spectrum<S>;
     typename RadialWind<S>;
+    typename CNR<S>;
     typename VerticalWindProfileUnit<S>;
 };
 static_assert(CanUseFrames<ChannelSpec>);
@@ -122,7 +124,8 @@ static_assert(std::same_as<decltype(std::declval<RadialWind<ChannelSpec>&>()[0])
 static_assert(std::same_as<decltype(std::declval<const RadialWind<ChannelSpec>&>()[0]), const double&>);
 static_assert(!HasCompletion<RadialWind<ChannelSpec>> && !HasAxisAliases<RadialWind<ChannelSpec>>);
 static_assert(!HasValues<RadialWind<ChannelSpec>> && !HasAxisValidation<RadialWind<ChannelSpec>>);
-template<class S> concept CanMakeRadialWind = requires { typename RadialWind<S>; };
+template<class S> concept CanMakeRadialWind = requires { typename RadialWind<S>;
+    typename CNR<S>; };
 static_assert(!CanMakeRadialWind<NoRangeGates> && !CanMakeRadialWind<RuntimeRangeGateCount>);
 static_assert(!CanMakeRadialWind<RangeStep<3>>);
 static_assert([] {
@@ -133,7 +136,7 @@ static_assert([] {
     return wind[0] == -3.5 && wind[1] == 8.0;
 }());
 
-// 公开计算入口只接受静态 Spectrum 或现有二维传输类型，不再按结构接收任意对象。
+// 公开计算入口只接受静态 Spectrum，不再按结构接收任意对象。
 struct UnrelatedSpectrum
 {
     static constexpr int rows = 2, columns = 17;
@@ -148,16 +151,14 @@ struct UnrelatedSpectrum
 };
 template<class T>
 concept CanCalculate = requires(const T &value) { RadialWindCalculation::Calc(value, 0.775, 18.0); };
-static_assert(CanCalculate<Spectrum<ChannelSpec>> && CanCalculate<LinearArray2D<double>>);
+static_assert(CanCalculate<Spectrum<ChannelSpec>> && !CanCalculate<LinearArray2D<double>>);
 static_assert(!CanCalculate<UnrelatedSpectrum> && !CanCalculate<LinearArray2D<float>>);
 static_assert(!CanCalculate<std::array<double, 34>> && !CanCalculate<std::span<const double>>);
 
-bool same(const RadialWindCalculation::Result &a, const RadialWindCalculation::Result &b)
-{
-    return a.ws->sameAxis(*b.ws) && a.cnr->sameAxis(*b.cnr)
-        && static_cast<const std::vector<double>&>(*a.ws) == static_cast<const std::vector<double>&>(*b.ws)
-        && static_cast<const std::vector<double>&>(*a.cnr) == static_cast<const std::vector<double>&>(*b.cnr);
-}
+static_assert(StationaryObject<Spectrum<ChannelSpec>> && StationaryObject<RadialWind<ChannelSpec>>
+    && StationaryObject<CNR<ChannelSpec>>);
+static_assert(!std::same_as<RadialWind<ChannelSpec>, CNR<ChannelSpec>>);
+struct NarrowSpec : ChannelSpec { static constexpr int frequencyBinCount = 1; };
 
 int main()
 {
@@ -170,15 +171,10 @@ int main()
             fixed[gate * fixed.frequencyBinCount + bin] = 3 + (gate + 1) * 100
                 * std::exp(-(bin - center) * (bin - center) / 2.0);
         }
-    const LinearArray2D<double> owned(fixed.rangeGateCount, fixed.frequencyBinCount, fixed.rangeStartM, fixed.rangeStepM,
-        fixed.frequencyStartMHz, fixed.frequencyStepMHz, {fixed.row(0).data(), fixed.row(0).data() + fixed.rangeGateCount * fixed.frequencyBinCount});
-    const auto baseline = RadialWindCalculation::Calc(owned, 0.775, 18.0);
-    if (!same(baseline, RadialWindCalculation::Calc(fixed))) return 7;
-    if (!same(RadialWindCalculation::Calc(owned, 0.8, 16.0), RadialWindCalculation::Calc(fixed, 0.8, 16.0))) return 8;
+    const auto baseline = RadialWindCalculation::Calc(fixed);
+    const auto shifted = RadialWindCalculation::Calc(fixed, 0.8, 16.0);
     if (fixed.row(1).data() != fixed.row(0).data() + ChannelSpec::frequencyBinCount) return 9;
-    if (!same(baseline, RadialWindCalculation::Calc(fixed, 0.775, 18.0))) return 1;
-    for (int i = 0; i < fixed.rangeGateCount * fixed.frequencyBinCount; ++i)
-        if (fixed[i] != owned[i]) return 2;
+    if (std::abs((*shifted.ws)[0] - 4.8) > 0.01 || std::abs((*shifted.ws)[1] - 11.2) > 0.01) return 8;
     for (int gate = 0; gate < fixed.rangeGateCount; ++gate)
     {
         const double expectedWind = (gate == 0 ? 4.0 : 12.0) * 0.775;
@@ -187,14 +183,8 @@ int main()
         if (std::abs((*baseline.ws)[gate] - expectedWind) > 0.01
             || std::abs((*baseline.cnr)[gate] - expectedCnr) > 0.01) return 3;
     }
-    // 无效输入仍返回空产物，不进入行读取。
-    LinearArray2D<double> shortFrame(2, 17, 30, 15, 10, 2, std::vector<double>(owned.begin(), owned.end()));
-    shortFrame.pop_back();
-    if (!RadialWindCalculation::Calc(shortFrame, 0.775, 18).ws->empty()) return 4;
-    LinearArray2D<double> invalid(2, 17, 30, 15, 10, 2, std::vector<double>(owned.begin(), owned.end()));
-    invalid.rowStep = 0;
-    if (!RadialWindCalculation::Calc(invalid, 0.775, 18).ws->empty()) return 5;
-    const LinearArray2D<double> narrow(2, 1, 30, 15, 10, 2, {1, 2});
-    if (!RadialWindCalculation::Calc(narrow, 0.775, 18).ws->empty()) return 6;
-    std::puts("Spectrum: static configuration, existing transport and explicit input checks passed");
+    // 频点不足的既有失败分支保留；轴和数组长度已由类型约束。
+    const Spectrum<NarrowSpec> narrow;
+    if (RadialWindCalculation::Calc(narrow).ws || RadialWindCalculation::Calc(narrow).cnr) return 6;
+    std::puts("Spectrum: typed axes, stationary frames and Gaussian numeric baseline passed");
 }

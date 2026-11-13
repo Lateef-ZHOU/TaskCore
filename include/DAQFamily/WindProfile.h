@@ -10,7 +10,6 @@
 #include <chrono>
 #include <utility>
 
-#include "LinearArray.h"
 #include "DAQFamily/DAQChannelSpec.h"
 #include "Matrix.h"
 #include "GMBFamily/GimbalModel.h"
@@ -29,13 +28,14 @@ namespace WindProfile
     // 这是业务约束，不是解出三个风分量的数学最小束数；改变扫描束数还须同步修改计划页面与编排。
     inline constexpr int kBeams = 4;
 
+    template<DAQChannelSpec Spec>
     struct Input
     {
         /// 该波束的**世界朝向**（只读方位与高度；翻滚与光束无关）。**空 = 朝向未知**。
         /// **参考系由类型钉住**：只收 `WorldModel`，由编排层经云台族口 `worldOf` 换好再交——
         /// 收一袋裸数的话，喂进来的若是云台角，基座一歪就指错且不响。
         std::optional<WorldModel> dir;
-        LinearSeriesPtr ws; ///< 该波束逐门径向风速；轴为斜距（第 k 门 = ws->positionAt(k)，米）
+        std::shared_ptr<const RadialWind<Spec>> ws; ///< 逐门径向风速；斜距由 Spec 确定
     };
 
     // 按高度采样原帧；网格有限且步长为正，覆盖外取端值，邻点缺测时不插值。
@@ -68,7 +68,7 @@ namespace WindProfile
 
     // 反演直接生成带到料时刻的只读整帧；层数组属于该帧，失败返回空份额。
     template<DAQChannelSpec Spec>
-    [[nodiscard]] std::shared_ptr<const VerticalWindProfileUnit<Spec>> Calc(std::span<const Input> beams,
+    [[nodiscard]] std::shared_ptr<const VerticalWindProfileUnit<Spec>> Calc(std::span<const Input<Spec>> beams,
         std::chrono::system_clock::time_point at)
     {
         const int N = static_cast<int>(beams.size());
@@ -112,14 +112,8 @@ namespace WindProfile
                 Pinv[r * N + i] = val;
             }
 
-        // 各束须在同一斜距网格上（起点、门距、门数都相同）。
-        const int nGates = static_cast<int>(beams[0].ws->size());
-        if (nGates != Spec::rangeGateCount || !beams[0].ws->hasValidAxis()
-            || beams[0].ws->start != Spec::rangeStartM || beams[0].ws->step != Spec::rangeStepM) return {};
-        for (int i = 1; i < N; ++i)
-        {
-            if (!beams[i].ws->sameAxis(*beams[0].ws)) return {};
-        }
+        // 同一 Spec 在类型上保证各束的门数和斜距网格一致。
+        constexpr int nGates = Spec::rangeGateCount;
 
         // 高度 = 斜距 × **sin**(高度角)。高度角自水平面起、抬头为正（WorldModel 的 el），
         // 与上面设计矩阵的竖直分量 sin(v) 是同一个口径。
@@ -154,5 +148,3 @@ namespace WindProfile
         return result; // 转交 const 份额，不搬运数组。
     }
 } // namespace WindProfile
-
-static_assert(ValueObject<WindProfile::Input>);

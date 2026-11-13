@@ -4,14 +4,12 @@
 #include <optional>
 #include <tuple>
 #include <utility>
-#include <vector>
 #include <QByteArray>
 #include <QByteArrayView>
 #include <QDir>
 #include <QString>
 
 #include "GMBFamily/GimbalModel.h"
-#include "LinearArray.h"
 #include "DAQFamily/RadialWind.h" // 标准径向风 / CNR 算法（各卡共用）
 #include "DAQFamily/DAQChannelSpec.h" // 算法层的静态通道规格契约
 #include "RunBase.h" // Collector 契约基类
@@ -42,39 +40,27 @@ struct DAQParameters
     const bool sync;
 };
 
-// 一个通道：静态规格（名称、波长、零风速参考）+ 三个产物。显示、反演与落盘只认这些，不认识官邸。
-// 功率谱：行 = 距离门（行轴为斜距 m），列 = 频点（列轴为频率 MHz）；径向风与 CNR 的轴取功率谱行轴。
-template <typename C>
-concept DAQChannelLike = requires(const C c) {
-    { C::name } -> std::convertible_to<const char *>;
-    { C::wavelengthM } -> std::convertible_to<double>;
-    { C::zeroWindMHz } -> std::convertible_to<double>;
-    { c.spectrum } -> std::same_as<const LinearSpectrumPtr &>;
-    { c.radialWind } -> std::same_as<const LinearSeriesPtr &>;
-    { c.cnr } -> std::same_as<const LinearSeriesPtr &>;
-};
-
-// 标准通道：继承规格的静态常量；型号只交本帧数值（行优先，rows × columns 个），两条轴取自规格，
-// 构造即按标准方法算出径向风与 CNR，存在即已处理。交付后经 const 收集器只读。
-template <DAQChannelSpec Spec>
+// 通道只持原帧的只读份额，规格不在帧中重复存储。型号直接填满最终谱数组，
+// 交入唯一份额后计算径向风与 CNR；通道本身只复制共享指针，不复制数据。
+template<DAQChannelSpec Spec>
 struct DAQChannel : Spec
 {
-    explicit DAQChannel(std::vector<double> values)
-        : DAQChannel(std::make_shared<const LinearArray2D<double>>(Spec::rangeGateCount, Spec::frequencyBinCount, Spec::rangeStartM, Spec::rangeStepM,
-                                           Spec::frequencyStartMHz, Spec::frequencyStepMHz, std::move(values))) {}
+    // 前置条件：交入非空、已完整填写的谱；协议完整性由型号 assemble 负责。
+    explicit DAQChannel(std::unique_ptr<Spectrum<Spec>> values)
+        : DAQChannel(RadialWindCalculation::Calc(*values), values) {}
 
-    LinearSpectrumPtr spectrum;
-    LinearSeriesPtr radialWind; // m/s；网格不完整时为空
-    LinearSeriesPtr cnr;        // dB
-
+    std::shared_ptr<const Spectrum<Spec>> spectrum;
+    std::shared_ptr<const RadialWind<Spec>> radialWind;
+    std::shared_ptr<const CNR<Spec>> cnr;
 private:
-    explicit DAQChannel(LinearSpectrumPtr spectrum)
-        : DAQChannel(RadialWindCalculation::Calc(*spectrum, RadialWindCalculation::metersPerSecondPerMHz(Spec::wavelengthM), Spec::zeroWindMHz),
-                     spectrum) {}
-    // 功率谱按只读共享份额收：拟合结果先于份额移入成员算出，不依赖实参求值顺序。
-    DAQChannel(RadialWindCalculation::Result wind, LinearSpectrumPtr spectrum)
-        : spectrum(std::move(spectrum)), radialWind(std::move(wind.ws)), cnr(std::move(wind.cnr)) {}
+    // 以引用交接唯一份额：拟合结束后才移入成员，不依赖实参求值顺序。
+    DAQChannel(RadialWindCalculation::Result<Spec> wind, std::unique_ptr<Spectrum<Spec>> &values)
+        : spectrum(std::move(values)), radialWind(std::move(wind.ws)), cnr(std::move(wind.cnr)) {}
 };
+
+template<class> inline constexpr bool isDAQChannel = false;
+template<DAQChannelSpec Spec> inline constexpr bool isDAQChannel<DAQChannel<Spec>> = true;
+template<class C> concept DAQChannelLike = isDAQChannel<C>;
 
 // 族基：等待器、任务与完成回调只认它（参数、帧时刻、是否判齐），不读通道；交付后只读。
 class DAQCollector : public Collector<QByteArray, DAQParameters>

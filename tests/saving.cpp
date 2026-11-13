@@ -79,11 +79,32 @@ private:
     std::optional<Frame> assemble(QByteArrayView, RxTime at) override
     {
         frameTime_ = at;
-        const std::vector<double> values{1, 2, 9, 2, 1, 3, 8, 3};
-        return Frame{DAQChannel<SavedA>(values), DAQChannel<SavedB>(values)};
+        const std::array<double, 8> values{1, 2, 9, 2, 1, 3, 8, 3};
+        auto a = std::make_unique<Spectrum<SavedA>>();
+        auto b = std::make_unique<Spectrum<SavedB>>();
+        std::copy(values.begin(), values.end(), a->begin());
+        std::copy(values.begin(), values.end(), b->begin());
+        return Frame{DAQChannel<SavedA>(std::move(a)), DAQChannel<SavedB>(std::move(b))};
     }
 };
 static_assert(DAQCollectorLike<SavedFrame>);
+
+struct SingleBinSpec : SavedA { static constexpr int frequencyBinCount = 1; };
+class SingleBinFrame final : public TypedDAQCollector<DAQChannel<SingleBinSpec>>
+{
+public:
+    explicit SingleBinFrame(const DAQParameters &p) : TypedDAQCollector(p) {}
+    QList<QByteArray> buildStart() const override { return {}; }
+    int timeoutMs() const override { return 0; }
+private:
+    std::optional<Frame> assemble(QByteArrayView, RxTime at) override
+    {
+        frameTime_ = at;
+        auto values = std::make_unique<Spectrum<SingleBinSpec>>();
+        (*values)[0] = 3; (*values)[1] = 4;
+        return Frame{DAQChannel<SingleBinSpec>(std::move(values))};
+    }
+};
 
 template<class T>
 concept SaveFrameAccepted = requires(std::shared_ptr<T> frame) {
@@ -127,6 +148,16 @@ int main(int argc, char **argv)
           "spectrum rows differ");
     check(a.value("radialWind").toArray().size() == 2 && !a.value("radialWind").toArray()[0].isNull(), "wind missing");
     check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "missing wind not null");
+
+    // 频点不足仍保存原谱；旧格式中无法拟合的两个产物保持空数组。
+    auto single = std::make_shared<SingleBinFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "single", false));
+    check(single->feed(QByteArray("x"), at), "single-bin frame did not complete");
+    AcqSaver::saveFrame(std::shared_ptr<const SingleBinFrame>(std::move(single)), "Card");
+    const auto singleSaved = readCompleted(root.filePath("single/" + AcqSaver::fileStem(at) + ".json"))
+        .value("channels").toArray()[0].toObject();
+    check(singleSaved.value("spectrum").toArray()[1].toArray()[0].toDouble() == 4
+        && singleSaved.value("radialWind").isArray() && singleSaved.value("radialWind").toArray().isEmpty()
+        && singleSaved.value("cnr").isArray() && singleSaved.value("cnr").toArray().isEmpty(), "single-bin save format differs");
 
     // 风廓线：东风 5 m/s、上升 0.5 m/s → 来向 90°。
     auto filling = std::make_shared<VerticalWindProfileUnit<ProfileSpec>>(at, 90.0);
