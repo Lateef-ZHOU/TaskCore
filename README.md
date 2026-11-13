@@ -1,3 +1,9 @@
+## 2026-11-14：任务 QML 登记依赖整理（用户定）
+
+TaskQmlTypes.h 只直接包含登记所需的 Qt QML、TaskBase.h 和保留的 ChartTypes.h；删除 DeviceBase.h、GMBDevice.h、DAQDevice.h 三条重复包含。任务业务依赖由 TaskBase.h 自己声明。UICore 依赖拆分继续暂缓，算法与共享份额传输保持不变。本轮不推送。
+
+验证：主程序原 build 的 Windows/MSVC Release 增量构建通过，含 TaskUI 的 AUTOMOC、QML 类型登记与编译；未见 C++ 编译警告。8 秒离屏冒烟通过，stderr 为空，随后仅终止测试进程。证据为主程序 build/task-qml-includes-build.log 和 task-qml-includes-smoke.{out,err,json}。
+
 ## 2026-11-14：双入口源码一致性（用户定）
 
 模型入口在创建或复用 `Lidar::FamilyModels` 前，按相对文件名和 SHA256 核对本库公开头、可选模块及构建文件。完整入口先经过同一检查；不同目录的相同源码允许复用，内容不一致或既有目标缺少来源标记时配置失败，并列出来源目录。文档和测试不参与源码版本指纹；不依赖 Git，因此源码归档及本地未提交的库代码修改也受检查。两个入口仍应固定同一提交，检查不替代依赖锁定。
