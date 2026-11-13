@@ -128,8 +128,6 @@ protected:
         : FamilyDevice<HandleT, CollectorT, GMBFamily>(std::move(name), std::move(subtitle), parent) {}
 
 public:
-    ~GMBDevice() override = default;
-
     [[nodiscard]] const WorldModel &mounting() const noexcept final { return mounting_; }
     [[nodiscard]] bool setMounting(const WorldModel &zeroPose,
                                    const std::shared_ptr<const DeviceLock> &lock) final
@@ -146,7 +144,7 @@ public:
 
     // 设备页手动前往：模板层完成 QML 值到强类型的边界转换，末端仅提供同名 Qt 槽。参数经 paramsFor 造出后
     // 走与任务相同的运行槽（看门狗按型号时限重发），不需要结局，故完成回调为空；不持锁，设备被占用时拒收。
-    // 失败由发现原因的层记录并返回 false（paramsFor / Device::start 各自记录），成功只返 true，由 QML 记日志。
+    // 失败由发现原因的层记录并返回 false（paramsFor / Device::start 各自记录）；true 仅表示请求已接受，当前页面不另记成功日志。
     // 两轴速度由页面直接给出；定位不带速度的型号在 paramsFor 中忽略它们。
     bool issueGoTo(const double pan, const double tilt, const double panSpeed, const double tiltSpeed)
     {
