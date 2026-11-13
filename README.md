@@ -1,5 +1,11 @@
 # TaskCore
 
+2026-11-13：`DAQChannelSpec` 移到 Algorithm 的 SpectrumLike.h，删除本层重复定义；通道规格要求无实例状态、参数可常量求值。现有 DAQChannel 传输、处理、保存和取消链保持。Algorithm 同时提供固定数组 `Spectrum<Spec>`，本轮尚未将各型号的原始缓冲、DAQChannel 传输及 Qt 登记改为该类型。
+
+本地验证需使用配套 Algorithm 工作树（配置 `FETCHCONTENT_SOURCE_DIR_LIDAR_ALGORITHM`）；暂未推送或更新远端固定版本。
+
+本轮验证：MSVC Release 增量构建及公开头独立编译通过；TaskCore 5/5（含处理、保存和界面冒烟）通过。
+
 2026-11-12：世界目标换算改用 Algorithm 的 `SO3::inverseRotation()`，转换顺序、安装标定与任务行为不变。
 
 本轮改名验证：使用本地配套依赖，MSVC Release 增量构建及 CTest 5/5 通过。

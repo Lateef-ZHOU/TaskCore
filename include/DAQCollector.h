@@ -13,6 +13,7 @@
 #include "GimbalModel.h"
 #include "LinearArray.h"
 #include "RadialWind.h" // 标准径向风 / CNR 算法（各卡共用）
+#include "SpectrumLike.h" // 算法层的静态通道规格契约
 #include "RunBase.h" // Collector 契约基类
 
 // 采集参数的通行证：构造与析构受保护，族外造不出来。DAQFamily 以 protected 方式继承它，
@@ -39,20 +40,6 @@ struct DAQParameters
     const std::optional<QDir> saveRoot; // 空 = 不落盘
     const QString sessionDir;
     const bool sync;
-};
-
-// 通道规格：型号以静态常量写死一路的名称、波长、零风速参考与两条轴。
-template <typename Spec>
-concept DAQChannelSpec = requires {
-    { Spec::name } -> std::convertible_to<const char *>;
-    { Spec::wavelengthM } -> std::convertible_to<double>;
-    { Spec::zeroWindMHz } -> std::convertible_to<double>;
-    { Spec::rows } -> std::convertible_to<int>;
-    { Spec::columns } -> std::convertible_to<int>;
-    { Spec::rangeStartM } -> std::convertible_to<double>;
-    { Spec::rangeStepM } -> std::convertible_to<double>;
-    { Spec::frequencyStartMHz } -> std::convertible_to<double>;
-    { Spec::frequencyStepMHz } -> std::convertible_to<double>;
 };
 
 // 一个通道：静态规格（名称、波长、零风速参考）+ 三个产物。显示、反演与落盘只认这些，不认识官邸。
