@@ -1,3 +1,4 @@
+#include <vector>
 #include <string>
 #include <atomic>
 #include <cmath>
@@ -44,7 +45,7 @@ private:
     {
         if (c) { c->stopped.store(true); c->input.release(); }
     }
-    bool connSend(std::shared_ptr<Transport> c, std::span<const unsigned char> view) const override
+    bool connSend(std::shared_ptr<Transport> c, const std::vector<unsigned char> &view) const override
     {
         const auto bytes = QByteArray::fromRawData(reinterpret_cast<const char *>(view.data()), static_cast<qsizetype>(view.size()));
         if (bytes == "start") c->input.release();

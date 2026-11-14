@@ -1,3 +1,7 @@
+## 2026-11-14：connSend 引用传输验证
+
+发送实现/测试替身适配 connSend 的 vector 只读引用；生产 RX 保持 span。Windows Release 独立构建和 CTest 15/15 通过，主程序增量构建和生命周期 8/8、8 秒离屏冒烟通过。证据相邻主程序 build/connsend-FamilyCore-*.log。无硬件操作，仅本地、不推送。
+
 ## 2026-11-14：发送裁决所有权与收发 span（用户定）
 
 processing 测试传输替身适配 Handle 的只读 span 收发接口和拥有型 TXRuling，生产族代码未改。Windows processing_contract 与公开头增量构建、专项 CTest 1/1 通过，日志在主程序 build/wire-family-{build,test}.log；主程序生命周期 8/8 通过。仅本地提交，不推送。
