@@ -31,29 +31,31 @@ Q_SIGNALS:
 private:
     std::shared_ptr<Transport> connOpen(const Parameters &p) override { return p.transport; }
     bool connLoop(std::shared_ptr<Transport> c,
-        std::function<void(std::shared_ptr<Transport>, const QByteArray &, RxTime)> sink) override
+        std::function<void(std::shared_ptr<Transport>, std::span<const unsigned char>, RxTime)> sink) override
     {
         for (;;) {
             c->input.acquire();
             if (c->stopped.load()) return true;
-            sink(c, QByteArray("frame"), std::chrono::system_clock::now());
+            static constexpr unsigned char frame[] = "frame";
+            sink(c, {frame, sizeof(frame) - 1}, std::chrono::system_clock::now());
         }
     }
     void connBreak(std::shared_ptr<Transport> c) const override
     {
         if (c) { c->stopped.store(true); c->input.release(); }
     }
-    bool connSend(std::shared_ptr<Transport> c, const QByteArray &bytes) const override
+    bool connSend(std::shared_ptr<Transport> c, std::span<const unsigned char> view) const override
     {
+        const auto bytes = QByteArray::fromRawData(reinterpret_cast<const char *>(view.data()), static_cast<qsizetype>(view.size()));
         if (bytes == "start") c->input.release();
         return true;
     }
-    RXRuling onRX(const QByteArray &raw, RxTime at, std::shared_ptr<Transport>) override
-    { return {{reinterpret_cast<const unsigned char *>(raw.constData()),
-                 static_cast<std::size_t>(raw.size())}, RXRuling::Decode, at}; }
-    TXRuling onTX(QByteArray &raw, std::shared_ptr<Transport>) const override
-    { return {{reinterpret_cast<const unsigned char *>(raw.constData()),
-                 static_cast<std::size_t>(raw.size())}, TXRuling::Encode}; }
+    RXRuling onRX(std::span<const unsigned char> view, RxTime at, std::shared_ptr<Transport>) override
+    {
+        return {view, RXRuling::Decode, at}; }
+    TXRuling onTX(std::span<const unsigned char> view, std::shared_ptr<Transport>) const override
+    {
+        return {{view.begin(), view.end()}, TXRuling::Encode}; }
 };
 
 // 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。

@@ -1,3 +1,7 @@
+## 2026-11-14：发送裁决所有权与收发 span（用户定）
+
+processing 测试传输替身适配 Handle 的只读 span 收发接口和拥有型 TXRuling，生产族代码未改。Windows processing_contract 与公开头增量构建、专项 CTest 1/1 通过，日志在主程序 build/wire-family-{build,test}.log；主程序生命周期 8/8 通过。仅本地提交，不推送。
+
 ## 2026-11-14：UTF-8 日志接口（用户定）
 
 族层和 TaskBase 日志统一为 UTF-8 std::string；采集、任务阶段等动态内容改用 std::format。现存 Qt 业务名称、路径只在取入日志时转成 UTF-8，不为日志改动业务字段。QML 自身的提示仍属于 UI string，显示适配由 UICore 统一登记；不增加族基或官邸日志转发。验锁、算法、保存、重试和取消链不变。
