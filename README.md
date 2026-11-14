@@ -1,3 +1,11 @@
+## 2026-11-14：UTF-8 日志接口（用户定）
+
+族层和 TaskBase 日志统一为 UTF-8 std::string；采集、任务阶段等动态内容改用 std::format。现存 Qt 业务名称、路径只在取入日志时转成 UTF-8，不为日志改动业务字段。QML 自身的提示仍属于 UI string，显示适配由 UICore 统一登记；不增加族基或官邸日志转发。验锁、算法、保存、重试和取消链不变。
+
+需要支持 C++20 std::format 的标准库。本轮仅本地修改与验证，不推送。
+
+验证：processing_contract 1/1、主程序设备/任务生命周期 8/8、增量构建与 8 秒离屏冒烟通过；证据为 build-core/logstring-{build,test}.log 和主程序 build/logstring-*。
+
 ## 2026-11-14：适配 TXRuling 只读 span（用户定）
 
 处理链测试 Handle 的 onTX 返回 send 局部缓冲的只读 span；生产算法与接口不变。 重连和关闭保持，与本地 HandleCore 同批使用，暂不推送。

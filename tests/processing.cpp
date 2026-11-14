@@ -1,3 +1,4 @@
+#include <string>
 #include <atomic>
 #include <cmath>
 #include <numbers>
@@ -26,7 +27,7 @@ public:
     ~TestHandle() override = default;
 Q_SIGNALS:
     void connectionChanged(HandleCore::ResourcePhase) override;
-    void logMessage(const QString &) const override;
+    void logMessage(const std::string &) const override;
 private:
     std::shared_ptr<Transport> connOpen(const Parameters &p) override { return p.transport; }
     bool connLoop(std::shared_ptr<Transport> c,

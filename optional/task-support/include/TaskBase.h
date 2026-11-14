@@ -1,5 +1,7 @@
 #pragma once
+#include <string>
 #include <algorithm>
+#include <format>
 #include <chrono>
 #include <cmath>
 #include <functional>
@@ -96,11 +98,11 @@ public Q_SLOTS:
                const double worldElevation, const int accumSec, const int settleSec,
                const bool save, const QUrl &folder, const double panSpeed, const double tiltSpeed)
     {
-        if (running()) { Q_EMIT logMessage(QStringLiteral("任务正在进行中")); return false; }
+        if (running()) { Q_EMIT logMessage("任务正在进行中"); return false; }
         // 先按身份查登记，只对已登记的活对象交叉转换：调用方可能交来已退场设备的旧指针。
         auto *gmb = std::ranges::find(gimbals_, gimbal) != gimbals_.end() ? dynamic_cast<GMBFamily *>(gimbal) : nullptr;
         if (!gmb) {
-            Q_EMIT logMessage(QStringLiteral("没有可用的已登记转台")); return false;
+            Q_EMIT logMessage("没有可用的已登记转台"); return false;
         }
         // 停稳与速度在启动时固定；协程逐束以目标位形和它们经官邸 paramsFor 构造运动参数（不带速度的型号忽略速度）。
         Cards picked;
@@ -110,7 +112,7 @@ public Q_SLOTS:
             auto *card = std::ranges::find(cards_, object) != cards_.end() ? dynamic_cast<DAQFamily *>(object) : nullptr;
             if (!card
                 || std::ranges::any_of(picked, [card](const auto &entry) { return &entry.get() == card; })) {
-                Q_EMIT logMessage(QStringLiteral("采集卡未登记或重复选择，任务未启动")); return false;
+                Q_EMIT logMessage("采集卡未登记或重复选择，任务未启动"); return false;
             }
             // 发令前按型号预验累积时间；朝向与会话逐束确定，再由 paramsFor 构造完整请求。
             if (!card->paramsFor(accumSec, std::nullopt, std::nullopt, {}, false)) return false;
@@ -118,21 +120,21 @@ public Q_SLOTS:
             const auto &device = card->device();
             scope << device.displayName + QStringLiteral(" · ") + device.subtitle;
         }
-        if (picked.empty()) { Q_EMIT logMessage(QStringLiteral("至少选一张采集卡")); return false; }
+        if (picked.empty()) { Q_EMIT logMessage("至少选一张采集卡"); return false; }
         if (settleSec < kSettleMin || settleSec > kSettleMax) {
-            Q_EMIT logMessage(QStringLiteral("停稳等待超出范围，任务未启动")); return false;
+            Q_EMIT logMessage("停稳等待超出范围，任务未启动"); return false;
         }
         std::optional<QDir> saveRoot;
         if (save) {
             if (!folder.isValid() || !folder.isLocalFile() || folder.toLocalFile().isEmpty()) {
-                Q_EMIT logMessage(QStringLiteral("保存目录不是有效的本机目录，任务未启动")); return false;
+                Q_EMIT logMessage("保存目录不是有效的本机目录，任务未启动"); return false;
             }
             saveRoot.emplace(folder.toLocalFile());
         }
         if (worldAzimuths.size() != beamCount() || !std::isfinite(worldElevation)
             || !std::all_of(worldAzimuths.cbegin(), worldAzimuths.cend(), [](double az) { return std::isfinite(az); }))
         {
-            Q_EMIT logMessage(QStringLiteral("世界角参数无效：束数不符或角度不是有限数"));
+            Q_EMIT logMessage("世界角参数无效：束数不符或角度不是有限数");
             return false;
         }
         std::vector<std::reference_wrapper<DeviceBase>> devices{gmb->device()};
@@ -151,14 +153,14 @@ public Q_SLOTS:
     }
     void stop()
     {
-        if (!running()) { Q_EMIT logMessage(QStringLiteral("没有在跑的任务")); return; }
+        if (!running()) { Q_EMIT logMessage("没有在跑的任务"); return; }
         cancelRun();
-        Q_EMIT logMessage(QStringLiteral("任务已停止"));
+        Q_EMIT logMessage("任务已停止");
         refreshRunState();
     }
 
 Q_SIGNALS:
-    void logMessage(const QString &text) const;
+    void logMessage(const std::string &text) const;
     void deviceRemoved(QObject *device);
     void runChanged();
 
@@ -187,15 +189,14 @@ protected:
     {
         const auto &target = parameters.target;
         step(beam, Phase::Moving,
-             QString("转台 前往 (水平 %1°, 俯仰 %2°)...").arg(target.pan(), 0, 'f', 2).arg(target.tilt(), 0, 'f', 2));
+             std::format("转台 前往 (水平 {:.2f}°, 俯仰 {:.2f}°)...", target.pan(), target.tilt()));
         return RunAwaiter<GMBFamily>{lock, gmb, parameters};
     }
     [[nodiscard]] RunAwaiter<DAQFamily> acquireAt(const std::shared_ptr<DeviceLock> &lock,
         GMBFamily &gmb, const Cards &cards, const GmbOrders &moved, const int beam, const int accumSec,
         const std::optional<QDir> &saveRoot, const QDateTime &sessionTime, const bool sync)
     {
-        step(beam, Phase::Acquiring, QString("%1 张卡同时采集%2...").arg(static_cast<int>(cards.size()))
-             .arg(saveRoot ? QStringLiteral("（落盘）") : QStringLiteral("（不落盘）")));
+        step(beam, Phase::Acquiring, std::format("{} 张卡同时采集{}...", cards.size(), saveRoot ? "（落盘）" : "（不落盘）"));
         // moved 的结果份额在本次同步换算期间保活 Collector，measured 不另复制位形。
         const auto &measured = moved[0].result->measured();
         const auto world = measured ? std::optional{gmb.worldOf(*measured)} : std::nullopt;
@@ -215,7 +216,7 @@ protected:
 
 private:
     enum class Phase { Idle, Moving, Acquiring };
-    void step(const int beam, const Phase phase, const QString &message)
+    void step(const int beam, const Phase phase, const std::string &message)
     {
         beam_ = beam;
         phase_ = phase;

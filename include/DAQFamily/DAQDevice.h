@@ -1,4 +1,5 @@
 #pragma once
+#include <format>
 #include <array>
 #include <chrono>
 #include <memory>
@@ -83,7 +84,7 @@ public:
     {
         if (testCoro_ && !testCoro_->done())
         {
-            Q_EMIT this->logMessage(QStringLiteral("测试正在进行中"));
+            Q_EMIT this->logMessage("测试正在进行中");
             return;
         }
         std::optional<QDir> saveRoot; // 空 = 不落盘
@@ -91,7 +92,7 @@ public:
         {
             if (!folder.isLocalFile() || folder.toLocalFile().isEmpty())
             {
-                Q_EMIT this->logMessage(QStringLiteral("选中的不是本机目录，未启动采集"));
+                Q_EMIT this->logMessage("选中的不是本机目录，未启动采集");
                 return;
             }
             saveRoot = QDir(folder.toLocalFile());
@@ -116,19 +117,18 @@ private:
         const auto lock = co_await HeldLock{};
         if (!lock)
         {
-            Q_EMIT this->logMessage(QStringLiteral("设备已被占用或未连接"));
+            Q_EMIT this->logMessage("设备已被占用或未连接");
             co_return;
         }
         while (true)
         {
-            Q_EMIT this->logMessage(QString("开始采集（累积 %1 秒）%2")
-                                 .arg(parameters.accumSec)
-                                 .arg(parameters.saveRoot ? QStringLiteral("，落盘到 ") + QDir::toNativeSeparators(parameters.saveRoot->absolutePath())
-                                                           : QStringLiteral("，不落盘")));
+            Q_EMIT this->logMessage(std::format("开始采集（累积 {} 秒）{}", parameters.accumSec,
+                                 parameters.saveRoot ? std::format("，落盘到 {}", QDir::toNativeSeparators(parameters.saveRoot->absolutePath()).toStdString())
+                                                     : "，不落盘"));
             const auto framed = co_await RunAwaiter<DAQFamily>{lock, *this, parameters};
             if (framed.empty())
             {
-                Q_EMIT this->logMessage(QStringLiteral("采集失败 / 设备断开 / 已取消"));
+                Q_EMIT this->logMessage("采集失败 / 设备断开 / 已取消");
                 co_return;
             }
         }

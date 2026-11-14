@@ -25,25 +25,25 @@ public:
     {
         if (interfaceIndex < 0 || interfaceIndex >= interfaces().size())
         {
-            Q_EMIT source.logMessage(QStringLiteral("未选择有效网卡，连接请求未提交"));
+            Q_EMIT source.logMessage("未选择有效网卡，连接请求未提交");
             return std::nullopt;
         }
         bool ok = false;
         const auto host = IPv4::fromString(hostIP, ok);
         if (!ok)
         {
-            Q_EMIT source.logMessage(QStringLiteral("本机 IPv4 无效，连接请求未提交"));
+            Q_EMIT source.logMessage("本机 IPv4 无效，连接请求未提交");
             return std::nullopt;
         }
         const auto device = IPv4::fromString(deviceIP, ok);
         if (!ok)
         {
-            Q_EMIT source.logMessage(QStringLiteral("设备 IPv4 无效，连接请求未提交"));
+            Q_EMIT source.logMessage("设备 IPv4 无效，连接请求未提交");
             return std::nullopt;
         }
         if (hostPort < kPortMin || hostPort > kPortMax || devicePort < kPortMin || devicePort > kPortMax)
         {
-            Q_EMIT source.logMessage(QStringLiteral("UDP 端口超出 0~65535，连接请求未提交"));
+            Q_EMIT source.logMessage("UDP 端口超出 0~65535，连接请求未提交");
             return std::nullopt;
         }
         MAC mac;
@@ -52,7 +52,7 @@ public:
             mac = MAC::fromString(*deviceMAC, ok);
             if (!ok)
             {
-                Q_EMIT source.logMessage(QStringLiteral("设备 MAC 无效，连接请求未提交"));
+                Q_EMIT source.logMessage("设备 MAC 无效，连接请求未提交");
                 return std::nullopt;
             }
         }

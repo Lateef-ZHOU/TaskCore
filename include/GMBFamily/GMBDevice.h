@@ -134,7 +134,7 @@ public:
     {
         if (!this->lockMatches(lock))
         {
-            Q_EMIT this->logMessage(QStringLiteral("设备正被占用，安装标定未写入"));
+            Q_EMIT this->logMessage("设备正被占用，安装标定未写入");
             return false;
         }
         mounting_ = zeroPose;
