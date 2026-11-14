@@ -16,7 +16,7 @@ public:
             tips << QString::fromStdString(n.description);
         }
         return {{"networkInterfaceOptions", names}, {"networkInterfaceTips", tips},
-                {"networkInterfaceDefault", interfaces().isEmpty() ? -1 : 0}};
+                {"networkInterfaceDefault", interfaces().empty() ? -1 : 0}};
     }
 
     // 先验证全部输入，再构造连接快照；失败不触碰正在运行的连接或重连种子。
@@ -26,7 +26,7 @@ public:
         const QString &deviceIP, const int devicePort, const std::optional<QString> &deviceMAC,
         const std::chrono::milliseconds readTimeout, const int kernelBufferBytes)
     {
-        if (interfaceIndex < 0 || interfaceIndex >= interfaces().size())
+        if (interfaceIndex < 0 || static_cast<std::size_t>(interfaceIndex) >= interfaces().size())
         {
             Q_EMIT source.logMessage("未选择有效网卡，连接请求未提交");
             return std::nullopt;
@@ -59,7 +59,7 @@ public:
                 return std::nullopt;
             }
         }
-        return PcapParams{interfaces().at(interfaceIndex), host, device, mac,
+        return PcapParams{interfaces().at(static_cast<std::size_t>(interfaceIndex)), host, device, mac,
                           static_cast<quint16>(hostPort), static_cast<quint16>(devicePort),
                           readTimeout, kernelBufferBytes};
     }
@@ -67,7 +67,7 @@ public:
 private:
     static constexpr int kPortMin = 0;
     static constexpr int kPortMax = 65535;
-    [[nodiscard]] static const QList<NetworkInterfaceInfo> &interfaces()
+    [[nodiscard]] static const std::vector<NetworkInterfaceInfo> &interfaces()
     {
         static const auto list = availableInterfaces();
         return list;

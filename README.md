@@ -1,3 +1,10 @@
+## 2026-11-15：网卡列表接入 vector（用户定）
+
+PcapForm 的枚举缓存改为 const std::vector<NetworkInterfaceInfo>，空列表仍给 QML 默认下标 -1；先拒绝负下标，再按 size_t 比较和索引。UI 选项仍只在边界转换，保持首次枚举、下标与线路参数校验。
+
+验证：PcapForm 的实际消费方随主程序 Release 增量构建通过，8 秒离屏冒烟与既有 stderr 基线一致。证据见主程序 build/pcap-vector-LiDAR_DataACQ-build.log、pcap-vector-smoke.json；不推送。
+
+
 ## 2026-11-15：网卡表单字符串边界（用户定）
 
 PcapForm 消费 NetworkInterfaceInfo 的 std::string 名称与描述，只在构造 QML 选项时转为 QString。网卡标识与连接参数快照保留标准字符串；一次枚举、下标校验和线路参数校验保持。
