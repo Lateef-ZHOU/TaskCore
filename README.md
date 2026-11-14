@@ -1,3 +1,9 @@
+## 2026-11-14：只读 span 接收裁决（用户定）
+
+2026-11-14：处理链测试传输适配 HandleCore 的只读 span 接收裁决；生产族接口不变，Collector 仍在同步 feed 中消费输入，异步完成仅传拥有结果的只读份额。
+
+Windows/MSVC：build-core 的 processing_contract 增量构建及专项 1/1 通过。验证日志为相应构建目录下 rxspan-build.log / rxspan-test.log（Linux 使用上述命名）。
+
 ## 2026-11-14：径向风规格读取与峰位说明（用户定）
 
 RadialWindCalculation::Calc 直接读取 Spec 的距离门数、频点数、频率起点及步进，删除四个仅转写字段的局部常量；保留循环外的风速换算系数、斜率和截距。拟合峰位 x0 表示频点坐标，多普勒频移为 frequencyStartMHz + x0 × frequencyStepMHz − zeroWindMHz，再按波长换算风速。现有计算顺序、拟合算法、阈值、缺测语义、结果分配及 OpenMP 分行写入保持不变。

@@ -48,7 +48,8 @@ private:
         return true;
     }
     RXRuling onRX(const QByteArray &raw, RxTime at, std::shared_ptr<Transport>) override
-    { return {raw, RXRuling::Decode, at}; }
+    { return {{reinterpret_cast<const unsigned char *>(raw.constData()),
+                 static_cast<std::size_t>(raw.size())}, RXRuling::Decode, at}; }
     TXRuling onTX(const QByteArray &raw, std::shared_ptr<Transport>) const override
     { return {raw, TXRuling::Encode}; }
 };
