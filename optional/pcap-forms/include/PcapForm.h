@@ -11,7 +11,10 @@ public:
     [[nodiscard]] static QVariantMap connectionParameters()
     {
         QStringList names, tips;
-        for (const auto &n : interfaces()) { names << n.friendlyName; tips << n.description; }
+        for (const auto &n : interfaces()) {
+            names << QString::fromStdString(n.friendlyName);
+            tips << QString::fromStdString(n.description);
+        }
         return {{"networkInterfaceOptions", names}, {"networkInterfaceTips", tips},
                 {"networkInterfaceDefault", interfaces().isEmpty() ? -1 : 0}};
     }

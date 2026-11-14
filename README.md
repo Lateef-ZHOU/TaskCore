@@ -1,3 +1,10 @@
+## 2026-11-15：网卡表单字符串边界（用户定）
+
+PcapForm 消费 NetworkInterfaceInfo 的 std::string 名称与描述，只在构造 QML 选项时转为 QString。网卡标识与连接参数快照保留标准字符串；一次枚举、下标校验和线路参数校验保持。
+
+验证：共享 PcapForm 的实际消费方随主程序 Release 增量构建通过；主程序及激光、温控三个配置的 qmllint 目标返回 0，8 秒离屏冒烟与原 stderr 基线一致。本轮未重跑与表单无关的族算法专项。证据见主程序 build/pcap-string-*。
+
+
 ## 2026-11-14：connSend 引用传输验证
 
 发送实现/测试替身适配 connSend 的 vector 只读引用；生产 RX 保持 span。Windows Release 独立构建和 CTest 15/15 通过，主程序增量构建和生命周期 8/8、8 秒离屏冒烟通过。证据相邻主程序 build/connsend-FamilyCore-*.log。无硬件操作，仅本地、不推送。
