@@ -50,8 +50,9 @@ private:
     RXRuling onRX(const QByteArray &raw, RxTime at, std::shared_ptr<Transport>) override
     { return {{reinterpret_cast<const unsigned char *>(raw.constData()),
                  static_cast<std::size_t>(raw.size())}, RXRuling::Decode, at}; }
-    TXRuling onTX(const QByteArray &raw, std::shared_ptr<Transport>) const override
-    { return {raw, TXRuling::Encode}; }
+    TXRuling onTX(QByteArray &raw, std::shared_ptr<Transport>) const override
+    { return {{reinterpret_cast<const unsigned char *>(raw.constData()),
+                 static_cast<std::size_t>(raw.size())}, TXRuling::Encode}; }
 };
 
 // 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。

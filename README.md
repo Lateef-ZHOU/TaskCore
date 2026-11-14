@@ -1,3 +1,9 @@
+## 2026-11-14：适配 TXRuling 只读 span（用户定）
+
+处理链测试 Handle 的 onTX 返回 send 局部缓冲的只读 span；生产算法与接口不变。 重连和关闭保持，与本地 HandleCore 同批使用，暂不推送。
+
+Windows build-core 的 processing_contract 构建及专项 1/1 通过。 Windows 日志为上述构建目录的 txspan-{build,test}.log。
+
 ## 2026-11-14：只读 span 接收裁决（用户定）
 
 2026-11-14：处理链测试传输适配 HandleCore 的只读 span 接收裁决；生产族接口不变，Collector 仍在同步 feed 中消费输入，异步完成仅传拥有结果的只读份额。
