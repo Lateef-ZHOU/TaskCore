@@ -19,7 +19,8 @@ public:
                 {"networkInterfaceDefault", interfaces().empty() ? -1 : 0}};
     }
 
-    // 先验证全部输入，再构造连接快照；失败不触碰正在运行的连接或重连种子。
+    // 验证网卡下标、地址文本和端口后构参；本层解析失败不触碰当前连接或重连种子。
+    // 读取超时与内核缓冲大小交给 Handle 在打开资源前校验，不在表单重复检查。
     [[nodiscard]] static std::optional<PcapParams> parseParameters(
         const PcapHandle &source,
         const int interfaceIndex, const QString &hostIP, const int hostPort,
