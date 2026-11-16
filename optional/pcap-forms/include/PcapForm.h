@@ -31,15 +31,14 @@ public:
             Q_EMIT source.logMessage("未选择有效网卡，连接请求未提交");
             return std::nullopt;
         }
-        bool ok = false;
-        const auto host = IPv4::fromString(hostIP, ok);
-        if (!ok)
+        const auto host = PacketProtocol::IPv4Header::Address::fromString(hostIP.toStdString());
+        if (!host)
         {
             Q_EMIT source.logMessage("本机 IPv4 无效，连接请求未提交");
             return std::nullopt;
         }
-        const auto device = IPv4::fromString(deviceIP, ok);
-        if (!ok)
+        const auto device = PacketProtocol::IPv4Header::Address::fromString(deviceIP.toStdString());
+        if (!device)
         {
             Q_EMIT source.logMessage("设备 IPv4 无效，连接请求未提交");
             return std::nullopt;
@@ -49,18 +48,19 @@ public:
             Q_EMIT source.logMessage("UDP 端口超出 0~65535，连接请求未提交");
             return std::nullopt;
         }
-        MAC mac;
+        PacketProtocol::EthernetHeader::MAC mac;
         if (deviceMAC)
         {
-            mac = MAC::fromString(*deviceMAC, ok);
-            if (!ok)
+            const auto parsed = PacketProtocol::EthernetHeader::MAC::fromString(deviceMAC->toStdString());
+            if (!parsed)
             {
                 Q_EMIT source.logMessage("设备 MAC 无效，连接请求未提交");
                 return std::nullopt;
             }
+            mac = *parsed;
         }
-        return PcapParams{interfaces().at(static_cast<std::size_t>(interfaceIndex)), host, device, mac,
-                          static_cast<quint16>(hostPort), static_cast<quint16>(devicePort),
+        return PcapParams{interfaces().at(static_cast<std::size_t>(interfaceIndex)), *host, *device, mac,
+                          static_cast<std::uint16_t>(hostPort), static_cast<std::uint16_t>(devicePort),
                           readTimeout, kernelBufferBytes};
     }
 
