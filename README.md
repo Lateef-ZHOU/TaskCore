@@ -1,3 +1,7 @@
+## 2026-11-17：onTX 接入 vector 只读引用（用户定）
+
+处理测试的 onTX 输入改为 const std::vector<unsigned char>&。仅适配 DAQ 处理测试的传输替身；生产族接口、算法和共享份额传输不变。 不新增成员状态；使用相邻本地 HandleCore 源码覆盖，远端锁定版本暂不变，不推送。Windows build-family Release 与 CTest 16/16 通过，包含实际 DAQ 处理链。 证据见主程序 docs/maintenance/validation.md 本轮记录。
+
 ## 2026-11-17：网口表单接入标准地址值（用户定）
 
 PcapForm 改用 PacketProtocol 的 MAC/IPv4 地址和 optional 解析结果，QString 只在表单边界转为 std::string。网卡快照、下标/端口校验、先验参后连接保持；不再接受 IPv4 前导零/空白或混用 MAC 分隔符等旧宽松写法。未新增设置副本或日志转发。

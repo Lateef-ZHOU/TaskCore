@@ -54,9 +54,9 @@ private:
     RXRuling onRX(std::span<const unsigned char> view, RxTime at, std::shared_ptr<Transport>) override
     {
         return {view, RXRuling::Decode, at}; }
-    TXRuling onTX(std::span<const unsigned char> view, std::shared_ptr<Transport>) const override
+    TXRuling onTX(const std::vector<unsigned char> &payload, std::shared_ptr<Transport>) const override
     {
-        return {{view.begin(), view.end()}, TXRuling::Encode}; }
+        return {{payload.begin(), payload.end()}, TXRuling::Encode}; }
 };
 
 // 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。
