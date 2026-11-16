@@ -59,7 +59,8 @@ public:
             }
             mac = *parsed;
         }
-        return PcapParams{interfaces().at(static_cast<std::size_t>(interfaceIndex)), *host, *device, mac,
+        const auto &network = interfaces().at(static_cast<std::size_t>(interfaceIndex));
+        return PcapParams{network.pcapDeviceName, network.macAddress, *host, *device, mac,
                           static_cast<std::uint16_t>(hostPort), static_cast<std::uint16_t>(devicePort),
                           readTimeout, kernelBufferBytes};
     }

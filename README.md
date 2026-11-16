@@ -1,3 +1,7 @@
+## 2026-11-17：网口连接参数收紧（用户定）
+
+PcapForm 从同一枚举项提取 pcapDeviceName 与 hostMAC 构造 PcapParams，不再传入整个 NetworkInterfaceInfo。名称/描述继续供 QML 选项使用，枚举缓存、下标/地址/端口校验、型号读取策略和先验参后连接保持。验证见主程序维护操作；相邻源码覆盖，远端锁定版本不变，不推送。
+
 ## 2026-11-17：onTX 接入 vector 只读引用（用户定）
 
 处理测试的 onTX 输入改为 const std::vector<unsigned char>&。仅适配 DAQ 处理测试的传输替身；生产族接口、算法和共享份额传输不变。 不新增成员状态；使用相邻本地 HandleCore 源码覆盖，远端锁定版本暂不变，不推送。Windows build-family Release 与 CTest 16/16 通过，包含实际 DAQ 处理链。 证据见主程序 docs/maintenance/validation.md 本轮记录。
