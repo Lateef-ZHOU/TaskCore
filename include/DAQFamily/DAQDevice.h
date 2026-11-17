@@ -106,7 +106,7 @@ public:
             return;
         // 裸 new 刻意：make_unique 走转发必索 move（DeviceCoro 不可动），prvalue 直构保证省略。
         // 锁请求交给准备模块（promise 的构造函数）：本卡只占自己这一台。
-        testCoro_.reset(new DeviceCoro(runTest(LockRequest{QStringLiteral("设备控制"), {*this}}, std::move(*parameters))));
+        testCoro_.reset(new DeviceCoro(runTest(LockRequest{"设备控制", {*this}}, std::move(*parameters))));
     }
     // 预析构及停止按钮共用；取消时设备各层仍在，等待器可安全撤单。
     void cancelTest() noexcept { testCoro_.reset(); }

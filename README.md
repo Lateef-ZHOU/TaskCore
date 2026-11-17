@@ -1,3 +1,7 @@
+## 2026-11-17：标准字符串锁请求（用户定）
+
+DAQ 测试采集直接以 UTF-8 名称构造 LockRequest，TaskBase 在创建请求时将现有任务显示名转换为 std::string；设备返回 optional<std::string> 占用者名称，Qt 属性适配仍由既有 qmlHolder 负责。任务名称接口、锁身份与取消链保持。验证见主程序维护操作；仅本地，不推送。
+
 ## 2026-11-17：onStream 接收只读字节视图（用户定）
 
 Device::onStream 的输入统一为 std::span<const unsigned char>，与 onData 一致；onData 直接转交原视图，删除 Device 层的 QByteArray 适配及包含。返回类型仍为 optional<CollectorT::Feed>，判空、同步进料、完成 CAS 和主线程消费顺序保持。

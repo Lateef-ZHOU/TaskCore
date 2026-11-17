@@ -139,7 +139,7 @@ public Q_SLOTS:
         }
         std::vector<std::reference_wrapper<DeviceBase>> devices{gmb->device()};
         for (DAQFamily &card : picked) devices.emplace_back(card.device());
-        LockRequest request{displayName(), std::move(devices)};
+        LockRequest request{displayName().toStdString(), std::move(devices)};
         delivered_ = 0;
         scopeText_ = scope.join(QStringLiteral("；"));
         // DeviceCoro 不可移动，同类型 prvalue 直接构造；不能用 make_unique 转发。
