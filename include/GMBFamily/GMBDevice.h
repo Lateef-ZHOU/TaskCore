@@ -1,11 +1,11 @@
 #pragma once
+#include <vector>
 #include <string>
 #include <chrono>
 #include <memory>
 #include <optional>
 #include <utility>
 #include <QByteArray>
-#include <QList>
 #include <QMetaObject>
 #include <QObject>
 #include <QString>
@@ -179,7 +179,7 @@ private:
     [[nodiscard]] virtual std::optional<PanTiltModel> decodeStream(const QByteArray &) = 0;
 
     // 本型号停机命令取自型号标签，与参数无关。
-    [[nodiscard]] QList<QByteArray> stopCommands() const final { return CollectorT::stopOf(); }
+    [[nodiscard]] std::vector<std::vector<unsigned char>> stopCommands() const final { return CollectorT::stopOf(); }
 
     // 唯一安装标定；主线程读写，族基通过 mounting() 使用。
     WorldModel mounting_;

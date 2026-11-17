@@ -72,7 +72,7 @@ class TestCollector final : public TypedDAQCollector<DAQChannel<TestChannelSpec>
 {
 public:
     explicit TestCollector(const DAQParameters &p) : TypedDAQCollector(p) {}
-    QList<QByteArray> buildStart() const override { return {"start"}; }
+    std::vector<std::vector<unsigned char>> buildStart() const override { return {{'s', 't', 'a', 'r', 't'}}; }
     int timeoutMs() const override { return 0; }
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
@@ -103,7 +103,7 @@ public:
         if (accumSec < 1 || accumSec > 10) return std::nullopt;
         return DAQParameters(*this, accumSec, std::move(pose), std::move(saveRoot), std::move(sessionDir), sync);
     }
-    QList<QByteArray> stopCommands() const override { return {}; }
+    std::vector<std::vector<unsigned char>> stopCommands() const override { return {}; }
 Q_SIGNALS:
     void lockChanged(HandleCore::ResourcePhase) override;
     void channelsReady(const Channels &channels) override;

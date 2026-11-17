@@ -1,11 +1,10 @@
 #pragma once
+#include <vector>
 #include <algorithm>
 #include <chrono>
 #include <concepts>
 #include <optional>
 #include <utility>
-#include <QByteArray>
-#include <QList>
 
 
 #include "GMBFamily/GimbalModel.h" // PanTiltModel（目标 / 实测位形；distance）
@@ -49,8 +48,8 @@ public:
     // （ms，非正 = 不设看门狗）。hold 对应任务页的“停稳等待”，不足 kMinHold 时取下限。进圈后开始计时，
     // 出圈即清零重新计时；须连续在圈内（样本首末时刻相差达到 hold）才完成。
 protected:
-    GMBCollector(const GMBParameters &parameters, const double tolerance, QList<QByteArray> start,
-                 QList<QByteArray> stop, const int timeoutMs)
+    GMBCollector(const GMBParameters &parameters, const double tolerance, std::vector<std::vector<unsigned char>> start,
+                 std::vector<std::vector<unsigned char>> stop, const int timeoutMs)
         : Collector(parameters), tolerance_(tolerance),
           start_(std::move(start)), stop_(std::move(stop)), timeoutMs_(timeoutMs)
     {
@@ -73,8 +72,8 @@ public:
     [[nodiscard]] const std::optional<PanTiltModel> &measured() const & noexcept { return last_; }
     const std::optional<PanTiltModel> &measured() const && = delete;
 
-    [[nodiscard]] QList<QByteArray> buildStart() const override { return start_; }
-    [[nodiscard]] QList<QByteArray> buildStop() const override { return stop_; }
+    [[nodiscard]] std::vector<std::vector<unsigned char>> buildStart() const override { return start_; }
+    [[nodiscard]] std::vector<std::vector<unsigned char>> buildStop() const override { return stop_; }
     [[nodiscard]] int timeoutMs() const override { return timeoutMs_; }
 
 
@@ -101,8 +100,8 @@ private:
 
     // 本层独持的不可变配置；型号仅在构造时提供，不直接访问成员。
     const double tolerance_;
-    const QList<QByteArray> start_;
-    const QList<QByteArray> stop_;
+    const std::vector<std::vector<unsigned char>> start_;
+    const std::vector<std::vector<unsigned char>> stop_;
     const int timeoutMs_;
     // ── 收集区（[仅 worker] 可写；判齐后 worker 不再触斗，主线程只读）──
     std::optional<PanTiltModel> last_;       // 最近一次采样（给 measured()，与判据无关）
@@ -121,10 +120,10 @@ public:
         : GMBCollector(parameters, Model::tolerance, Model::startOf(parameters), Model::stopOf(), Model::timeoutMs) {}
 
     // 本型号的停机命令与参数无关；族模板层据此实现 Device 的 stopCommands（无 run 时也能停）。
-    [[nodiscard]] static QList<QByteArray> stopOf() { return Model::stopOf(); }
+    [[nodiscard]] static std::vector<std::vector<unsigned char>> stopOf() { return Model::stopOf(); }
 };
 
 template <typename C>
 concept GMBCollectorLike = std::derived_from<C, GMBCollector> && CollectorLike<C>
     && std::constructible_from<C, const GMBParameters &>
-    && requires { { C::stopOf() } -> std::same_as<QList<QByteArray>>; };
+    && requires { { C::stopOf() } -> std::same_as<std::vector<std::vector<unsigned char>>>; };

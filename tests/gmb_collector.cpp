@@ -1,3 +1,4 @@
+#include <vector>
 #include "GMBFamily/GMBCollector.h"
 #include <QtLogging>
 #include <chrono>
@@ -14,8 +15,8 @@ struct TestModel
 {
     static constexpr double tolerance = 0.1;
     static constexpr int timeoutMs = 10000;
-    static QList<QByteArray> startOf(const GMBParameters &) { return {"start"}; }
-    static QList<QByteArray> stopOf() { return {"stop"}; }
+    static std::vector<std::vector<unsigned char>> startOf(const GMBParameters &) { return {{'s', 't', 'a', 'r', 't'}}; }
+    static std::vector<std::vector<unsigned char>> stopOf() { return {{'s', 't', 'o', 'p'}}; }
 };
 using TestCollector = TypedGMBCollector<TestModel>;
 template<class C> concept HasPublicClock = requires { typename C::Clock; };
@@ -40,6 +41,13 @@ int main()
     const auto hold = GMBCollector::kMinHold;
     const GMBParameters parameters(key, target, hold, GMBParameters::Speeds{10, 5});
     TestCollector stopped(parameters), reentered(parameters);
+    auto startCommands = stopped.buildStart();
+    auto stopCommands = stopped.buildStop();
+    startCommands.front().front() = 0xff;
+    stopCommands.front().clear();
+    require(stopped.buildStart() == TestModel::startOf(parameters)
+            && stopped.buildStop() == TestModel::stopOf(),
+            "returned command bytes aliased the collector cache");
     TestCollector minimum(GMBParameters(key, target, std::chrono::milliseconds(0), std::nullopt));
     TestCollector longer(GMBParameters(key, target, hold + std::chrono::seconds(1), std::nullopt));
     const RxTime at{std::chrono::seconds(100000)};

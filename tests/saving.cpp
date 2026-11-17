@@ -25,7 +25,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
-#include <QList>
 #include <QSaveFile>
 #include <QString>
 #include <QString>
@@ -102,7 +101,7 @@ class SavedFrame final : public TypedDAQCollector<DAQChannel<SavedA>, DAQChannel
 {
 public:
     explicit SavedFrame(const DAQParameters &p) : TypedDAQCollector(p) {}
-    QList<QByteArray> buildStart() const override { return {}; }
+    std::vector<std::vector<unsigned char>> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
     std::optional<Frame> assemble(QByteArrayView, RxTime at) override
@@ -123,7 +122,7 @@ class SingleBinFrame final : public TypedDAQCollector<DAQChannel<SingleBinSpec>>
 {
 public:
     explicit SingleBinFrame(const DAQParameters &p) : TypedDAQCollector(p) {}
-    QList<QByteArray> buildStart() const override { return {}; }
+    std::vector<std::vector<unsigned char>> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
     std::optional<Frame> assemble(QByteArrayView, RxTime at) override

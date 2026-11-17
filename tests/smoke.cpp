@@ -1,10 +1,10 @@
+#include <vector>
 #include <optional>
 #include <chrono>
 #include <type_traits>
 #include <QMetaType>
 #include <QCoreApplication>
 #include <QByteArray>
-#include <QList>
 #include "DeviceCoro.h"
 #include "FamilyBase.h"
 #include "HandleBase.h"
@@ -32,7 +32,7 @@ class ContractCollector : public Base
 public:
     explicit ContractCollector(const int &value) : Base(value) {}
     bool settled() const override { return false; }
-    QList<QByteArray> buildStart() const override { return {}; }
+    std::vector<std::vector<unsigned char>> buildStart() const override { return {}; }
     int timeoutMs() const override { return 1; }
 private:
     void onFeed(const int &, RxTime) override {}

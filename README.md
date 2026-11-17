@@ -1,3 +1,9 @@
+## 2026-11-17：GMB 命令集合接入 vector（用户定）
+
+GMBCollector 的构造参数、原有 start_/stop_ 缓存和 buildStart/buildStop、型号 startOf/stopOf 统一为 std::vector<std::vector<unsigned char>>；GMBDevice::stopCommands 与 Collector 类型约束同步适配。缓存保持不可变，构造时移动接收，值返回复制缓存；调用方修改返回集合不会影响后续启动、重试或撤单。未增加状态，也未改变运动判齐、驻留、重试或取消。
+
+验证见主程序 docs/maintenance/validation.md；本轮使用相邻源码覆盖，不改远端依赖锁，不推送。
+
 ## 2026-11-17：网口表单校验范围（用户定）
 
 PcapForm 仅检查网卡下标、地址文本和端口，本层解析失败不会触碰当前连接或重连种子。读取超时和内核缓冲大小由 PcapHandle::connOpen 在打开资源前统一校验，表单不重复检查；后续异步打开失败不属于本层解析失败。本轮只纠正注释，构参与业务行为保持；验证见主程序维护操作，暂不推送。
