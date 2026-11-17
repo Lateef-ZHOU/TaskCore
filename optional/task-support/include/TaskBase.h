@@ -106,7 +106,7 @@ public Q_SLOTS:
         }
         // 停稳与速度在启动时固定；协程逐束以目标位形和它们经官邸 paramsFor 构造运动参数（不带速度的型号忽略速度）。
         Cards picked;
-        QStringList scope{gmb->device().displayName + QStringLiteral(" · ") + gmb->device().subtitle};
+        QStringList scope{QString::fromStdString(gmb->device().displayName + " · " + gmb->device().subtitle)};
         for (auto *object : cards)
         {
             auto *card = std::ranges::find(cards_, object) != cards_.end() ? dynamic_cast<DAQFamily *>(object) : nullptr;
@@ -118,7 +118,7 @@ public Q_SLOTS:
             if (!card->paramsFor(accumSec, std::nullopt, std::nullopt, {}, false)) return false;
             picked.emplace_back(*card);
             const auto &device = card->device();
-            scope << device.displayName + QStringLiteral(" · ") + device.subtitle;
+            scope << QString::fromStdString(device.displayName + " · " + device.subtitle);
         }
         if (picked.empty()) { Q_EMIT logMessage("至少选一张采集卡"); return false; }
         if (settleSec < kSettleMin || settleSec > kSettleMax) {

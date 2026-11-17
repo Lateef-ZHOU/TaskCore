@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include <concepts>
 #include <memory>
 #include <utility>
@@ -49,8 +50,8 @@ class FamilyDevice : public Device<HandleT, CollectorT>, public FamilyT
 protected:
     using DeviceT = Device<HandleT, CollectorT>;
 
-    FamilyDevice(QString name, QString subtitle, QObject *parent)
-        : DeviceT(std::move(name), std::move(subtitle), parent) {}
+    FamilyDevice(const std::string &name, const std::string &subtitle, QObject *parent)
+        : DeviceT(name, subtitle, parent) {}
 
 public:
     // 返回自身的 DeviceBase 基类。不用协变返回 DeviceT&：MSVC 对结构体非类型模板实参（如国耀规格）

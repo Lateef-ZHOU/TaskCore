@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -124,8 +125,8 @@ class GMBDevice : public FamilyDevice<HandleT, CollectorT, GMBFamily>
 {
     using DeviceT = Device<HandleT, CollectorT>;
 protected:
-    GMBDevice(QString name, QString subtitle, QObject *parent)
-        : FamilyDevice<HandleT, CollectorT, GMBFamily>(std::move(name), std::move(subtitle), parent) {}
+    GMBDevice(const std::string &name, const std::string &subtitle, QObject *parent)
+        : FamilyDevice<HandleT, CollectorT, GMBFamily>(name, subtitle, parent) {}
 
 public:
     [[nodiscard]] const WorldModel &mounting() const noexcept final { return mounting_; }

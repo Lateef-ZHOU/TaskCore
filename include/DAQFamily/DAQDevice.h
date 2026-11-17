@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include <format>
 #include <array>
 #include <chrono>
@@ -59,8 +60,8 @@ public:
 private:
     using DeviceT = Device<HandleT, CollectorT>;
 protected:
-    DAQDevice(QString name, QString subtitle, QObject *parent)
-        : FamilyDevice<HandleT, CollectorT, DAQFamily>(std::move(name), std::move(subtitle), parent)
+    DAQDevice(const std::string &name, const std::string &subtitle, QObject *parent)
+        : FamilyDevice<HandleT, CollectorT, DAQFamily>(name, subtitle, parent)
     {
         static_assert(DeviceLifecycleLayer<DAQDevice, decltype(&DAQDevice::PreDestruction)>);
     }
