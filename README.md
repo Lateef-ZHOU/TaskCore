@@ -1,3 +1,9 @@
+## 2026-11-17：onStream 接收只读字节视图（用户定）
+
+Device::onStream 的输入统一为 std::span<const unsigned char>，与 onData 一致；onData 直接转交原视图，删除 Device 层的 QByteArray 适配及包含。返回类型仍为 optional<CollectorT::Feed>，判空、同步进料、完成 CAS 和主线程消费顺序保持。
+
+DAQ 的 Collector 进料与 GMB 的 decodeStream 尚使用 Qt 字节接口，仅在对应族入口以 fromRawData 同步借用，不复制字节、不延长输入寿命；型号跨包留存仍须写入自有收集区，GMB 排队只携带解析后的位形和时刻。本轮不迁移 Collector::Feed、assemble 或 decodeStream 的签名，不新增缓存或转发。验证见主程序 docs/maintenance/validation.md；仅本地修改，不推送。
+
 ## 2026-11-17：GMB 命令集合接入 vector（用户定）
 
 GMBCollector 的构造参数、原有 start_/stop_ 缓存和 buildStart/buildStop、型号 startOf/stopOf 统一为 std::vector<std::vector<unsigned char>>；GMBDevice::stopCommands 与 Collector 类型约束同步适配。缓存保持不可变，构造时移动接收，值返回复制缓存；调用方修改返回集合不会影响后续启动、重试或撤单。未增加状态，也未改变运动判齐、驻留、重试或取消。

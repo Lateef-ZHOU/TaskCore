@@ -9,6 +9,9 @@
 #include <QElapsedTimer>
 #include <QSemaphore>
 
+// 包含 NUL 和高位字节，检查接收链按长度借用原地址，不把二进制输入当字符串或另复制一份。
+static constexpr unsigned char inputBytes[] = {'f', 0, 0xff, 'm', 'e'};
+
 struct Transport
 {
     QSemaphore input;
@@ -37,8 +40,7 @@ private:
         for (;;) {
             c->input.acquire();
             if (c->stopped.load()) return true;
-            static constexpr unsigned char frame[] = "frame";
-            sink(c, {frame, sizeof(frame) - 1}, std::chrono::system_clock::now());
+            sink(c, inputBytes, std::chrono::system_clock::now());
         }
     }
     void connBreak(std::shared_ptr<Transport> c) const override
@@ -77,8 +79,12 @@ public:
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
     // 每口料即一整帧：在收包线程解析与处理。
-    std::optional<Frame> assemble(QByteArrayView, RxTime at) override
+    std::optional<Frame> assemble(QByteArrayView bytes, RxTime at) override
     {
+        if (bytes.data() != reinterpret_cast<const char *>(inputBytes)
+            || bytes.size() != static_cast<qsizetype>(sizeof(inputBytes)) || bytes[1] != '\0'
+            || static_cast<unsigned char>(bytes[2]) != 0xff)
+            return std::nullopt;
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
         auto values = std::make_unique<Spectrum<TestChannelSpec>>();

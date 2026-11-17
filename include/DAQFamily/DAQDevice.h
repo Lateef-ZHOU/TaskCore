@@ -5,9 +5,11 @@
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <span>
 #include <tuple>
 #include <utility>
 #include <boost/circular_buffer.hpp>
+#include <QByteArray>
 #include <QDir>
 #include <QString>
 #include <QUrl>
@@ -135,8 +137,12 @@ private:
         }
     }
 
-    // [Handle 收包线程] 一口上行原样交给收集器；TypedDAQCollector 的 onFeed 调用型号 assemble 凑帧并构造通道。
-    std::optional<QByteArray> onStream(const QByteArray &raw, RxTime) final { return raw; }
+    // [Handle 收包线程] 仅在现有 Collector 的 Qt 进料边界适配，不复制字节；同步 feed/assemble 完成前原字节有效。
+    // 型号若需跨包留存，须在 assemble 中写入自有收集区，不保存此借用。
+    std::optional<QByteArray> onStream(std::span<const unsigned char> raw, RxTime) final
+    {
+        return QByteArray::fromRawData(reinterpret_cast<const char *>(raw.data()), static_cast<qsizetype>(raw.size()));
+    }
 
     // [主] 完成帧：发送只读通道结果元组、提交整帧保存，进四束环；同步位为真时逐通道反演风廓线。
     // 四束是同一收集器类型的帧，第 I 路在每帧都是同一类型（同一规格、同一距离轴），无须运行时核对。

@@ -4,6 +4,7 @@
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <span>
 #include <utility>
 #include <QByteArray>
 #include <QMetaObject>
@@ -161,9 +162,11 @@ public:
 private:
 
     // [Handle 收包线程] 解析在收包线程；安装姿态只在主线程读取和换算。
-    std::optional<PanTiltModel> onStream(const QByteArray &raw, RxTime at) final
+    std::optional<PanTiltModel> onStream(std::span<const unsigned char> raw, RxTime at) final
     {
-        const auto pose = decodeStream(raw);
+        // 现有型号解码器同步借用 Qt 字节视图；排队投递只携带解析后的位形和时刻。
+        const auto bytes = QByteArray::fromRawData(reinterpret_cast<const char *>(raw.data()), static_cast<qsizetype>(raw.size()));
+        const auto pose = decodeStream(bytes);
         if (!pose) return std::nullopt;
         QMetaObject::invokeMethod(this, [this, at, p = *pose] {
             const auto world = this->worldOf(p);
