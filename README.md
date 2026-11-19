@@ -1,3 +1,9 @@
+## 2026-11-19：GMB 请求值类型禁止派生（用户定）
+
+GMBParameters 显式声明 final，明确它是协程与族层之间按值传递的最终请求类型，型号知识不通过参数派生类扩散。Collector<PanTiltModel, GMBParameters> 继续用于 DeviceCore 的 Feed/Params 契约，运行、验锁和收集行为不变。
+
+验证：build-family Release 零警告，CTest 16/16；主程序原 build Release 零警告，覆盖实际云台消费链，8 秒离屏冒烟与基线一致。仅本地提交，不推送，不更新远端固定版本。
+
 ## 2026-11-19：静态轴向配置与作动值数组（用户定）
 
 删除 Joint 类型及元组关节存储，GimbalModel 直接以私有 std::array<double, N> 保存运行时作动值；固定轴向由 std::array<double, 3> 值模板参数提供，不随模型实例复制。WorldModel 和 PanTiltModel 的高频复制仅携带 3 个或 2 个 double，角度窗口、正反解和类型约束保持。

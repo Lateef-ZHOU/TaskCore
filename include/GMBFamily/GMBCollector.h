@@ -23,7 +23,7 @@ protected:
 };
 
 // 一次到位请求：目标位形、停稳等待与（型号量化后的）速度。只能由官邸 paramsFor 校验后构造，存在即有效；字段只读。
-struct GMBParameters
+struct GMBParameters final
 {
     struct Speeds { double pan; double tilt; }; // °/s，两轴必须成组提供
 
