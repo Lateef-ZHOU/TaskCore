@@ -3,8 +3,8 @@
 #include <concepts>
 #include <memory>
 #include <utility>
-#include <QString>
 
+#include "ObjectPolicy.h"
 #include "DeviceBase.h" // DeviceBase / Device<H,C>
 #include "RunBase.h"    // DoneFn<C> / DeviceLock
 
@@ -20,7 +20,7 @@ public:
     using CollectorBase = CollectorBaseT;
 
     FamilyBase() = default;
-    Q_DISABLE_COPY_MOVE(FamilyBase)
+    DISABLE_COPY_MOVE(FamilyBase)
     virtual ~FamilyBase() = default;
 
     // 同一对象的机制面：族模板层返回自身的 DeviceBase 基类，供编排验锁和读取身份。

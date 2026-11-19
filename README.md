@@ -1,3 +1,7 @@
+## 2026-11-19：FamilyBase 移除 Qt 宏依赖（用户定）
+
+FamilyBase 删除未使用的 QString 包含，复制与移动禁用改用 Algorithm/ObjectPolicy.h 的 DISABLE_COPY_MOVE，语义与 Q_DISABLE_COPY_MOVE 一致；族接口、begin/stop 和运行行为不变。验证：build-family Release 零警告，CTest 16/16；主程序原 build Release 零警告，8 秒离屏冒烟与基线一致。仅本地提交，不推送，不更新远端固定版本。
+
 ## 2026-11-17：标准字符串锁请求（用户定）
 
 DAQ 测试采集直接以 UTF-8 名称构造 LockRequest，TaskBase 在创建请求时将现有任务显示名转换为 std::string；设备返回 optional<std::string> 占用者名称，Qt 属性适配仍由既有 qmlHolder 负责。任务名称接口、锁身份与取消链保持。验证见主程序维护操作；仅本地，不推送。
