@@ -6,7 +6,6 @@
 #include <optional>
 #include <span>
 #include <utility>
-#include <QByteArray>
 #include <QMetaObject>
 #include <QObject>
 #include <QString>
@@ -164,9 +163,8 @@ private:
     // [Handle 收包线程] 解析在收包线程；安装姿态只在主线程读取和换算。
     std::optional<PanTiltModel> onStream(std::span<const unsigned char> raw, RxTime at) final
     {
-        // 现有型号解码器同步借用 Qt 字节视图；排队投递只携带解析后的位形和时刻。
-        const auto bytes = QByteArray::fromRawData(reinterpret_cast<const char *>(raw.data()), static_cast<qsizetype>(raw.size()));
-        const auto pose = decodeStream(bytes);
+        // 解码器同步借用输入字节视图；排队投递只携带解析后的位形和时刻。
+        const auto pose = decodeStream(raw);
         if (!pose) return std::nullopt;
         QMetaObject::invokeMethod(this, [this, at, p = *pose] {
             const auto world = this->worldOf(p);
@@ -179,7 +177,7 @@ private:
     //   · **空** = 这一口没有可交的角度（不是角度上报 / 校验不过 / 两轴还没凑齐）；
     //     本口是族层接口，官邸在此摆位形合乎"位形只在接口处出现"。
     // **非 const**：型号要攒另一根轴（sqaf 的 Pelco 应答经、纬分帧），MCZT 还要记报警状态。
-    [[nodiscard]] virtual std::optional<PanTiltModel> decodeStream(const QByteArray &) = 0;
+    [[nodiscard]] virtual std::optional<PanTiltModel> decodeStream(std::span<const unsigned char>) = 0;
 
     // 唯一安装标定；主线程读写，族基通过 mounting() 使用。
     WorldModel mounting_;

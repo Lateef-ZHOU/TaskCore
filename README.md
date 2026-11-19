@@ -1,3 +1,9 @@
+## 2026-11-19：GMB 解码链统一只读字节视图（用户定）
+
+GMBDevice::onStream 不再构造 QByteArray，decodeStream 及铭辰上行、Pelco 成帧校验和仿真协议解码统一接收 std::span<const unsigned char>。Pelco 接收缓存改用 unsigned char 数组；视图仅在同步解码期间借用，排队到主线程的仍只有解析后的位形与 RxTime。发送侧协议词汇、DAQ 的 assemble 字节接口及 HandleCore、DeviceCore 不在本轮改动范围。
+
+验证：FamilyCore CTest 16/16；主程序 CTest 8/8；simonly Release 构建零警告、CTest 11/11、QML lint 返回 0。仅本地提交，不推送，不更新远端固定版本。
+
 ## 2026-11-19：官邸直接实现收集器命令虚函数（用户定）
 
 GMBCollector 改为 protected 继承 GMBParameters，官邸直接读取目标、停稳等待和两轴速度并实现 buildStart/buildStop/timeoutMs；族层删除 start_/stop_/timeoutMs_ 缓存及默认实现，只保留公共到位/驻留逻辑。GMBParameters 不再声明 final，以允许该受保护继承，但其受保护构造、只读字段和 paramsFor 唯一入口保持，仍不作为自由派生的多态参数类型。铭辰、亚安、仿真官邸和测试收集器同步直接实现三个虚函数。
