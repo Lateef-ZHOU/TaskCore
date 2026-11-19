@@ -1,14 +1,11 @@
 #pragma once
-#include <vector>
 #include <string>
 #include <chrono>
 #include <memory>
 #include <optional>
 #include <span>
-#include <utility>
 #include <QMetaObject>
 #include <QObject>
-#include <QString>
 
 #include "GMBFamily/GimbalModel.h"                // WorldModel / PanTiltModel（世界朝向与云台位形）
 #include "FamilyBase.h" // FamilyBase / FamilyDevice（族骨架与共同实现）
