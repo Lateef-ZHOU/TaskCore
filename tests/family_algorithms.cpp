@@ -19,13 +19,11 @@ static_assert(std::is_same_v<decltype(&SiteCalibration::estimateFromSamples),
     std::optional<SiteCalibration::Estimate> (*)(const std::span<const SiteCalibration::Sample>&) noexcept>);
 static_assert(noexcept(SiteCalibration::estimateFromSamples(std::span<const SiteCalibration::Sample>{})));
 static_assert(noexcept(Wrap360(0.0)));
-using TestJoint = Joint<GimbalModelAxes::minusZ>;
 using TestModel = GimbalModel<GimbalModelAxes::minusZ>;
-static_assert(sizeof(TestJoint) == sizeof(double)); // 固定轴向在模板中，不占用 Joint 实例存储
+static_assert(sizeof(WorldModel) == 3 * sizeof(double)); // 固定轴向不占用模型实例存储
+static_assert(sizeof(PanTiltModel) == 2 * sizeof(double));
 static_assert(std::is_base_of_v<GimbalModelBase, WorldModel>);
 static_assert(std::is_base_of_v<GimbalModelBase, PanTiltModel>);
-template<class T> concept PublicArrayAccess = requires(T &v) { v[0]; v.data(); v.fill(0.0); };
-static_assert(!PublicArrayAccess<TestJoint>);
 struct MissingInverse : TestModel {};
 struct WrongInverseResult : TestModel {
     static WorldModel fromOrientation(const SO3 &);
@@ -48,26 +46,14 @@ static_assert(ModelDistanceAvailable<WorldModel> && ModelDistanceAvailable<PanTi
 static_assert(!ModelDistanceAvailable<TestModel> && !ModelDistanceAvailable<MissingInverse>);
 static_assert(!ModelDistanceAvailable<WrongInverseResult> && !ModelDistanceAvailable<InheritedInverse>);
 static_assert(!ModelDistanceAvailable<UnrelatedModel> && !ModelDistanceAvailable<PrivateModel>);
-static_assert(!std::is_convertible_v<WorldModel*,
-    std::tuple<Joint<GimbalModelAxes::minusZ>, Joint<GimbalModelAxes::x>, Joint<GimbalModelAxes::minusY>>*>);
-static_assert(!std::is_convertible_v<PanTiltModel*,
-    std::tuple<Joint<GimbalModelAxes::minusZ>, Joint<GimbalModelAxes::x>>*>);
+static_assert(!std::is_convertible_v<WorldModel*, std::array<double, 3>*>);
+static_assert(!std::is_convertible_v<PanTiltModel*, std::array<double, 2>*>);
 template<class T> concept PublicJointContainer = requires(T &v) { v.clear(); v[0]; v.begin(); };
 template<class T> concept PublicEquality = requires(const T &a, const T &b) { a == b; };
 static_assert(!PublicJointContainer<WorldModel> && !PublicJointContainer<PanTiltModel>);
 static_assert(!PublicEquality<WorldModel> && !PublicEquality<PanTiltModel>);
-template<class T> concept PublicAxis = requires(const T &v) { v.template axis<0>(); };
-static_assert(!PublicAxis<TestModel> && !PublicAxis<WorldModel> && !PublicAxis<PanTiltModel>);
-// 测试派生类可读关节，生产模型不公开该入口。
-struct AxisProbe : WorldModel { using WorldModel::axis; };
-static_assert(std::is_same_v<decltype(std::declval<const AxisProbe&>().axis<0>()), const TestJoint &>);
-static_assert(noexcept(std::declval<const AxisProbe&>().axis<0>()));
-static_assert([] {
-    constexpr TestJoint joint(35);
-    return joint.value() == 35 && TestJoint::axis().z() == -1;
-}());
-static_assert(noexcept(TestJoint(35)));
-static_assert(noexcept(std::declval<const TestJoint&>().value()));
+template<class T> concept PublicValue = requires(const T &v) { v.template value<0>(); };
+static_assert(!PublicValue<TestModel> && !PublicValue<WorldModel> && !PublicValue<PanTiltModel>);
 static_assert(noexcept(std::declval<const WorldModel&>().azimuth()));
 static_assert(noexcept(std::declval<const WorldModel&>().elevation()));
 static_assert(noexcept(std::declval<const WorldModel&>().roll()));
@@ -85,23 +71,21 @@ bool modelStorageTransfer()
 {
     struct Probe : Model {
         using Model::Model;
-        using Model::axis;
+        using Model::value;
     };
     Probe source(35.0, 60.0);
-    const auto *storage = &source.template axis<0>();
     Probe copied(source);
-    if (&copied.template axis<0>() == storage || copied.template axis<0>().value() != 35.0) return false;
+    if (copied.template value<0>() != 35.0) return false;
     Probe moved(std::move(source));
-    if (&moved.template axis<0>() == storage || moved.template axis<1>().value() != 60.0) return false;
+    if (moved.template value<1>() != 60.0) return false;
     Probe assigned(10.0, 20.0);
     assigned = std::move(moved);
-    if (&assigned.template axis<0>() == storage || assigned.template axis<0>().value() != 35.0) return false;
+    if (assigned.template value<0>() != 35.0) return false;
     // tuple 按元素复制/移动，存储随对象而不跨对象转移；移出对象先重新赋值，再读取。
     source = copied;
     moved = Probe(15.0, -20.0);
-    return &source.template axis<0>() != &copied.template axis<0>()
-        && source.template axis<0>().value() == 35.0 && source.template axis<1>().value() == 60.0
-        && moved.template axis<0>().value() == 15.0 && moved.template axis<1>().value() == -20.0;
+    return source.template value<0>() == 35.0 && source.template value<1>() == 60.0
+        && moved.template value<0>() == 15.0 && moved.template value<1>() == -20.0;
 }
 
 template<int Gates, int Start = 0, int Step = 15>
@@ -245,10 +229,9 @@ int main()
             const double expected = r == c ? 1.0 : 0.0;
             if (worldZero(r, c) != expected || panTiltZero(r, c) != expected) return 48;
         }
-    // Joint 保留原值；各模型在构造时分别归一化自己的角度窗口。
+    // 作动值数组保留原值；各模型在构造时分别归一化自己的角度窗口。
     if (Wrap360(-30.0) != 330.0 || Wrap360(390.0) != 30.0
         || Wrap360(360.0) != 0.0 || Wrap360(-360.0) != 0.0
-        || TestJoint(190.0).value() != 190.0
         || WorldModel(0.0, 190.0).elevation() != 190.0
         || WorldModel(0.0, -90.0).elevation() != -90.0
         || WorldModel(0.0, 270.0).elevation() != -90.0

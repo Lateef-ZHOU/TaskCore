@@ -13,7 +13,7 @@
 
 #include "SO3.h" // 朝向对象 + 流形工具；角量单位契约也写在那里
 
-// GimbalModel.h — 云台的**位形模型**一族：Joint（关节）→ GimbalModel（关节链 + 正解）→
+// GimbalModel.h — 云台的**位形模型**一族：GimbalModel（静态轴向 + 作动值 + 正解）→
 // WorldModel{az,el,roll} / PanTiltModel{pan,tilt}（各自的反解）。
 // SO3 是"朝向本身"，本文件是"哪种装配、作动到哪儿会得到那个朝向"——两层，上层包含下层。
 // 模型实例即一个位形（谈位形不谈指向）；角量一律是度。
@@ -52,24 +52,6 @@ inline constexpr std::array<double, 3> x{1.0, 0.0, 0.0};
 inline constexpr std::array<double, 3> minusY{0.0, -1.0, 0.0};
 } // namespace GimbalModelAxes
 
-// Joint — 一根关节：轴向由 std::array 值模板参数指定，实体只保存当前作动值（°）。
-// 关节只描述轴向和当前值，不拥有角度窗口或机械零偏；作动值是周期量，正解直接使用。
-// 读数窗口由具体模型在构造时统一归一化，设备行程由官邸按协议校验。
-template <std::array<double, 3> Axis>
-class Joint
-{
-public:
-    // 作动值（任意实数）。轴向由模板参数给出，不在对象内另存。
-    constexpr explicit Joint(const double deg) noexcept : value_(deg) {}
-
-    [[nodiscard]] static constexpr LinAlg::Vec3 axis() noexcept { return {Axis[0], Axis[1], Axis[2]}; }
-    // 本轴此刻的作动值；Joint 本身不做窗口折返。
-    [[nodiscard]] constexpr double value() const noexcept { return value_; }
-
-private:
-    double value_;
-};
-
 // 无数据的模型标记，仅供 GimbalModelLike 识别本族；不公开基类析构或容器入口。
 class GimbalModelBase
 {
@@ -95,7 +77,7 @@ concept GimbalModelLike = std::derived_from<T, GimbalModelBase> && requires(cons
 // GimbalModel — 一台云台的**一个位形**（关节列表，每根关节自带当前值）：位形 ↔ 朝向
 //
 // 定朝向需「轴序 / 内外旋 / 符号」约定——本质是把每根关节的（带符号）单位轴向按复合顺序排成一串。
-// 关节列表就是模型的核心数据，轴数即表长；每个 Joint 保存当前作动值，具体模型在构造时归一化。指数积(PoE)/旋量：
+// 模型实例直接保存定长作动值数组；具体模型在构造时归一化，固定轴向由值模板给出。指数积(PoE)/旋量：
 //     R(θ₁,…,θ_N) = ∏ exp(θ_i[û_i]×)   （内旋=动轴=正序连乘）
 //
 // 正向 toOrientation 通用且简单，收在基类。**反向（朝向 → 位形）是真逆运动学**，通用解复杂度极高、
@@ -104,8 +86,8 @@ concept GimbalModelLike = std::derived_from<T, GimbalModelBase> && requires(cons
 // 关节列表构造与析构为 protected，复制和移动构造为 public；外部不能直接创建并销毁基类值。
 // 一袋任意关节没有已知反解，不算一台完整模型。
 //
-// 私有继承 std::tuple 仅用于保存各轴作动值；轴向由模板给出，不随模型实例复制。
-// axis() 仅供派生模型只读访问；整体赋值使用具体模型类型。
+// 私有 std::array 仅保存各轴作动值；固定轴向由模板给出，不随模型实例复制。
+// value<I>() 仅供派生模型只读访问；整体赋值使用具体模型类型。
 // 调用方不得经 GimbalModel 引用或指针对基类子对象赋值，以免破坏具体模型的轴数、轴序与固定轴配置。
 // 轴数由模板实参固定；移动按元素进行，移出后的对象仅用于析构或重新赋值，恢复前不读角度、不做正解或距离计算。
 //
@@ -116,8 +98,8 @@ concept GimbalModelLike = std::derived_from<T, GimbalModelBase> && requires(cons
 template <std::array<double, 3>... Axes>
 class GimbalModel : public GimbalModelBase
 {
-    using Joints = std::tuple<Joint<Axes>...>;
-    Joints joints_;
+    static constexpr auto kAxes = std::array{Axes...};
+    std::array<double, kAxes.size()> values_;
 public:
     GimbalModel(const GimbalModel &) = default;
     GimbalModel &operator=(const GimbalModel &) = default;
@@ -136,8 +118,8 @@ public:
     {
         double worst = 0.0;
         [&]<std::size_t... I>(std::index_sequence<I...>) {
-            ((worst = std::max(worst, AngularDistance(std::get<I>(a.joints_).value(), std::get<I>(b.joints_).value()))), ...);
-        }(std::make_index_sequence<sizeof...(Axes)>{});
+            ((worst = std::max(worst, AngularDistance(a.values_[I], b.values_[I]))), ...);
+        }(std::make_index_sequence<kAxes.size()>{});
         return worst;
     }
 
@@ -148,18 +130,20 @@ public:
     {
         constexpr double D2R = std::numbers::pi / 180.0;
         SO3 R = SO3::Identity();
-        std::apply([&](const auto &...joint) {
-            ((R = R * SO3::exp(joint.axis() * (joint.value() * D2R))), ...);
-        }, joints_);
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            ((R = R * SO3::exp(LinAlg::Vec3(kAxes[I][0], kAxes[I][1], kAxes[I][2]) * (values_[I] * D2R))), ...);
+        }(std::make_index_sequence<kAxes.size()>{});
         return R;
     }
 
 protected:
-    // 派生模型按自身固定轴数访问；不提供分量写入口。
+    // 派生模型按自身固定轴数读取作动值；不提供分量写入口。
     template <std::size_t I>
-    [[nodiscard]] constexpr const auto &axis() const noexcept { return std::get<I>(joints_); }
+    [[nodiscard]] constexpr double value() const noexcept { return values_[I]; }
 
-    explicit GimbalModel(Joint<Axes>... joints) noexcept : joints_(std::make_tuple(std::move(joints)...)) {}
+    template <class... Values>
+        requires (sizeof...(Values) == kAxes.size() && (std::convertible_to<Values, double> && ...))
+    explicit GimbalModel(Values... values) noexcept : values_{static_cast<double>(values)...} {}
     // **非虚 + protected**：本类一个虚函数都没有，而位形从不经基类指针删除（它们是被按值造、
     // 按值传的东西）。protected 禁止外部通过 GimbalModel 基类指针删除对象。
     ~GimbalModel() = default;
@@ -184,16 +168,14 @@ public:
     // 摆到这个世界朝向：三个角任意实数，各折进自己的窗、不坍缩。翻滚默认 0（见类注）。
     // 本模型构造时归一化：方位 [0°, 360°)（罗盘方向），高度 [−90°, 270°)（连续覆盖越顶分支），翻滚 [−180°, 180°)；读口与界面用同一张窗。
     WorldModel(const double azimuth, const double elevation, const double roll = 0.0)
-        : GimbalModel(Joint<GimbalModelAxes::minusZ>(Wrap360(azimuth)),
-                      Joint<GimbalModelAxes::x>(Wrap270(elevation)),
-                      Joint<GimbalModelAxes::minusY>(Wrap180(roll)))
+        : GimbalModel(Wrap360(azimuth), Wrap270(elevation), Wrap180(roll))
     {
     }
     WorldModel() : WorldModel(0.0, 0.0, 0.0) {} // 归零位：水平正北
 
-    [[nodiscard]] constexpr double azimuth() const noexcept { return axis<0>().value(); }
-    [[nodiscard]] constexpr double elevation() const noexcept { return axis<1>().value(); }
-    [[nodiscard]] constexpr double roll() const noexcept { return axis<2>().value(); }
+    [[nodiscard]] constexpr double azimuth() const noexcept { return value<0>(); }
+    [[nodiscard]] constexpr double elevation() const noexcept { return value<1>(); }
+    [[nodiscard]] constexpr double roll() const noexcept { return value<2>(); }
 
     // E = UᵀRU 转到本模型关节基，按标准内旋 XYZ 提取三个角（度）。
     // 方位归 [0, 360)，高度取 [-90, 90]，翻滚由构造函数归 [-180, 180)。
@@ -276,14 +258,13 @@ public:
     // 摆到这个位形：两个角任意实数，各折进自己的窗、不坍缩；设备行程不在此判（归官邸）。
     // 本模型构造时归一化：水平 [0°, 360°)，俯仰 [−90°, 270°)（连续覆盖越顶分支）；读口与界面用同一张窗。
     PanTiltModel(const double pan, const double tilt)
-        : GimbalModel(Joint<GimbalModelAxes::minusZ>(Wrap360(pan)), // pan：绕 −ẑ
-                      Joint<GimbalModelAxes::x>(Wrap270(tilt)))     // tilt：绕 x̂
+        : GimbalModel(Wrap360(pan), Wrap270(tilt))
     {
     }
     PanTiltModel() : PanTiltModel(0.0, 0.0) {} // 归零位，一个真实合法的位形
 
-    [[nodiscard]] constexpr double pan() const noexcept { return axis<0>().value(); }
-    [[nodiscard]] constexpr double tilt() const noexcept { return axis<1>().value(); }
+    [[nodiscard]] constexpr double pan() const noexcept { return value<0>(); }
+    [[nodiscard]] constexpr double tilt() const noexcept { return value<1>(); }
 
     // 朝向 → 位形：目标翻滚忽略，取 WorldModel 反解的前两个分量（见类注）；设备行程由官邸造斗时查。
     [[nodiscard]] static PanTiltModel fromOrientation(const SO3 &R)
@@ -301,6 +282,5 @@ using WorldPoseHistory = std::vector<std::pair<std::chrono::system_clock::time_p
 // 窗口快照一次构建，跨 QML 和采样线程只传递只读共享份额。
 using WorldPoseHistoryPtr = std::shared_ptr<const WorldPoseHistory>;
 
-static_assert(ValueObject<Joint<GimbalModelAxes::minusZ>>);
 static_assert(ValueObject<WorldModel>);
 static_assert(ValueObject<PanTiltModel>);
