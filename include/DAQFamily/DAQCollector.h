@@ -2,10 +2,9 @@
 #include <concepts>
 #include <memory>
 #include <optional>
+#include <span>
 #include <tuple>
 #include <utility>
-#include <QByteArray>
-#include <QByteArrayView>
 #include <QDir>
 #include <QString>
 
@@ -66,7 +65,7 @@ template<DAQParams P> inline constexpr bool isDAQChannel<DAQChannel<P>> = true;
 template<class C> concept DAQChannelLike = isDAQChannel<C>;
 
 // 族基：等待器、任务与完成回调只认它（参数、帧时刻、是否判齐），不读通道；交付后只读。
-class DAQCollector : public Collector<QByteArray, DAQParameters>
+class DAQCollector : public Collector<std::span<const unsigned char>, DAQParameters>
 {
 public:
     // 当前帧的到料时刻由型号按协议确定；完成后供落盘文件名和风廓线时间轴使用。
@@ -101,10 +100,11 @@ protected:
     ~TypedDAQCollector() = default;
 
 private:
-    void onFeed(const QByteArray &item, RxTime at) final { frame_ = assemble(item, at); }
+    void onFeed(const Feed &item, RxTime at) final { frame_ = assemble(item, at); }
 
-    // [worker] 型号凑帧：校验并放置这一口字节；未凑齐返回空，凑齐的那一口按协议解析为各路通道（构造即处理）。
-    [[nodiscard]] virtual std::optional<Frame> assemble(QByteArrayView bytes, RxTime at) = 0;
+    // [worker] 仅在本次同步调用内借用输入。型号若需跨包留存，须写入自己的收帧缓冲。
+    // 未凑齐返回空，凑齐的那一口按协议解析为各路通道。
+    [[nodiscard]] virtual std::optional<Frame> assemble(std::span<const unsigned char> bytes, RxTime at) = 0;
 
     std::optional<Frame> frame_;
 };

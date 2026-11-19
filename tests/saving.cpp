@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 #include <QByteArray>
-#include <QByteArrayView>
+#include <span>
 #include <QChar>
 #include <QCoreApplication>
 #include <QDir>
@@ -106,7 +106,7 @@ public:
     std::vector<std::vector<unsigned char>> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
-    std::optional<Frame> assemble(QByteArrayView, RxTime at) override
+    std::optional<Frame> assemble(std::span<const unsigned char>, RxTime at) override
     {
         frameTime_ = at;
         const std::array<double, 8> values{1, 2, 9, 2, 1, 3, 8, 3};
@@ -132,7 +132,7 @@ public:
     std::vector<std::vector<unsigned char>> buildStart() const override { return {}; }
     int timeoutMs() const override { return 0; }
 private:
-    std::optional<Frame> assemble(QByteArrayView, RxTime at) override
+    std::optional<Frame> assemble(std::span<const unsigned char>, RxTime at) override
     {
         frameTime_ = at;
         auto values = std::make_unique<Spectrum<singleBinSpec>>();
@@ -150,6 +150,7 @@ static_assert(!SaveFrameAccepted<SavedFrame>);
 
 // 存盘测试不经设备：自行派生通行证造参数（通行证只防误用，不防刻意派生）。
 struct TestKey : DAQParamsKey { TestKey() {} };
+static constexpr unsigned char payload[] = {'x'};
 }
 
 int main(int argc, char **argv)
@@ -162,7 +163,7 @@ int main(int argc, char **argv)
 
     // 无朝向帧：朝向写 null，未标定通道的风速写 null，CNR 照常。
     auto collecting = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 3, std::nullopt, root, QStringLiteral("session"), false));
-    check(collecting->feed(QByteArray("x"), at), "frame did not complete");
+    check(collecting->feed(payload, at), "frame did not complete");
     const std::shared_ptr<const SavedFrame> frame = std::move(collecting);
     AcqSaver::saveFrame(frame, QStringLiteral("Card"));
     const auto saved = readCompleted(root.filePath("session/" + AcqSaver::fileStem(at) + ".json"));
@@ -186,7 +187,7 @@ int main(int argc, char **argv)
 
     // 频点不足仍保存原谱；旧格式中无法拟合的两个产物保持空数组。
     auto single = std::make_shared<SingleBinFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "single", false));
-    check(single->feed(QByteArray("x"), at), "single-bin frame did not complete");
+    check(single->feed(payload, at), "single-bin frame did not complete");
     AcqSaver::saveFrame(std::shared_ptr<const SingleBinFrame>(std::move(single)), "Card");
     const auto singleSaved = readCompleted(root.filePath("single/" + AcqSaver::fileStem(at) + ".json"))
         .value("channels").toArray()[0].toObject();
@@ -228,7 +229,7 @@ int main(int argc, char **argv)
             destroyedHere.store(std::this_thread::get_id() == caller);
             delete value;
         });
-    check(source->feed(QByteArray("x"), at), "lifetime frame did not complete");
+    check(source->feed(payload, at), "lifetime frame did not complete");
     std::shared_ptr<const SavedFrame> sourceFrame = std::move(source);
     const std::weak_ptr<const SavedFrame> sourceWeak = sourceFrame;
     auto result = std::make_shared<VerticalWindProfileUnit<profileSpec>>(at + std::chrono::seconds(10), 90.0);
@@ -260,7 +261,7 @@ int main(int argc, char **argv)
             frameDestroyedHere.store(std::this_thread::get_id() == caller);
             delete value;
         });
-    check(savingSource->feed(QByteArray("x"), at), "independent save frame did not complete");
+    check(savingSource->feed(payload, at), "independent save frame did not complete");
     std::shared_ptr<const SavedFrame> savingFrame = std::move(savingSource);
     const std::weak_ptr<const SavedFrame> savingWeak = savingFrame;
     AcqSaver::saveFrame(std::move(savingFrame), QStringLiteral("Card"));
@@ -285,7 +286,7 @@ int main(int argc, char **argv)
     QString cardName = QString::fromUtf8("采集卡 \"A\" \\");
     for (ushort code = 0; code < 0x20; ++code) cardName.append(QChar(code));
     auto escapedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "escaped", false));
-    check(escapedFrame->feed(QByteArray("x"), at), "escape frame did not complete");
+    check(escapedFrame->feed(payload, at), "escape frame did not complete");
     AcqSaver::saveFrame(std::shared_ptr<const SavedFrame>(std::move(escapedFrame)), cardName);
     const QString escapedPath = root.filePath("escaped/" + AcqSaver::fileStem(at) + ".json");
     check(readCompleted(escapedPath).value("frame").toObject().value("card").toString() == cardName,
@@ -302,7 +303,7 @@ int main(int argc, char **argv)
     check(obstacle.open(QIODevice::WriteOnly), "cannot create directory obstacle");
     obstacle.close();
     auto blockedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "obstacle/session", false));
-    check(blockedFrame->feed(QByteArray("x"), at), "blocked frame did not complete");
+    check(blockedFrame->feed(payload, at), "blocked frame did not complete");
     AcqSaver::saveFrame(std::shared_ptr<const SavedFrame>(std::move(blockedFrame)), "Card");
     const auto directoryFailure = waitDiagnostic(0);
     check(directoryFailure.contains("Cannot create acquisition directory:")
@@ -312,7 +313,7 @@ int main(int argc, char **argv)
     const auto occupiedPath = root.filePath("occupied/profile_" + AcqSaver::fileStem(at) + ".json");
     check(QDir().mkpath(occupiedPath), "cannot create filename obstacle");
     auto occupiedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "occupied", true));
-    check(occupiedFrame->feed(QByteArray("x"), at), "occupied frame did not complete");
+    check(occupiedFrame->feed(payload, at), "occupied frame did not complete");
     // 从同一 QSaveFile 路径取得平台自己的错误文案，不硬编码英文或本地化系统信息。
     QSaveFile expectedFailure(occupiedPath);
     check(!expectedFailure.open(QIODevice::WriteOnly), "directory unexpectedly opened as output file");

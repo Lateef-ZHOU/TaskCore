@@ -5,6 +5,7 @@
 #include <numbers>
 #include <functional>
 #include "DAQFamily/DAQDevice.h"
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QSemaphore>
@@ -78,11 +79,9 @@ public:
     [[nodiscard]] QThread *processedOn() const noexcept { return processedOn_; }
 private:
     // 每口料即一整帧：在收包线程解析与处理。
-    std::optional<Frame> assemble(QByteArrayView bytes, RxTime at) override
+    std::optional<Frame> assemble(std::span<const unsigned char> bytes, RxTime at) override
     {
-        if (bytes.data() != reinterpret_cast<const char *>(inputBytes)
-            || bytes.size() != static_cast<qsizetype>(sizeof(inputBytes)) || bytes[1] != '\0'
-            || static_cast<unsigned char>(bytes[2]) != 0xff)
+        if (bytes.data() != inputBytes || bytes.size() != sizeof(inputBytes) || bytes[1] != 0 || bytes[2] != 0xff)
             return std::nullopt;
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
