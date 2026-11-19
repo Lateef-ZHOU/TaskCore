@@ -3,9 +3,11 @@
 #include <format>
 #include <array>
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
+#include <system_error>
 #include <tuple>
 #include <utility>
 #include <boost/circular_buffer.hpp>
@@ -39,7 +41,7 @@ public:
     // 由原始量构造本型号的采集参数：累积时间超出本型号范围时返回空并记录原因；不造 Collector、不发令。
     // 这是造出 DAQParameters 的唯一入口：型号以 *this 出示通行证。任务与单卡测试在发令前调用，为空即拒绝启动。
     [[nodiscard]] virtual std::optional<DAQParameters> paramsFor(int accumSec, std::optional<WorldModel> pose,
-        std::optional<QDir> saveRoot, std::string sessionDir, bool sync) const = 0;
+        std::optional<std::filesystem::path> saveRoot, std::string sessionDir, bool sync) const = 0;
 };
 
 // 模板层继承具体 Device 与族基：Device 按参数造斗；本层在主线程显示、提交保存、维护四束环与反演，并提供单卡测试。
@@ -89,15 +91,16 @@ public:
             Q_EMIT this->logMessage("测试正在进行中");
             return;
         }
-        std::optional<QDir> saveRoot; // 空 = 不落盘
+        std::optional<std::filesystem::path> saveRoot;
         if (save)
         {
-            if (!folder.isLocalFile() || folder.toLocalFile().isEmpty())
+            const auto localFolder = folder.toLocalFile();
+            if (!folder.isLocalFile() || localFolder.isEmpty())
             {
                 Q_EMIT this->logMessage("选中的不是本机目录，未启动采集");
                 return;
             }
-            saveRoot = QDir(folder.toLocalFile());
+            saveRoot = QDir(localFolder).filesystemPath();
         }
         // 没有云台：朝向为空、同步位恒假；参数不合本型号即不起协程。
         auto parameters = this->paramsFor(accumSec, std::nullopt, std::move(saveRoot), std::move(sessionDir), false);
@@ -122,11 +125,19 @@ private:
             Q_EMIT this->logMessage("设备已被占用或未连接");
             co_return;
         }
+        std::string destination = "，不落盘";
+        if (parameters.saveRoot)
+        {
+            std::error_code error;
+            const auto absolute = std::filesystem::absolute(*parameters.saveRoot, error);
+            auto path = error ? *parameters.saveRoot : absolute.lexically_normal();
+            const auto utf8 = path.make_preferred().u8string();
+            destination = "，落盘到 ";
+            destination.append(reinterpret_cast<const char *>(utf8.data()), utf8.size());
+        }
         while (true)
         {
-            Q_EMIT this->logMessage(std::format("开始采集（累积 {} 秒）{}", parameters.accumSec,
-                                 parameters.saveRoot ? std::format("，落盘到 {}", QDir::toNativeSeparators(parameters.saveRoot->absolutePath()).toStdString())
-                                                     : "，不落盘"));
+            Q_EMIT this->logMessage(std::format("开始采集（累积 {} 秒）{}", parameters.accumSec, destination));
             const auto framed = co_await RunAwaiter<DAQFamily>{lock, *this, parameters};
             if (framed.empty())
             {

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <numbers>
 #include <functional>
+#include <filesystem>
 #include "DAQFamily/DAQDevice.h"
 #include <QByteArray>
 #include <QCoreApplication>
@@ -101,7 +102,7 @@ public:
     TestDevice() : DAQDevice("test", {}, nullptr) {}
     ~TestDevice() override { PreDestruction(); }
     // 测试型号接受 1~10 秒。
-    std::optional<DAQParameters> paramsFor(int accumSec, std::optional<WorldModel> pose, std::optional<QDir> saveRoot,
+    std::optional<DAQParameters> paramsFor(int accumSec, std::optional<WorldModel> pose, std::optional<std::filesystem::path> saveRoot,
                                            std::string sessionDir, bool sync) const override
     {
         if (accumSec < 1 || accumSec > 10) return std::nullopt;

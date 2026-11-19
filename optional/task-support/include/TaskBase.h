@@ -4,6 +4,7 @@
 #include <format>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -124,12 +125,13 @@ public Q_SLOTS:
         if (settleSec < kSettleMin || settleSec > kSettleMax) {
             Q_EMIT logMessage("停稳等待超出范围，任务未启动"); return false;
         }
-        std::optional<QDir> saveRoot;
+        std::optional<std::filesystem::path> saveRoot;
         if (save) {
-            if (!folder.isValid() || !folder.isLocalFile() || folder.toLocalFile().isEmpty()) {
+            const auto localFolder = folder.toLocalFile();
+            if (!folder.isValid() || !folder.isLocalFile() || localFolder.isEmpty()) {
                 Q_EMIT logMessage("保存目录不是有效的本机目录，任务未启动"); return false;
             }
-            saveRoot.emplace(folder.toLocalFile());
+            saveRoot = QDir(localFolder).filesystemPath();
         }
         if (worldAzimuths.size() != beamCount() || !std::isfinite(worldElevation)
             || !std::all_of(worldAzimuths.cbegin(), worldAzimuths.cend(), [](double az) { return std::isfinite(az); }))
@@ -175,7 +177,7 @@ protected:
     // hold 与两轴速度为启动时固定的快照；协程逐束连同目标位形交官邸 paramsFor 构造运动参数。
     virtual DeviceCoro run(LockRequest, GMBFamily &, Cards, QList<double>, double, int,
                           std::chrono::milliseconds hold, double panSpeed, double tiltSpeed,
-                          std::optional<QDir>) = 0;
+                          std::optional<std::filesystem::path>) = 0;
 
     // 本函数只重置协程持有者，不额外发通知；取消链可同步恢复协程收尾、撤单并产生日志或通知。
     // 末端析构在自己的成员拆除前调用。
@@ -194,7 +196,7 @@ protected:
     }
     [[nodiscard]] RunAwaiter<DAQFamily> acquireAt(const std::shared_ptr<DeviceLock> &lock,
         GMBFamily &gmb, const Cards &cards, const GmbOrders &moved, const int beam, const int accumSec,
-        const std::optional<QDir> &saveRoot, const QDateTime &sessionTime, const bool sync)
+        const std::optional<std::filesystem::path> &saveRoot, const QDateTime &sessionTime, const bool sync)
     {
         step(beam, Phase::Acquiring, std::format("{} 张卡同时采集{}...", cards.size(), saveRoot ? "（落盘）" : "（不落盘）"));
         // moved 的结果份额在本次同步换算期间保活 Collector，measured 不另复制位形。

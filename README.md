@@ -2,6 +2,12 @@
 
 设备族库：GMB 云台族与 DAQ 采集卡族。11-14 及更早的历史条目见[归档](docs/archive/README-2026-11-19.md)。
 
+## 2026-11-20：采集保存根目录使用标准路径（用户定）
+
+单卡测试与任务在界面入口把本地目录转换为 `std::filesystem::path`。采集请求的 `saveRoot` 使用 `std::optional<std::filesystem::path>`，`std::nullopt` 表示不落盘。保存层在拼接功率谱和风廓线文件路径时转换为 Qt 路径。
+
+Windows Release CTest 16/16。落盘测试核对带中文、空格及特殊字符的根目录和会话目录，并读回功率谱及风廓线 JSON。
+
 ## 2026-11-20：采集会话目录使用标准字符串（用户定）
 
 任务及单卡测试按原日期格式和设备标签生成 UTF-8 的 `std::string`。采集参数按值携带 `sessionDir`，保存时用同一个 Qt 字符串写文件路径和 JSON 的 `frame.session`。

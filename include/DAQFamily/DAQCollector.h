@@ -1,12 +1,12 @@
 #pragma once
 #include <concepts>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <tuple>
 #include <utility>
-#include <QDir>
 
 #include "GMBFamily/GimbalModel.h"
 #include "DAQFamily/RadialWind.h" // 标准径向风 / CNR 算法（各卡共用）
@@ -27,14 +27,14 @@ protected:
 // 模板层据此直接构造本次 Collector；重试照抄，完成帧自带处理与保存所需信息。
 struct DAQParameters
 {
-    DAQParameters(const DAQParamsKey &, const int accumSec, std::optional<WorldModel> pose, std::optional<QDir> saveRoot,
+    DAQParameters(const DAQParamsKey &, const int accumSec, std::optional<WorldModel> pose, std::optional<std::filesystem::path> saveRoot,
                   std::string sessionDir, const bool sync)
         : accumSec(accumSec), pose(std::move(pose)), saveRoot(std::move(saveRoot)), sessionDir(std::move(sessionDir)),
           sync(sync) {}
 
     const int accumSec;
     const std::optional<WorldModel> pose;
-    const std::optional<QDir> saveRoot; // 空 = 不落盘
+    const std::optional<std::filesystem::path> saveRoot; // nullopt = 不落盘
     const std::string sessionDir; // UTF-8
     const bool sync;
 };

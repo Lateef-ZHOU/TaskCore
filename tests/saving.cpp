@@ -159,7 +159,8 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     QTemporaryDir temp;
     check(temp.isValid(), "temporary directory unavailable");
-    const QDir root(temp.path());
+    const QDir root(QDir(temp.path()).filePath(QStringLiteral("采集根 +#%")));
+    const auto saveRoot = root.filesystemPath();
     const auto at = std::chrono::system_clock::now();
     const QString sessionName = QStringLiteral("20261120_091011_采集 会话+%");
     const auto session = AcqSaver::sessionDir(QDateTime(QDate(2026, 11, 20), QTime(9, 10, 11)),
@@ -167,7 +168,7 @@ int main(int argc, char **argv)
     check(session == sessionName.toStdString(), "UTF-8 session name differs");
 
     // 无朝向帧：朝向写 null，未标定通道的风速写 null，CNR 照常。
-    auto collecting = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 3, std::nullopt, root, session, false));
+    auto collecting = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 3, std::nullopt, saveRoot, session, false));
     check(collecting->feed(payload, at), "frame did not complete");
     const std::shared_ptr<const SavedFrame> frame = std::move(collecting);
     AcqSaver::saveFrame(frame, QStringLiteral("Card"));
@@ -192,7 +193,7 @@ int main(int argc, char **argv)
     check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "missing wind not null");
 
     // 频点不足仍保存原谱；旧格式中无法拟合的两个产物保持空数组。
-    auto single = std::make_shared<SingleBinFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "single", false));
+    auto single = std::make_shared<SingleBinFrame>(DAQParameters(TestKey(), 1, std::nullopt, saveRoot, "single", false));
     check(single->feed(payload, at), "single-bin frame did not complete");
     AcqSaver::saveFrame(std::shared_ptr<const SingleBinFrame>(std::move(single)), "Card");
     const auto singleSaved = readCompleted(root.filePath("single/" + AcqSaver::fileStem(at) + ".json"))
@@ -230,7 +231,7 @@ int main(int argc, char **argv)
     const auto caller = std::this_thread::get_id();
     std::atomic<bool> destroyedHere = false;
     std::shared_ptr<SavedFrame> source(new SavedFrame(DAQParameters(TestKey(), 7,
-        WorldModel(12, 30, 0), root, "released", true)),
+        WorldModel(12, 30, 0), saveRoot, "released", true)),
         [caller, &destroyedHere](SavedFrame *value) {
             destroyedHere.store(std::this_thread::get_id() == caller);
             delete value;
@@ -262,7 +263,7 @@ int main(int argc, char **argv)
     // 整帧保存也只捕获结果份额；Collector 在调用线程释放后，原数组仍可写出。
     std::atomic<bool> frameDestroyedHere = false;
     std::shared_ptr<SavedFrame> savingSource(new SavedFrame(DAQParameters(TestKey(), 3,
-        std::nullopt, root, "released-frame", false)),
+        std::nullopt, saveRoot, "released-frame", false)),
         [caller, &frameDestroyedHere](SavedFrame *value) {
             frameDestroyedHere.store(std::this_thread::get_id() == caller);
             delete value;
@@ -292,7 +293,7 @@ int main(int argc, char **argv)
     // 字符串字段往返保留全部 JSON 控制字符、引号、反斜杠和 UTF-8；不改变普通帧格式。
     QString cardName = QString::fromUtf8("采集卡 \"A\" \\");
     for (ushort code = 0; code < 0x20; ++code) cardName.append(QChar(code));
-    auto escapedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "escaped", false));
+    auto escapedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, saveRoot, "escaped", false));
     check(escapedFrame->feed(payload, at), "escape frame did not complete");
     AcqSaver::saveFrame(std::shared_ptr<const SavedFrame>(std::move(escapedFrame)), cardName);
     const QString escapedPath = root.filePath("escaped/" + AcqSaver::fileStem(at) + ".json");
@@ -309,7 +310,7 @@ int main(int argc, char **argv)
     QFile obstacle(root.filePath("obstacle"));
     check(obstacle.open(QIODevice::WriteOnly), "cannot create directory obstacle");
     obstacle.close();
-    auto blockedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "obstacle/session", false));
+    auto blockedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, saveRoot, "obstacle/session", false));
     check(blockedFrame->feed(payload, at), "blocked frame did not complete");
     AcqSaver::saveFrame(std::shared_ptr<const SavedFrame>(std::move(blockedFrame)), "Card");
     const auto directoryFailure = waitDiagnostic(0);
@@ -319,7 +320,7 @@ int main(int argc, char **argv)
 
     const auto occupiedPath = root.filePath("occupied/profile_" + AcqSaver::fileStem(at) + ".json");
     check(QDir().mkpath(occupiedPath), "cannot create filename obstacle");
-    auto occupiedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, root, "occupied", true));
+    auto occupiedFrame = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, saveRoot, "occupied", true));
     check(occupiedFrame->feed(payload, at), "occupied frame did not complete");
     // 从同一 QSaveFile 路径取得平台自己的错误文案，不硬编码英文或本地化系统信息。
     QSaveFile expectedFailure(occupiedPath);

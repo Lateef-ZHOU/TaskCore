@@ -174,7 +174,7 @@ private:
         const std::tuple<Channels...> &channels, const QString &card)
     {
         const auto session = QString::fromStdString(context.sessionDir);
-        Writer out(context.saveRoot->filePath(session + "/" + fileStem(at) + ".json"));
+        Writer out(QDir(*context.saveRoot).filePath(session + "/" + fileStem(at) + ".json"));
         if (!out.open()) return;
         out.raw("{");
         writeFrameInfo(out, context, at, session);
@@ -222,7 +222,7 @@ private:
         const QStringList &names)
     {
         const auto session = QString::fromStdString(context.sessionDir);
-        Writer out(context.saveRoot->filePath(session + "/profile_" + fileStem(at) + ".json"));
+        Writer out(QDir(*context.saveRoot).filePath(session + "/profile_" + fileStem(at) + ".json"));
         if (!out.open()) return;
         out.raw("{");
         writeFrameInfo(out, context, at, session);
