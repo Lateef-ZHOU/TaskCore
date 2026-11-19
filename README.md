@@ -1,6 +1,6 @@
 ## 2026-11-19：关节轴向静态化（用户定）
 
-Joint<AxisTag> 仅保存当前作动值，固定轴向由轴类型标签的编译期常量提供，不再作为 LinAlg::Vec3 基类子对象复制。GimbalModel<AxisTags...> 以私有 std::tuple 保存各关节值，WorldModel 和 PanTiltModel 的复制仅携带角度数据；角度窗口、正反解和类型约束保持。采用轴类型标签而非 Vec3 非类型模板值，避免私有 Vec3 存储对结构性类型的限制及 MSVC 对指针参数包展开的问题。
+Joint<std::array<double, 3>> 仅保存当前作动值，固定轴向直接作为 C++20 std::array 值模板实参，不再作为 LinAlg::Vec3 基类子对象复制，也不需要额外的轴类型标签。GimbalModel<std::array<double, 3>...> 以私有 std::tuple 保存各关节值，WorldModel 和 PanTiltModel 的复制仅携带角度数据；角度窗口、正反解和类型约束保持。Vec3 的私有数组基类不适合直接作结构性值模板参数，std::array 值模板则给出明确的轴向约束。
 
 验证：build-family Release 零警告，CTest 16/16；build-models CTest 1/1；主程序原 build Release 零警告，8 秒离屏冒烟与基线一致。仅本地提交，不推送，不更新远端固定版本。
 

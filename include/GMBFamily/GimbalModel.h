@@ -44,25 +44,25 @@
     return d > 180.0 ? 360.0 - d : d;
 }
 
-// 固定的关节轴向类型标签：只提供编译期常量，模型实例不再保存轴向或指针。
+// 固定的关节轴向直接作为 C++20 值模板实参，模型实例不再保存轴向或指针。
 namespace GimbalModelAxes
 {
-struct MinusZ { static constexpr LinAlg::Vec3 value{0.0, 0.0, -1.0}; };
-struct X { static constexpr LinAlg::Vec3 value{1.0, 0.0, 0.0}; };
-struct MinusY { static constexpr LinAlg::Vec3 value{0.0, -1.0, 0.0}; };
+inline constexpr std::array<double, 3> minusZ{0.0, 0.0, -1.0};
+inline constexpr std::array<double, 3> x{1.0, 0.0, 0.0};
+inline constexpr std::array<double, 3> minusY{0.0, -1.0, 0.0};
 } // namespace GimbalModelAxes
 
-// Joint — 一根关节：轴向由类型标签指定，实体只保存当前作动值（°）。
+// Joint — 一根关节：轴向由 std::array 值模板参数指定，实体只保存当前作动值（°）。
 // 关节只描述轴向和当前值，不拥有角度窗口或机械零偏；作动值是周期量，正解直接使用。
 // 读数窗口由具体模型在构造时统一归一化，设备行程由官邸按协议校验。
-template <class AxisTag>
+template <std::array<double, 3> Axis>
 class Joint
 {
 public:
     // 作动值（任意实数）。轴向由模板参数给出，不在对象内另存。
     constexpr explicit Joint(const double deg) noexcept : value_(deg) {}
 
-    [[nodiscard]] static constexpr const LinAlg::Vec3 &axis() noexcept { return AxisTag::value; }
+    [[nodiscard]] static constexpr LinAlg::Vec3 axis() noexcept { return {Axis[0], Axis[1], Axis[2]}; }
     // 本轴此刻的作动值；Joint 本身不做窗口折返。
     [[nodiscard]] constexpr double value() const noexcept { return value_; }
 
@@ -113,10 +113,10 @@ concept GimbalModelLike = std::derived_from<T, GimbalModelBase> && requires(cons
 // 任一模型；就是几行 SO3 复合（`toOrientation` / `inverseRotation` / `fromOrientation`），住在持有安装标定的
 // 云台族基（GMBFamily::gimbalOf / worldOf）。
 // ============================================================
-template <class... AxisTags>
+template <std::array<double, 3>... Axes>
 class GimbalModel : public GimbalModelBase
 {
-    using Joints = std::tuple<Joint<AxisTags>...>;
+    using Joints = std::tuple<Joint<Axes>...>;
     Joints joints_;
 public:
     GimbalModel(const GimbalModel &) = default;
@@ -137,7 +137,7 @@ public:
         double worst = 0.0;
         [&]<std::size_t... I>(std::index_sequence<I...>) {
             ((worst = std::max(worst, AngularDistance(std::get<I>(a.joints_).value(), std::get<I>(b.joints_).value()))), ...);
-        }(std::make_index_sequence<sizeof...(AxisTags)>{});
+        }(std::make_index_sequence<sizeof...(Axes)>{});
         return worst;
     }
 
@@ -159,7 +159,7 @@ protected:
     template <std::size_t I>
     [[nodiscard]] constexpr const auto &axis() const noexcept { return std::get<I>(joints_); }
 
-    explicit GimbalModel(Joint<AxisTags>... joints) noexcept : joints_(std::make_tuple(std::move(joints)...)) {}
+    explicit GimbalModel(Joint<Axes>... joints) noexcept : joints_(std::make_tuple(std::move(joints)...)) {}
     // **非虚 + protected**：本类一个虚函数都没有，而位形从不经基类指针删除（它们是被按值造、
     // 按值传的东西）。protected 禁止外部通过 GimbalModel 基类指针删除对象。
     ~GimbalModel() = default;
@@ -178,15 +178,15 @@ protected:
 // R·SO(2)，翻滚是那根纤维的坐标。对"我要指哪"而言它不关心，给个代表元即可；对"基座架成什么样"
 // 而言它是实打实的物理，那一处必须显式给。
 // ============================================================
-class WorldModel : public GimbalModel<GimbalModelAxes::MinusZ, GimbalModelAxes::X, GimbalModelAxes::MinusY>
+class WorldModel : public GimbalModel<GimbalModelAxes::minusZ, GimbalModelAxes::x, GimbalModelAxes::minusY>
 {
 public:
     // 摆到这个世界朝向：三个角任意实数，各折进自己的窗、不坍缩。翻滚默认 0（见类注）。
     // 本模型构造时归一化：方位 [0°, 360°)（罗盘方向），高度 [−90°, 270°)（连续覆盖越顶分支），翻滚 [−180°, 180°)；读口与界面用同一张窗。
     WorldModel(const double azimuth, const double elevation, const double roll = 0.0)
-        : GimbalModel(Joint<GimbalModelAxes::MinusZ>(Wrap360(azimuth)),
-                      Joint<GimbalModelAxes::X>(Wrap270(elevation)),
-                      Joint<GimbalModelAxes::MinusY>(Wrap180(roll)))
+        : GimbalModel(Joint<GimbalModelAxes::minusZ>(Wrap360(azimuth)),
+                      Joint<GimbalModelAxes::x>(Wrap270(elevation)),
+                      Joint<GimbalModelAxes::minusY>(Wrap180(roll)))
     {
     }
     WorldModel() : WorldModel(0.0, 0.0, 0.0) {} // 归零位：水平正北
@@ -217,7 +217,9 @@ public:
 private:
     // 构造与反解换基共用同一份固定轴向，反解无需构造归零位形。
     static constexpr std::array<LinAlg::Vec3, 3> kAxes{
-        GimbalModelAxes::MinusZ::value, GimbalModelAxes::X::value, GimbalModelAxes::MinusY::value};
+        LinAlg::Vec3{GimbalModelAxes::minusZ[0], GimbalModelAxes::minusZ[1], GimbalModelAxes::minusZ[2]},
+        LinAlg::Vec3{GimbalModelAxes::x[0], GimbalModelAxes::x[1], GimbalModelAxes::x[2]},
+        LinAlg::Vec3{GimbalModelAxes::minusY[0], GimbalModelAxes::minusY[1], GimbalModelAxes::minusY[2]}};
 
     // 极点带宽：|cos θ₂| ≤ kPoleCos 按"光指着极点"收（本模型反解使用，双轴模型复用结果）。
     // **带宽取 ±0.1°，不是"正好 90°"**（用户定）：严格的 90° 谁也到不了——浮点会丢精度，设备更有误差。
@@ -268,14 +270,14 @@ private:
 // **反解 `fromOrientation`：朝向 → 位形**：目标的翻滚直接忽略（用户定：双轴对翻滚无计可施，需求只要指向），
 // 前两轴与 WorldModel 一致，复用其反解的前两个分量——水平 [0°,360°)、俯仰 [−90°,90°]，两极折进水平角，与 WorldModel 同一套。
 // ============================================================
-class PanTiltModel : public GimbalModel<GimbalModelAxes::MinusZ, GimbalModelAxes::X>
+class PanTiltModel : public GimbalModel<GimbalModelAxes::minusZ, GimbalModelAxes::x>
 {
 public:
     // 摆到这个位形：两个角任意实数，各折进自己的窗、不坍缩；设备行程不在此判（归官邸）。
     // 本模型构造时归一化：水平 [0°, 360°)，俯仰 [−90°, 270°)（连续覆盖越顶分支）；读口与界面用同一张窗。
     PanTiltModel(const double pan, const double tilt)
-        : GimbalModel(Joint<GimbalModelAxes::MinusZ>(Wrap360(pan)), // pan：绕 −ẑ
-                      Joint<GimbalModelAxes::X>(Wrap270(tilt)))     // tilt：绕 x̂
+        : GimbalModel(Joint<GimbalModelAxes::minusZ>(Wrap360(pan)), // pan：绕 −ẑ
+                      Joint<GimbalModelAxes::x>(Wrap270(tilt)))     // tilt：绕 x̂
     {
     }
     PanTiltModel() : PanTiltModel(0.0, 0.0) {} // 归零位，一个真实合法的位形
@@ -299,6 +301,6 @@ using WorldPoseHistory = std::vector<std::pair<std::chrono::system_clock::time_p
 // 窗口快照一次构建，跨 QML 和采样线程只传递只读共享份额。
 using WorldPoseHistoryPtr = std::shared_ptr<const WorldPoseHistory>;
 
-static_assert(ValueObject<Joint<GimbalModelAxes::MinusZ>>);
+static_assert(ValueObject<Joint<GimbalModelAxes::minusZ>>);
 static_assert(ValueObject<WorldModel>);
 static_assert(ValueObject<PanTiltModel>);

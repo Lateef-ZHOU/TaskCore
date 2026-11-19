@@ -19,8 +19,8 @@ static_assert(std::is_same_v<decltype(&SiteCalibration::estimateFromSamples),
     std::optional<SiteCalibration::Estimate> (*)(const std::span<const SiteCalibration::Sample>&) noexcept>);
 static_assert(noexcept(SiteCalibration::estimateFromSamples(std::span<const SiteCalibration::Sample>{})));
 static_assert(noexcept(Wrap360(0.0)));
-using TestJoint = Joint<GimbalModelAxes::MinusZ>;
-using TestModel = GimbalModel<GimbalModelAxes::MinusZ>;
+using TestJoint = Joint<GimbalModelAxes::minusZ>;
+using TestModel = GimbalModel<GimbalModelAxes::minusZ>;
 static_assert(sizeof(TestJoint) == sizeof(double)); // 固定轴向在模板中，不占用 Joint 实例存储
 static_assert(std::is_base_of_v<GimbalModelBase, WorldModel>);
 static_assert(std::is_base_of_v<GimbalModelBase, PanTiltModel>);
@@ -49,9 +49,9 @@ static_assert(!ModelDistanceAvailable<TestModel> && !ModelDistanceAvailable<Miss
 static_assert(!ModelDistanceAvailable<WrongInverseResult> && !ModelDistanceAvailable<InheritedInverse>);
 static_assert(!ModelDistanceAvailable<UnrelatedModel> && !ModelDistanceAvailable<PrivateModel>);
 static_assert(!std::is_convertible_v<WorldModel*,
-    std::tuple<Joint<GimbalModelAxes::MinusZ>, Joint<GimbalModelAxes::X>, Joint<GimbalModelAxes::MinusY>>*>);
+    std::tuple<Joint<GimbalModelAxes::minusZ>, Joint<GimbalModelAxes::x>, Joint<GimbalModelAxes::minusY>>*>);
 static_assert(!std::is_convertible_v<PanTiltModel*,
-    std::tuple<Joint<GimbalModelAxes::MinusZ>, Joint<GimbalModelAxes::X>>*>);
+    std::tuple<Joint<GimbalModelAxes::minusZ>, Joint<GimbalModelAxes::x>>*>);
 template<class T> concept PublicJointContainer = requires(T &v) { v.clear(); v[0]; v.begin(); };
 template<class T> concept PublicEquality = requires(const T &a, const T &b) { a == b; };
 static_assert(!PublicJointContainer<WorldModel> && !PublicJointContainer<PanTiltModel>);
