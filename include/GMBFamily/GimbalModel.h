@@ -30,6 +30,12 @@
     return Wrap360(deg + 180.0) - 180.0;
 }
 
+// 角度回绕到 [-90, 270)（度）：供世界模型的高度角使用，连续范围覆盖水平以下及越过天顶的分支。
+[[nodiscard]] inline double Wrap270(double deg) noexcept
+{
+    return Wrap360(deg + 90.0) - 90.0;
+}
+
 // 最短无向角距离（度），范围 [0, 180]。
 [[nodiscard]] inline double AngularDistance(double a, double b) noexcept
 {
@@ -150,10 +156,10 @@ class WorldModel : public GimbalModel
 {
 public:
     // 摆到这个世界朝向：三个角任意实数，各折进自己的窗、不坍缩。翻滚默认 0（见类注）。
-    // 本模型构造时归一化：方位 [0°, 360°)（罗盘方向），高度 / 翻滚 [−180°, 180°)（以水平为零）；读口与界面用同一张窗。
+    // 本模型构造时归一化：方位 [0°, 360°)（罗盘方向），高度 [−90°, 270°)（连续覆盖越顶分支），翻滚 [−180°, 180°)；读口与界面用同一张窗。
     WorldModel(const double azimuth, const double elevation, const double roll = 0.0)
         : GimbalModel({{kAxes[0], Wrap360(azimuth)},
-                       {kAxes[1], Wrap180(elevation)},
+                       {kAxes[1], Wrap270(elevation)},
                        {kAxes[2], Wrap180(roll)}})
     {
     }
@@ -242,10 +248,10 @@ class PanTiltModel : public GimbalModel
 {
 public:
     // 摆到这个位形：两个角任意实数，各折进自己的窗、不坍缩；设备行程不在此判（归官邸）。
-    // 本模型构造时归一化：水平 [0°, 360°)，俯仰 [−180°, 180°)（以水平为零）；读口与界面用同一张窗。
+    // 本模型构造时归一化：水平 [0°, 360°)，俯仰 [−90°, 270°)（连续覆盖越顶分支）；读口与界面用同一张窗。
     PanTiltModel(const double pan, const double tilt)
         : GimbalModel({{{0.0, 0.0, -1.0}, Wrap360(pan)}, // pan：绕 −ẑ
-                       {{1.0, 0.0, 0.0}, Wrap180(tilt)}}) // tilt：绕 x̂
+                       {{1.0, 0.0, 0.0}, Wrap270(tilt)}}) // tilt：绕 x̂
     {
     }
     PanTiltModel() : PanTiltModel(0.0, 0.0) {} // 归零位，一个真实合法的位形

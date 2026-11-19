@@ -243,8 +243,11 @@ int main()
     if (Wrap360(-30.0) != 330.0 || Wrap360(390.0) != 30.0
         || Wrap360(360.0) != 0.0 || Wrap360(-360.0) != 0.0
         || Joint({1, 0, 0}, 190.0).value() != 190.0
-        || WorldModel(0.0, 190.0).elevation() != -170.0
-        || PanTiltModel(0.0, 190.0).tilt() != -170.0) return 36;
+        || WorldModel(0.0, 190.0).elevation() != 190.0
+        || WorldModel(0.0, -90.0).elevation() != -90.0
+        || WorldModel(0.0, 270.0).elevation() != -90.0
+        || PanTiltModel(0.0, 190.0).tilt() != 190.0
+        || PanTiltModel(0.0, 270.0).tilt() != -90.0) return 36;
     // 位形复制、赋值及跨零距离保持。
     WorldModel assignedWorld;
     assignedWorld = world;

@@ -1,3 +1,9 @@
+## 2026-11-19：高度与俯仰采用连续越顶窗口（用户定）
+
+WorldModel 的 elevation 与 PanTiltModel 的 tilt 统一以 Wrap270 归一化到 [-90°, 270°)，保留水平以下及越过天顶的连续表示；roll 继续以 Wrap180 归一化到 [-180°, 180°)。正逆解公式、轴向配置与代表解策略不变，190° 保留原值，270° 折回 −90°。
+
+验证：build-family Release 零警告，CTest 16/16；build-models CTest 1/1；主程序原 build Release 零警告，8 秒离屏冒烟与基线一致。仅本地提交，不推送，不更新远端固定版本。
+
 ## 2026-11-19：Joint 与模型角度窗口分离（用户定）
 
 Joint 不再接收或保存 offset，只描述轴向与当前作动值；WorldModel 以 Wrap360 归一化方位、以 Wrap180 归一化高度和翻滚，PanTiltModel 同样自行归一化两轴。正解直接使用周期角，反解继续通过 jointBasis 处理既有轴向，不增加机械零偏。两种模型的零位正解均为单位朝向，即零俯仰、零翻滚对应水平。
