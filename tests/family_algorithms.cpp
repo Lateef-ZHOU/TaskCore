@@ -57,10 +57,10 @@ struct AxisProbe : WorldModel { using GimbalModel::axis; };
 static_assert(std::is_same_v<decltype(std::declval<const AxisProbe&>().axis(0)), const Joint&>);
 static_assert(noexcept(std::declval<const AxisProbe&>().axis(0)));
 static_assert([] {
-    constexpr Joint joint({0, 0, -1}, 0, 35);
+    constexpr Joint joint({0, 0, -1}, 35);
     return joint.value() == 35 && joint.z() == -1;
 }());
-static_assert(noexcept(Joint({0, 0, -1}, 0, 35)));
+static_assert(noexcept(Joint({0, 0, -1}, 35)));
 static_assert(noexcept(std::declval<const Joint&>().value()));
 static_assert(noexcept(std::declval<const WorldModel&>().azimuth()));
 static_assert(noexcept(std::declval<const WorldModel&>().elevation()));
@@ -232,10 +232,19 @@ int main()
         {SO3::Identity(), SO3::exp({0, 0, 2.0 * std::numbers::pi / 3.0})},
         {SO3::Identity(), SO3::exp({0, 0, 4.0 * std::numbers::pi / 3.0})}}};
     if (SiteCalibration::estimateFromSamples(contradictory)) return 47;
-    // 角度回绕归装配模型；保留负角、整圈与带偏置关节窗的行为。
+    // 零俯仰、零翻滚时，两种模型都为水平零位（单位朝向），不需要额外的关节偏置。
+    const SO3 worldZero = WorldModel().toOrientation(), panTiltZero = PanTiltModel().toOrientation();
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c) {
+            const double expected = r == c ? 1.0 : 0.0;
+            if (worldZero(r, c) != expected || panTiltZero(r, c) != expected) return 48;
+        }
+    // Joint 保留原值；各模型在构造时分别归一化自己的角度窗口。
     if (Wrap360(-30.0) != 330.0 || Wrap360(390.0) != 30.0
         || Wrap360(360.0) != 0.0 || Wrap360(-360.0) != 0.0
-        || Joint({1, 0, 0}, -180.0, 190.0).value() != -170.0) return 36;
+        || Joint({1, 0, 0}, 190.0).value() != 190.0
+        || WorldModel(0.0, 190.0).elevation() != -170.0
+        || PanTiltModel(0.0, 190.0).tilt() != -170.0) return 36;
     // 位形复制、赋值及跨零距离保持。
     WorldModel assignedWorld;
     assignedWorld = world;

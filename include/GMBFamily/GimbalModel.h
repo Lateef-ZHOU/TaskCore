@@ -17,11 +17,17 @@
 // SO3 是"朝向本身"，本文件是"哪种装配、作动到哪儿会得到那个朝向"——两层，上层包含下层。
 // 模型实例即一个位形（谈位形不谈指向）；角量一律是度。
 
-// 角度回绕到 [0, 360)（度）：供关节进窗及反解收尾使用。
+// 角度回绕到 [0, 360)（度）：供模型归一化及反解收尾使用。
 [[nodiscard]] inline double Wrap360(double deg) noexcept
 {
     deg = std::fmod(deg, 360.0);
     return deg < 0.0 ? deg + 360.0 : deg;
+}
+
+// 角度回绕到 [-180, 180)（度）：供以水平为零的模型角使用。
+[[nodiscard]] inline double Wrap180(double deg) noexcept
+{
+    return Wrap360(deg + 180.0) - 180.0;
 }
 
 // 最短无向角距离（度），范围 [0, 180]。
@@ -32,32 +38,17 @@
 }
 
 // ============================================================
-// Joint — 一根关节：带符号单位轴向（IS-A LinAlg::Vec3）+ 已归入窗口的作动值（°）。
-// 窗口偏置仅用于构造时归一化，不另存为成员，也不表示设备行程。
-//
-// 把"轴向"、"这根轴的角从哪儿数起"、"它此刻转到哪"绑在一起：轴向继续当 Vec3 用（PoE 连乘按基类切片，正向不变）。
-// **关节没有范围、只有窗**（用户定）：一根转轴的作动值本来就是整整一圈，窗只定这一圈从哪儿数起（偏置 offset）——方位 / 水平
-// 是罗盘方向，窗 [0°, 360°)；高度 / 翻滚 / 俯仰以水平为零，窗 [−180°, 180°)。收进来的数进门时折进窗，不拒、不坍缩
-// ——(130°, 120°, 0°) 与 (310°, 60°, 180°) 是同一个朝向的两个位形，都合法；此后读到的就是窗里的数，界面用同一张窗，
-// 中间没有换算。设备行程是另一回事，归官邸按协议定、造斗 / 组包时查。
-//
-// **关节自带当前值**，于是**模型实例就是一个位形**——`WorldModel` 的实例是一个世界朝向，
-// `PanTiltModel` 的实例是这台云台的一个位形。参考系由类型说，长度由构造口保证；作动量不另装
-// 一袋裸 double 满世界传（那样"这袋数是谁的、长度对不对"无人知晓，传反了编译器也不响）。
-// 构造后不可变：位形是值，要换就整台换。
+// Joint — 一根关节：带符号单位轴向（IS-A LinAlg::Vec3）+ 当前作动值（°）。
+// 关节只描述轴向和当前值，不拥有角度窗口或机械零偏；作动值是周期量，正解直接使用。
+// 读数窗口由具体模型在构造时统一归一化，设备行程由官邸按协议校验。
 // ============================================================
 class Joint : public LinAlg::Vec3
 {
 public:
-    // 轴向 + 窗的偏置 offset（整圈从 offset 数起，窗 = [offset, offset+360°)；它不是限位，只定从哪儿数）+ 作动值
-    //（任意实数；已在窗里的原样收下，否则折进窗）。非 explicit：便于 GimbalModel 列表构造 {{x,y,z}, offset, deg}。
-    constexpr Joint(const LinAlg::Vec3 &axis, const double offset, const double deg) noexcept
-        : LinAlg::Vec3(axis),
-          value_(deg >= offset && deg < offset + 360.0 ? deg : offset + Wrap360(deg - offset))
-    {
-    }
+    // 轴向 + 作动值（任意实数）。非 explicit：便于 GimbalModel 列表构造 {{x,y,z}, deg}。
+    constexpr Joint(const LinAlg::Vec3 &axis, const double deg) noexcept : LinAlg::Vec3(axis), value_(deg) {}
 
-    // 本轴此刻的作动值，落在本轴的窗里。
+    // 本轴此刻的作动值；Joint 本身不做窗口折返。
     [[nodiscard]] constexpr double value() const noexcept { return value_; }
 
 private:
@@ -78,7 +69,7 @@ concept GimbalModelLike = std::derived_from<T, GimbalModel> && requires(const SO
 // GimbalModel — 一台云台的**一个位形**（关节列表，每根关节自带当前值）：位形 ↔ 朝向
 //
 // 定朝向需「轴序 / 内外旋 / 符号」约定——本质是把每根关节的（带符号）单位轴向按复合顺序排成一串。
-// 关节列表就是模型的核心数据，轴数即表长；每个 Joint 保存归窗后的作动值。指数积(PoE)/旋量：
+// 关节列表就是模型的核心数据，轴数即表长；每个 Joint 保存当前作动值，具体模型在构造时归一化。指数积(PoE)/旋量：
 //     R(θ₁,…,θ_N) = ∏ exp(θ_i[û_i]×)   （内旋=动轴=正序连乘）
 //
 // 正向 toOrientation 通用且简单，收在基类。**反向（朝向 → 位形）是真逆运动学**，通用解复杂度极高、
@@ -159,11 +150,11 @@ class WorldModel : public GimbalModel
 {
 public:
     // 摆到这个世界朝向：三个角任意实数，各折进自己的窗、不坍缩。翻滚默认 0（见类注）。
-    // 窗写在关节上：方位 [0°, 360°)（罗盘方向），高度 / 翻滚 [−180°, 180°)（以水平为零）；读口与界面用同一张窗。
+    // 本模型构造时归一化：方位 [0°, 360°)（罗盘方向），高度 / 翻滚 [−180°, 180°)（以水平为零）；读口与界面用同一张窗。
     WorldModel(const double azimuth, const double elevation, const double roll = 0.0)
-        : GimbalModel({{kAxes[0], 0.0, azimuth},
-                       {kAxes[1], -180.0, elevation},
-                       {kAxes[2], -180.0, roll}})
+        : GimbalModel({{kAxes[0], Wrap360(azimuth)},
+                       {kAxes[1], Wrap180(elevation)},
+                       {kAxes[2], Wrap180(roll)}})
     {
     }
     WorldModel() : WorldModel(0.0, 0.0, 0.0) {} // 归零位：水平正北
@@ -251,10 +242,10 @@ class PanTiltModel : public GimbalModel
 {
 public:
     // 摆到这个位形：两个角任意实数，各折进自己的窗、不坍缩；设备行程不在此判（归官邸）。
-    // 窗写在关节上：水平 [0°, 360°)，俯仰 [−180°, 180°)（以水平为零）；读口与界面用同一张窗。
+    // 本模型构造时归一化：水平 [0°, 360°)，俯仰 [−180°, 180°)（以水平为零）；读口与界面用同一张窗。
     PanTiltModel(const double pan, const double tilt)
-        : GimbalModel({{{0.0, 0.0, -1.0}, 0.0, pan},     // pan：绕 −ẑ
-                       {{1.0, 0.0, 0.0}, -180.0, tilt}}) // tilt：绕 x̂
+        : GimbalModel({{{0.0, 0.0, -1.0}, Wrap360(pan)}, // pan：绕 −ẑ
+                       {{1.0, 0.0, 0.0}, Wrap180(tilt)}}) // tilt：绕 x̂
     {
     }
     PanTiltModel() : PanTiltModel(0.0, 0.0) {} // 归零位，一个真实合法的位形
