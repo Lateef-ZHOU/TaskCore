@@ -2,7 +2,6 @@
 #include "DAQFamily/DAQChannelSpec.h"
 
 #include <array>
-#include "LinearArray.h"
 #include <cmath>
 #include <cstdio>
 #include <numbers>
@@ -151,8 +150,8 @@ struct UnrelatedSpectrum
 };
 template<class T>
 concept CanCalculate = requires(const T &value) { RadialWindCalculation::Calc(value); };
-static_assert(CanCalculate<Spectrum<ChannelSpec>> && !CanCalculate<LinearArray2D<double>>);
-static_assert(!CanCalculate<UnrelatedSpectrum> && !CanCalculate<LinearArray2D<float>>);
+static_assert(CanCalculate<Spectrum<ChannelSpec>>);
+static_assert(!CanCalculate<UnrelatedSpectrum>);
 static_assert(!CanCalculate<std::array<double, 34>> && !CanCalculate<std::span<const double>>);
 template<class T>
 concept CanOverrideCalibration = requires(const T &value) { RadialWindCalculation::Calc(value, 0.8, 16.0); };

@@ -2,6 +2,12 @@
 
 设备族库：GMB 云台族与 DAQ 采集卡族。11-14 及更早的历史条目见[归档](docs/archive/README-2026-11-19.md)。
 
+## 2026-11-20：测试移除 LinearArray 依赖
+
+family_algorithms 删除一维等间隔轴的行为测试；spectrum 删除对 `LinearArray2D` 的反例断言。Algorithm 的 `LinearArray.h` 已整体删除，功率谱轴配置由 ChartCore 的 `SurfaceGrid` 承担。
+
+验证：FamilyCore build-family Release 零警告，CTest 16/16。
+
 ## 2026-11-19：GMB 解码链统一只读字节视图（用户定）
 
 GMBDevice::onStream 不再构造 QByteArray，decodeStream 及铭辰上行、Pelco 成帧校验和仿真协议解码统一接收 std::span<const unsigned char>。Pelco 接收缓存改用 unsigned char 数组；视图仅在同步解码期间借用，排队到主线程的仍只有解析后的位形与 RxTime。发送侧协议词汇、DAQ 的 assemble 字节接口及 HandleCore、DeviceCore 不在本轮改动范围。

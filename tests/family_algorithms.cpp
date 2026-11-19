@@ -9,7 +9,6 @@
 #include <type_traits>
 #include <vector>
 #include "DAQFamily/RadialWind.h"
-#include "LinearArray.h"
 #include "DAQFamily/WindProfile.h"
 #include "WallClockHistory.h"
 #include "SO3.h"
@@ -133,9 +132,6 @@ int main()
         now + std::chrono::seconds(2), 90.0));
     if (history2.size() != 2 || !old.expired() || history2.at(0)->at != now + std::chrono::seconds(1)
         || history2.back()->at != now + std::chrono::seconds(2)) return 5;
-    const LinearArray<double> axis(10, 15, {0, 0, 0, 0});
-    if (axis.positionAt(3) != 55 || !axis.hasValidAxis() || LinearArray<double>(0, 0).hasValidAxis()
-        || !axis.sameAxis(LinearArray<int>(10, 15, {1, 2, 3, 4})) || axis.sameAxis(LinearArray<double>(10, 15, {0}))) return 6;
     std::array<WindProfile::Input<ProfileSpec<3>>, 4> beams;
     for (int i = 0; i < 4; ++i)
         beams[i] = {WorldModel(90.0 * i, 30.0), wind<ProfileSpec<3>>({1, 2, 3})};
