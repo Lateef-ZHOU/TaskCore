@@ -52,13 +52,13 @@ static_assert(!CanNameFamilyDevice<ContractCollectorBase, ContractFamily>);
 static_assert(!CanNameFamilyDevice<int, ContractFamily>);
 static_assert(!CanNameFamilyDevice<MatchingCollector, int>);
 }
-struct ProbeSpec {
-    static constexpr const char *name = "test";
-    static constexpr int rangeGateCount = 1, frequencyBinCount = 1;
-    static constexpr double rangeStartM = 100, rangeStepM = 25, frequencyStartMHz = 0,
-        frequencyStepMHz = 1, wavelengthM = 1.55e-6, zeroWindMHz = 80;
+inline constexpr DAQParams probeParams{
+    .wavelengthM = 1.55e-6, .zeroWindMHz = 80,
+    .rangeStartM = 100, .rangeStepM = 25,
+    .frequencyStartMHz = 0, .frequencyStepMHz = 1,
+    .rangeGateCount = 1, .frequencyBinCount = 1,
 };
-using Frame = VerticalWindProfileUnit<ProbeSpec>;
+using Frame = VerticalWindProfileUnit<probeParams>;
 static_assert(std::is_same_v<RxTime, std::chrono::system_clock::time_point>);
 static_assert(std::is_same_v<decltype(Frame::at), const RxTime>);
 static_assert(!std::is_copy_constructible_v<DeviceLock>);

@@ -2,6 +2,10 @@
 
 设备族库：GMB 云台族与 DAQ 采集卡族。11-14 及更早的历史条目见[归档](docs/archive/README-2026-11-19.md)。
 
+## 2026-11-20：采集通道规格按值进入模板
+
+官邸定义 `constexpr DAQParams`，功率谱、径向风、CNR 和风廓线以该值实例化。网格约束仍在编译期检查，运行帧不重复保存轴配置。通道名由官邸提供，属于采集结果的元数据。风廓线保存按原通道下标取名称，跳过缺测通道时仍保留其余通道的正确名称。
+
 ## 2026-11-20：测试移除 LinearArray 依赖
 
 family_algorithms 删除一维等间隔轴的行为测试；spectrum 删除对 `LinearArray2D` 的反例断言。Algorithm 的 `LinearArray.h` 已整体删除，功率谱轴配置由 ChartCore 的 `SurfaceGrid` 承担。

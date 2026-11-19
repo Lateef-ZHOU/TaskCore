@@ -26,27 +26,27 @@ namespace WindProfile
     // 这是业务约束，不是解出三个风分量的数学最小束数；改变扫描束数还须同步修改计划页面与编排。
     inline constexpr int kBeams = 4;
 
-    template<DAQChannelSpec Spec>
+    template<DAQParams P>
     struct Input
     {
         /// 该波束的**世界朝向**（只读方位与高度；翻滚与光束无关）。**空 = 朝向未知**。
         /// **参考系由类型钉住**：只收 `WorldModel`，由编排层经云台族口 `worldOf` 换好再交——
         /// 收一袋裸数的话，喂进来的若是云台角，基座一歪就指错且不响。
         std::optional<WorldModel> dir;
-        std::shared_ptr<const RadialWind<Spec>> ws; ///< 逐门径向风速；斜距由 Spec 确定
+        std::shared_ptr<const RadialWind<P>> ws; ///< 逐门径向风速；斜距由 Spec 确定
     };
 
     // 按高度采样原帧；网格有限且步长为正，覆盖外取端值，邻点缺测时不插值。
-    template<DAQChannelSpec Spec>
-    [[nodiscard]] bool hasValidGrid(const VerticalWindProfileUnit<Spec> &frame) noexcept
+    template<DAQParams P>
+    [[nodiscard]] bool hasValidGrid(const VerticalWindProfileUnit<P> &frame) noexcept
     {
         const double start = frame.heightStartM(), step = frame.heightStepM();
         return std::isfinite(start) && std::isfinite(step) && step > 0.0
             && std::isfinite(start + step * (frame.size() - 1));
     }
 
-    template<DAQChannelSpec Spec>
-    [[nodiscard]] std::optional<LinAlg::Vec3> windAt(const VerticalWindProfileUnit<Spec> &frame,
+    template<DAQParams P>
+    [[nodiscard]] std::optional<LinAlg::Vec3> windAt(const VerticalWindProfileUnit<P> &frame,
                                                    const double heightM) noexcept
     {
         if (!hasValidGrid(frame) || !std::isfinite(heightM)) return std::nullopt;
@@ -65,8 +65,8 @@ namespace WindProfile
     }
 
     // 反演直接生成带到料时刻的只读整帧；层数组属于该帧，失败返回空份额。
-    template<DAQChannelSpec Spec>
-    [[nodiscard]] std::shared_ptr<const VerticalWindProfileUnit<Spec>> Calc(std::span<const Input<Spec>> beams,
+    template<DAQParams P>
+    [[nodiscard]] std::shared_ptr<const VerticalWindProfileUnit<P>> Calc(std::span<const Input<P>> beams,
         std::chrono::system_clock::time_point at)
     {
         const int N = static_cast<int>(beams.size());
@@ -111,7 +111,7 @@ namespace WindProfile
             }
 
         // 同一 Spec 在类型上保证各束的门数和斜距网格一致。
-        constexpr int nGates = Spec::rangeGateCount;
+        constexpr int nGates = P.rangeGateCount;
 
         // 高度 = 斜距 × **sin**(高度角)。高度角自水平面起、抬头为正（WorldModel 的 el），
         // 与上面设计矩阵的竖直分量 sin(v) 是同一个口径。
@@ -123,7 +123,7 @@ namespace WindProfile
         meanEl /= N;
         const double sinEl = std::sin(meanEl);
         if (!(sinEl > 0.0)) return {};
-        auto result = std::make_shared<VerticalWindProfileUnit<Spec>>(at, meanEl / DEG_TO_RAD);
+        auto result = std::make_shared<VerticalWindProfileUnit<P>>(at, meanEl / DEG_TO_RAD);
         const double *pinvU = Pinv.data() + 0 * N;
         const double *pinvV = Pinv.data() + 1 * N;
         const double *pinvW = Pinv.data() + 2 * N;
