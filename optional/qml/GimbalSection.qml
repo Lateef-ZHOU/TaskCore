@@ -20,6 +20,7 @@ Section {
     required property real panMax
     required property real tiltMin
     required property real tiltMax
+    property real initialTilt: tiltMin
     title: qsTr("状态与定位")
 
     function fmt(v) {
@@ -51,7 +52,7 @@ Section {
                 Layout.fillWidth: true
                 minimum: root.tiltMin
                 maximum: root.tiltMax
-                value: root.tiltMin
+                value: root.initialTilt
                 onCommitted: function (v) {
                     tTilt.value = v;
                     root.device.issueGoTo(tPan.value, tTilt.value, root.settings.panSpeed, root.settings.tiltSpeed);

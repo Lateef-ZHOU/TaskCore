@@ -256,9 +256,10 @@ class PanTiltModel : public GimbalModel<GimbalModelAxes::minusZ, GimbalModelAxes
 {
 public:
     // 摆到这个位形：两个角任意实数，各折进自己的窗、不坍缩；设备行程不在此判（归官邸）。
-    // 本模型构造时归一化：水平 [0°, 360°)，俯仰 [−90°, 270°)（连续覆盖越顶分支）；读口与界面用同一张窗。
+    // 水平归一化到 [0°, 360°)。俯仰保留 [−90°, 270°] 内的输入，便于设备区分同向的两个命令端点。
+    // 窗外俯仰仍回绕，orientation 和 distance 均按周期角处理。
     PanTiltModel(const double pan, const double tilt)
-        : GimbalModel(Wrap360(pan), Wrap270(tilt))
+        : GimbalModel(Wrap360(pan), -90.0 <= tilt && tilt <= 270.0 ? tilt : Wrap270(tilt))
     {
     }
     PanTiltModel() : PanTiltModel(0.0, 0.0) {} // 归零位，一个真实合法的位形
