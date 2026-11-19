@@ -181,9 +181,6 @@ private:
     // **非 const**：型号要攒另一根轴（sqaf 的 Pelco 应答经、纬分帧），MCZT 还要记报警状态。
     [[nodiscard]] virtual std::optional<PanTiltModel> decodeStream(const QByteArray &) = 0;
 
-    // 本型号停机命令取自型号标签，与参数无关。
-    [[nodiscard]] std::vector<std::vector<unsigned char>> stopCommands() const final { return CollectorT::stopOf(); }
-
     // 唯一安装标定；主线程读写，族基通过 mounting() 使用。
     WorldModel mounting_;
 };

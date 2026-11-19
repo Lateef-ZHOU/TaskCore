@@ -118,12 +118,8 @@ public:
     // 族模板层按已校验的运动参数直接构造完整、可写的本次 Collector，独占交给 Device。
     explicit TypedGMBCollector(const GMBParameters &parameters)
         : GMBCollector(parameters, Model::tolerance, Model::startOf(parameters), Model::stopOf(), Model::timeoutMs) {}
-
-    // 本型号的停机命令与参数无关；族模板层据此实现 Device 的 stopCommands（无 run 时也能停）。
-    [[nodiscard]] static std::vector<std::vector<unsigned char>> stopOf() { return Model::stopOf(); }
 };
 
 template <typename C>
 concept GMBCollectorLike = std::derived_from<C, GMBCollector> && CollectorLike<C>
-    && std::constructible_from<C, const GMBParameters &>
-    && requires { { C::stopOf() } -> std::same_as<std::vector<std::vector<unsigned char>>>; };
+    && std::constructible_from<C, const GMBParameters &>;
