@@ -36,7 +36,7 @@ struct GMBParameters final
     const std::optional<Speeds> speeds;
 };
 
-// 云台族公共到位/驻留判据与位形读口；型号以 TypedGMBCollector 的标签区分。
+// 云台族公共到位/驻留判据与位形读口；具体官邸实现自己的收集器。
 // 指示区不可变，收集区只由收包线程写，完成后按 const 份额交付。
 // 对象不可复制或移动的约束由 Collector 基类统一提供，调用方只共享指针份额。
 class GMBCollector : public Collector<PanTiltModel, GMBParameters>
@@ -107,17 +107,6 @@ private:
     std::optional<PanTiltModel> last_;       // 最近一次采样（给 measured()，与判据无关）
     // 本段连续圈内回报的首末时刻；空 = 尚未进圈或已出圈。
     std::optional<std::pair<Clock::time_point, Clock::time_point>> hitInterval_;
-};
-
-// 型号标签给出本型号的容差 tolerance（°）、看门狗时限 timeoutMs、按参数成帧的 startOf 与停机 stopOf；
-// 三型号共享同一到位/驻留实现。
-template <typename Model>
-class TypedGMBCollector final : public GMBCollector
-{
-public:
-    // 族模板层按已校验的运动参数直接构造完整、可写的本次 Collector，独占交给 Device。
-    explicit TypedGMBCollector(const GMBParameters &parameters)
-        : GMBCollector(parameters, Model::tolerance, Model::startOf(parameters), Model::stopOf(), Model::timeoutMs) {}
 };
 
 template <typename C>

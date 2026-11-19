@@ -18,7 +18,12 @@ struct TestModel
     static std::vector<std::vector<unsigned char>> startOf(const GMBParameters &) { return {{'s', 't', 'a', 'r', 't'}}; }
     static std::vector<std::vector<unsigned char>> stopOf() { return {{'s', 't', 'o', 'p'}}; }
 };
-using TestCollector = TypedGMBCollector<TestModel>;
+class TestCollector final : public GMBCollector
+{
+public:
+    explicit TestCollector(const GMBParameters &parameters)
+        : GMBCollector(parameters, TestModel::tolerance, TestModel::startOf(parameters), TestModel::stopOf(), TestModel::timeoutMs) {}
+};
 template<class C> concept HasPublicClock = requires { typename C::Clock; };
 template<class C> concept HasTargetGetter = requires(const C &c) { c.target(); };
 template<class C> concept CanFeedConst = requires(const C &c, const PanTiltModel &pose) { c.feed(pose, RxTime{}); };

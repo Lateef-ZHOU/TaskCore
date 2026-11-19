@@ -1,3 +1,9 @@
+## 2026-11-19：具体云台收集器归官邸（用户定）
+
+删除 TypedGMBCollector 模板适配层，铭辰、亚安和仿真云台官邸直接定义各自的 final Collector 子类，按已校验的 GMBParameters 构造并交给 Device。FamilyCore 只保留 GMBCollector 的公共到位/驻留逻辑和 GMBCollectorLike 参数构造约束，测试收集器同步改为具体子类；启动/停止命令、容差、超时及到位判定行为不变。
+
+验证：build-family Release 零警告，CTest 16/16；主程序原 build Release 零警告，CTest 8/8，8 秒离屏冒烟与基线一致。仅本地提交，不推送，不更新远端固定版本。
+
 ## 2026-11-19：无 run 停机命令归具体官邸（用户定）
 
 GMBFamily 不增加停机接口，GMBDevice 不再经 CollectorT::stopOf() 代实现 stopCommands。铭辰、亚安和仿真云台官邸直接实现 DeviceCore 的 stopCommands；TypedGMBCollector 删除静态 stopOf，GMBCollectorLike 同步收紧为只要求参数构造。若有当前 run，停机仍使用该 Collector 实例的 buildStop；无 run 时由官邸提供本型号停机命令。
