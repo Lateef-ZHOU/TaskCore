@@ -145,7 +145,7 @@ public Q_SLOTS:
         // DeviceCoro 不可移动，同类型 prvalue 直接构造；不能用 make_unique 转发。
         starting_ = true;
         coro_.reset(new DeviceCoro(run(std::move(request), *gmb, std::move(picked), std::move(worldAzimuths),
-                                      worldElevation, accumSec, std::chrono::seconds(settleSec), GMBParameters::Speeds{panSpeed, tiltSpeed}, std::move(saveRoot))));
+                                      worldElevation, accumSec, std::chrono::seconds(settleSec), panSpeed, tiltSpeed, std::move(saveRoot))));
         starting_ = false;
         const bool acquired = coro_->locked();
         refreshRunState();
@@ -172,9 +172,9 @@ protected:
         Q_EMIT runChanged();
     }
     using GmbOrders = RunAwaiter<GMBFamily>::Orders;
-    // hold 与 speeds 为启动时固定的快照；协程逐束连同目标位形交官邸 paramsFor 构造运动参数。
+    // hold 与两轴速度为启动时固定的快照；协程逐束连同目标位形交官邸 paramsFor 构造运动参数。
     virtual DeviceCoro run(LockRequest, GMBFamily &, Cards, QList<double>, double, int,
-                          std::chrono::milliseconds hold, std::optional<GMBParameters::Speeds> speeds,
+                          std::chrono::milliseconds hold, double panSpeed, double tiltSpeed,
                           std::optional<QDir>) = 0;
 
     // 本函数只重置协程持有者，不额外发通知；取消链可同步恢复协程收尾、撤单并产生日志或通知。

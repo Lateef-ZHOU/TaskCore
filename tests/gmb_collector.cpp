@@ -44,7 +44,7 @@ int main()
     const TestKey key;
     const PanTiltModel target(10, 20), inside(10.05, 20.02), outside(30, 40);
     const auto hold = GMBCollector::kMinHold;
-    const GMBParameters parameters(key, target, hold, GMBParameters::Speeds{10, 5});
+    const GMBParameters parameters(key, target, hold, 10, 5);
     TestCollector stopped(parameters), reentered(parameters);
     auto startCommands = stopped.buildStart();
     auto stopCommands = stopped.buildStop();
@@ -53,8 +53,8 @@ int main()
     require(stopped.buildStart() == TestModel::startOf(parameters)
             && stopped.buildStop() == TestModel::stopOf(),
             "returned command bytes aliased the collector cache");
-    TestCollector minimum(GMBParameters(key, target, std::chrono::milliseconds(0), std::nullopt));
-    TestCollector longer(GMBParameters(key, target, hold + std::chrono::seconds(1), std::nullopt));
+    TestCollector minimum(GMBParameters(key, target, std::chrono::milliseconds(0), 10, 5));
+    TestCollector longer(GMBParameters(key, target, hold + std::chrono::seconds(1), 10, 5));
     const RxTime at{std::chrono::seconds(100000)};
     // 同一存活收集器的借用直接观察原槽；此处在同一线程先写后读，不与 feed 并发。
     const auto &observation = stopped.measured();
@@ -73,8 +73,8 @@ int main()
     TestCollector retry(stopped.parameters);
     require(!retry.measured() && !retry.settled()
             && retry.parameters.target.pan() == target.pan() && retry.parameters.target.tilt() == target.tilt()
-            && retry.parameters.hold == hold && retry.parameters.speeds->pan == 10
-            && retry.parameters.speeds->tilt == 5 && retry.buildStart() == stopped.buildStart()
+            && retry.parameters.hold == hold && retry.parameters.panSpeed == 10
+            && retry.parameters.tiltSpeed == 5 && retry.buildStart() == stopped.buildStart()
             && retry.buildStop() == stopped.buildStop() && retry.timeoutMs() == stopped.timeoutMs(),
             "retry copied observations or lost request parameters");
     require(!retry.feed(inside, at) && !reentered.feed(inside, at), "retry or reentry retained the old hold interval");

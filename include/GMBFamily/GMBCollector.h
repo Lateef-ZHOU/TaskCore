@@ -10,7 +10,7 @@
 #include "GMBFamily/GimbalModel.h" // PanTiltModel（目标 / 实测位形；distance）
 #include "RunBase.h" // Collector<FeedT, ParamsT> 契约基类
 
-// 一次运动请求的按值参数：云台位形目标、停稳等待及可选两轴速度（无速度表示本型号定位协议不携带速度）。
+// 一次运动请求的按值参数：云台位形目标、停稳等待及两轴速度（°/s），速度必须成组携带。
 // 协程按束保存它并交族口 begin，由模板层据此造出本次 Collector；官邸 paramsFor 负责型号校验与量化。
 // QML 仅在命令/任务启动边界交一份值，协程与工厂不回读界面。
 // 运动参数的通行证：构造与析构受保护，族外造不出来。GMBFamily 以 protected 方式继承它，
@@ -25,15 +25,14 @@ protected:
 // 一次到位请求：目标位形、停稳等待与（型号量化后的）速度。只能由官邸 paramsFor 校验后构造，存在即有效；字段只读。
 struct GMBParameters final
 {
-    struct Speeds { double pan; double tilt; }; // °/s，两轴必须成组提供
-
     GMBParameters(const GMBParamsKey &, PanTiltModel target, const std::chrono::milliseconds hold,
-                      const std::optional<Speeds> speeds)
-        : target(std::move(target)), hold(hold), speeds(speeds) {}
+                  const double panSpeed, const double tiltSpeed)
+        : target(std::move(target)), hold(hold), panSpeed(panSpeed), tiltSpeed(tiltSpeed) {}
 
     const PanTiltModel target;
     const std::chrono::milliseconds hold;
-    const std::optional<Speeds> speeds;
+    const double panSpeed;  // °/s，两轴速度必须成组携带
+    const double tiltSpeed; // °/s
 };
 
 // 云台族公共到位/驻留判据与位形读口；具体官邸实现自己的收集器。

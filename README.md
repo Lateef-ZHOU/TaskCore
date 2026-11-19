@@ -1,3 +1,9 @@
+## 2026-11-19：云台请求强制携带两轴速度（用户定）
+
+删除 GMBParameters::Speeds 及 optional 速度状态，GMBParameters 直接以 const double 保存 panSpeed 和 tiltSpeed，构造时必须成组提供。GMBFamily::paramsFor 与三个任务协程同步改为分别接收两轴速度；铭辰、亚安和仿真官邸按新字段组包或保留快照，亚安协议不编码速度但请求仍携带速度。删除“速度可缺席”的测试分支，非有限速度仍按型号规则拒绝。
+
+验证：build-family Release 零警告，CTest 16/16；主程序原 build Release 零警告，CTest 8/8，8 秒离屏冒烟与基线一致。simonly 使用相邻源码重新配置，Release 零警告，CTest 11/11，QML lint 返回 0；simonly 三个任务入口使用型号默认两轴速度，零速度不再作为“无速度”占位。仅本地提交，不推送，不更新远端固定版本。
+
 ## 2026-11-19：具体云台收集器归官邸（用户定）
 
 删除 TypedGMBCollector 模板适配层，铭辰、亚安和仿真云台官邸直接定义各自的 final Collector 子类，按已校验的 GMBParameters 构造并交给 Device。FamilyCore 只保留 GMBCollector 的公共到位/驻留逻辑和 GMBCollectorLike 参数构造约束，测试收集器同步改为具体子类；启动/停止命令、容差、超时及到位判定行为不变。

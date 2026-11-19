@@ -90,12 +90,12 @@ public:
         return WorldModel::fromOrientation(mounting().toOrientation() * pose.toOrientation());
     }
 
-    // 由原始量构造本型号的运动参数：目标云台位形、停稳等待、可选两轴速度。
+    // 由原始量构造本型号的运动参数：目标云台位形、停稳等待和两轴速度（必须成组携带）。
     // 越出本台行程或速度不合本型号协议时返回空并记录原因；成功返回规范化（量化/去速度）的参数，
     // 不造 Collector、不发令。这是造出 GMBParameters 的唯一入口：型号以 *this 出示通行证。
     // 任务协程发令前对全部波束调用，任一为空即拒绝启动；世界角先经 gimbalOf 换算。
     [[nodiscard]] virtual std::optional<GMBParameters> paramsFor(const PanTiltModel &target,
-        std::chrono::milliseconds hold, const std::optional<GMBParameters::Speeds> &speeds) const = 0;
+        std::chrono::milliseconds hold, double panSpeed, double tiltSpeed) const = 0;
 
     // 世界角 → 云台位形（反解）：R_云台 = R_安装⁻¹ · R_世界(目标)，再由 `PanTiltModel::fromOrientation`
     // 解出。`worldOf` 的去程，只做坐标换算，不构造 Collector 或发令。
@@ -150,7 +150,7 @@ public:
     // 两轴速度由页面直接给出；定位不带速度的型号在 paramsFor 中忽略它们。
     bool issueGoTo(const double pan, const double tilt, const double panSpeed, const double tiltSpeed)
     {
-        const auto parameters = this->paramsFor(PanTiltModel(pan, tilt), {}, GMBParameters::Speeds{panSpeed, tiltSpeed});
+        const auto parameters = this->paramsFor(PanTiltModel(pan, tilt), {}, panSpeed, tiltSpeed);
         return parameters && DeviceT::start(*parameters, {}, nullptr);
     }
 
