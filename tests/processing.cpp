@@ -102,7 +102,7 @@ public:
     ~TestDevice() override { PreDestruction(); }
     // 测试型号接受 1~10 秒。
     std::optional<DAQParameters> paramsFor(int accumSec, std::optional<WorldModel> pose, std::optional<QDir> saveRoot,
-                                           QString sessionDir, bool sync) const override
+                                           std::string sessionDir, bool sync) const override
     {
         if (accumSec < 1 || accumSec > 10) return std::nullopt;
         return DAQParameters(*this, accumSec, std::move(pose), std::move(saveRoot), std::move(sessionDir), sync);
@@ -160,7 +160,7 @@ int main(int argc, char **argv)
     if (!device.open(Parameters{std::make_shared<Transport>()}) || !until([&] { return device.isOpen(); })) return 1;
     // 四个方位各一帧，第四帧带同步位：前三帧不反演，第四帧对满环反演一次。
     for (int i = 0; i < 4; ++i) {
-        const auto parameters = *device.paramsFor(1, WorldModel(i * 90.0, 60.0), std::nullopt, QStringLiteral("s"), i == 3);
+        const auto parameters = *device.paramsFor(1, WorldModel(i * 90.0, 60.0), std::nullopt, "s", i == 3);
         if (!device.begin(parameters, [&](auto frame) {
             const auto typed = std::dynamic_pointer_cast<const TestCollector>(frame);
             if (!typed || !typed->settled() || typed->processedOn() == app.thread() || QThread::currentThread() != app.thread())
@@ -173,10 +173,10 @@ int main(int argc, char **argv)
     // 越出型号范围的参数在 paramsFor 处拦下，造不出参数，也就到不了 begin。
     if (device.paramsFor(11, std::nullopt, std::nullopt, {}, false)) return 5;
     if (spectra != 4) return 4;
-    device.startTest(11, false, {}, QStringLiteral("rejected"));
+    device.startTest(11, false, {}, "rejected");
     if (device.holder()) return 6;
     // 有效参数进入单卡协程后跨多轮复用；停止仍沿原取消链释放本卡的锁。
-    device.startTest(1, false, {}, QStringLiteral("single-card"));
+    device.startTest(1, false, {}, "single-card");
     if (!device.holder() || !until([&] { return spectra >= 6; })) return 7;
     device.cancelTest();
     if (device.holder() || profiles != 1) return 8;

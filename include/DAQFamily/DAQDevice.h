@@ -39,7 +39,7 @@ public:
     // 由原始量构造本型号的采集参数：累积时间超出本型号范围时返回空并记录原因；不造 Collector、不发令。
     // 这是造出 DAQParameters 的唯一入口：型号以 *this 出示通行证。任务与单卡测试在发令前调用，为空即拒绝启动。
     [[nodiscard]] virtual std::optional<DAQParameters> paramsFor(int accumSec, std::optional<WorldModel> pose,
-        std::optional<QDir> saveRoot, QString sessionDir, bool sync) const = 0;
+        std::optional<QDir> saveRoot, std::string sessionDir, bool sync) const = 0;
 };
 
 // 模板层继承具体 Device 与族基：Device 按参数造斗；本层在主线程显示、提交保存、维护四束环与反演，并提供单卡测试。
@@ -82,7 +82,7 @@ public:
     // 没有云台：朝向传空、同步位恒假，触发不了风廓线反演。同一时刻只跑一个测试；与编排的互斥由设备锁
     // 天然保证，UI 不做门控。
     // 官邸交入设置与会话名快照；族层不决定文件命名格式。目录仅在启用保存时转换。
-    void startTest(const int accumSec, const bool save, const QUrl &folder, QString sessionDir)
+    void startTest(const int accumSec, const bool save, const QUrl &folder, std::string sessionDir)
     {
         if (testCoro_ && !testCoro_->done())
         {

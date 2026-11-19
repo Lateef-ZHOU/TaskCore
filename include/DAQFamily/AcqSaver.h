@@ -4,6 +4,7 @@
 #include <memory>
 #include <limits>
 #include <numbers>
+#include <string>
 #include <thread>
 #include <tuple>
 #include <utility>
@@ -38,9 +39,9 @@ class AcqSaver
 public:
     // sessionDir 只吃 run 级参数（一轮采集共用一个目录），由编排层算好经 Collector 上下文递下；
     // 帧级文件名由帧时刻现算。
-    [[nodiscard]] static QString sessionDir(const QDateTime &sessionTime, const QString &tag)
+    [[nodiscard]] static std::string sessionDir(const QDateTime &sessionTime, const QString &tag)
     {
-        return sessionTime.toString("yyyyMMdd_HHmmss") + "_" + tag;
+        return (sessionTime.toString("yyyyMMdd_HHmmss") + "_" + tag).toStdString();
     }
     [[nodiscard]] static QString fileStem(const RxTime frameTime)
     {
@@ -155,11 +156,11 @@ private:
     };
 
     // 帧级公共信息（与通道无关）。
-    static void writeFrameInfo(Writer &out, const DAQParameters &context, const RxTime at)
+    static void writeFrameInfo(Writer &out, const DAQParameters &context, const RxTime at, const QString &session)
     {
         out.key("frame");
         out.raw("{");
-        out.key("session"); out.text(context.sessionDir); out.raw(",");
+        out.key("session"); out.text(session); out.raw(",");
         out.key("frameTime"); out.text(timeStem(at)); out.raw(",");
         out.key("azimuthDeg"); out.number(context.pose ? context.pose->azimuth() : std::nan("")); out.raw(",");
         out.key("elevationDeg"); out.number(context.pose ? context.pose->elevation() : std::nan("")); out.raw(",");
@@ -172,10 +173,11 @@ private:
     static void writeFrame(const DAQParameters &context, const RxTime at,
         const std::tuple<Channels...> &channels, const QString &card)
     {
-        Writer out(context.saveRoot->filePath(context.sessionDir + "/" + fileStem(at) + ".json"));
+        const auto session = QString::fromStdString(context.sessionDir);
+        Writer out(context.saveRoot->filePath(session + "/" + fileStem(at) + ".json"));
         if (!out.open()) return;
         out.raw("{");
-        writeFrameInfo(out, context, at);
+        writeFrameInfo(out, context, at, session);
         out.raw(",");
         out.key("card"); out.text(card);
         out.raw("},");
@@ -219,10 +221,11 @@ private:
         const std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Ps>>...> &channels,
         const QStringList &names)
     {
-        Writer out(context.saveRoot->filePath(context.sessionDir + "/profile_" + fileStem(at) + ".json"));
+        const auto session = QString::fromStdString(context.sessionDir);
+        Writer out(context.saveRoot->filePath(session + "/profile_" + fileStem(at) + ".json"));
         if (!out.open()) return;
         out.raw("{");
-        writeFrameInfo(out, context, at);
+        writeFrameInfo(out, context, at, session);
         out.raw("},");
         out.key("channels");
         out.raw("[");

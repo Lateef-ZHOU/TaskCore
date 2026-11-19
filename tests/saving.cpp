@@ -17,6 +17,7 @@
 #include <span>
 #include <QChar>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -160,15 +161,20 @@ int main(int argc, char **argv)
     check(temp.isValid(), "temporary directory unavailable");
     const QDir root(temp.path());
     const auto at = std::chrono::system_clock::now();
+    const QString sessionName = QStringLiteral("20261120_091011_采集 会话+%");
+    const auto session = AcqSaver::sessionDir(QDateTime(QDate(2026, 11, 20), QTime(9, 10, 11)),
+                                             QStringLiteral("采集 会话+%"));
+    check(session == sessionName.toStdString(), "UTF-8 session name differs");
 
     // 无朝向帧：朝向写 null，未标定通道的风速写 null，CNR 照常。
-    auto collecting = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 3, std::nullopt, root, QStringLiteral("session"), false));
+    auto collecting = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 3, std::nullopt, root, session, false));
     check(collecting->feed(payload, at), "frame did not complete");
     const std::shared_ptr<const SavedFrame> frame = std::move(collecting);
     AcqSaver::saveFrame(frame, QStringLiteral("Card"));
-    const auto saved = readCompleted(root.filePath("session/" + AcqSaver::fileStem(at) + ".json"));
+    const auto framePath = root.filePath(sessionName + "/" + AcqSaver::fileStem(at) + ".json");
+    const auto saved = readCompleted(framePath);
     const auto info = saved.value("frame").toObject();
-    check(info.value("session").toString() == "session" && info.value("frameTime").toString() == AcqSaver::timeStem(at)
+    check(info.value("session").toString() == sessionName && info.value("frameTime").toString() == AcqSaver::timeStem(at)
           && info.value("azimuthDeg").isNull() && info.value("elevationDeg").isNull()
           && !info.value("sync").toBool() && info.value("accumSec").toInt() == 3 && info.value("card").toString() == "Card",
           "frame information differs");
@@ -203,9 +209,9 @@ int main(int argc, char **argv)
     const std::shared_ptr<const VerticalWindProfileUnit<profileSpec>> frozen = std::move(filling);
     const auto unit = frozen;
     AcqSaver::saveWindProfiles(frame, std::tuple{std::shared_ptr<const VerticalWindProfileUnit<profileSpec>>{}, unit});
-    const auto profile = readCompleted(root.filePath("session/profile_" + AcqSaver::fileStem(at) + ".json"));
+    const auto profile = readCompleted(root.filePath(sessionName + "/profile_" + AcqSaver::fileStem(at) + ".json"));
     const auto first = profile.value("channels").toArray()[0].toObject();
-    check(profile.value("frame").toObject().value("session").toString() == "session"
+    check(profile.value("frame").toObject().value("session").toString() == sessionName
           && first.value("name").toString() == "B" && first.value("heightStartM").toDouble() == 10
           && first.value("heightStepM").toDouble() == 10 && first.value("horizontalSpeed").toArray().size() == 4, "profile layout differs");
     check(std::abs(first.value("horizontalDirectionDeg").toArray()[0].toDouble() - 90.0) < 1e-3
@@ -224,7 +230,7 @@ int main(int argc, char **argv)
     const auto caller = std::this_thread::get_id();
     std::atomic<bool> destroyedHere = false;
     std::shared_ptr<SavedFrame> source(new SavedFrame(DAQParameters(TestKey(), 7,
-        WorldModel(12, 30, 0), root, QStringLiteral("released"), true)),
+        WorldModel(12, 30, 0), root, "released", true)),
         [caller, &destroyedHere](SavedFrame *value) {
             destroyedHere.store(std::this_thread::get_id() == caller);
             delete value;
@@ -256,7 +262,7 @@ int main(int argc, char **argv)
     // 整帧保存也只捕获结果份额；Collector 在调用线程释放后，原数组仍可写出。
     std::atomic<bool> frameDestroyedHere = false;
     std::shared_ptr<SavedFrame> savingSource(new SavedFrame(DAQParameters(TestKey(), 3,
-        std::nullopt, root, QStringLiteral("released-frame"), false)),
+        std::nullopt, root, "released-frame", false)),
         [caller, &frameDestroyedHere](SavedFrame *value) {
             frameDestroyedHere.store(std::this_thread::get_id() == caller);
             delete value;
@@ -272,10 +278,11 @@ int main(int argc, char **argv)
     check(savedIndependent.value("frame").toObject() == expectedInfo
           && savedIndependent.value("channels") == saved.value("channels"),
           "frame saver lost context, channel order or original result values");
-    QFile originalFile(root.filePath("session/" + AcqSaver::fileStem(at) + ".json"));
+    QFile originalFile(framePath);
     QFile independentFile(root.filePath("released-frame/" + AcqSaver::fileStem(at) + ".json"));
     check(originalFile.open(QIODevice::ReadOnly) && independentFile.open(QIODevice::ReadOnly), "cannot compare saved frame bytes");
-    check(originalFile.readAll().replace("\"session\":\"session\"", "\"session\":\"released-frame\"") == independentFile.readAll(),
+    const auto sessionField = QByteArrayLiteral("\"session\":\"") + sessionName.toUtf8() + '"';
+    check(originalFile.readAll().replace(sessionField, "\"session\":\"released-frame\"") == independentFile.readAll(),
           "frame JSON field order, numeric format or missing values changed");
 
     // 不落盘：saveRoot 为空时入口直接返回。

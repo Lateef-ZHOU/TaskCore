@@ -3,10 +3,10 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <QDir>
-#include <QString>
 
 #include "GMBFamily/GimbalModel.h"
 #include "DAQFamily/RadialWind.h" // 标准径向风 / CNR 算法（各卡共用）
@@ -28,14 +28,14 @@ protected:
 struct DAQParameters
 {
     DAQParameters(const DAQParamsKey &, const int accumSec, std::optional<WorldModel> pose, std::optional<QDir> saveRoot,
-                  QString sessionDir, const bool sync)
+                  std::string sessionDir, const bool sync)
         : accumSec(accumSec), pose(std::move(pose)), saveRoot(std::move(saveRoot)), sessionDir(std::move(sessionDir)),
           sync(sync) {}
 
     const int accumSec;
     const std::optional<WorldModel> pose;
     const std::optional<QDir> saveRoot; // 空 = 不落盘
-    const QString sessionDir;
+    const std::string sessionDir; // UTF-8
     const bool sync;
 };
 
