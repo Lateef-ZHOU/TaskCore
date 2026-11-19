@@ -22,7 +22,11 @@ class TestCollector final : public GMBCollector
 {
 public:
     explicit TestCollector(const GMBParameters &parameters)
-        : GMBCollector(parameters, TestModel::tolerance, TestModel::startOf(parameters), TestModel::stopOf(), TestModel::timeoutMs) {}
+        : GMBCollector(parameters, TestModel::tolerance) {}
+
+    [[nodiscard]] std::vector<std::vector<unsigned char>> buildStart() const override { return TestModel::startOf(*this); }
+    [[nodiscard]] std::vector<std::vector<unsigned char>> buildStop() const override { return TestModel::stopOf(); }
+    [[nodiscard]] int timeoutMs() const override { return TestModel::timeoutMs; }
 };
 template<class C> concept HasPublicClock = requires { typename C::Clock; };
 template<class C> concept HasTargetGetter = requires(const C &c) { c.target(); };

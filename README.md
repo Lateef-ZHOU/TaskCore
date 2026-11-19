@@ -1,3 +1,9 @@
+## 2026-11-19：官邸直接实现收集器命令虚函数（用户定）
+
+GMBCollector 改为 protected 继承 GMBParameters，官邸直接读取目标、停稳等待和两轴速度并实现 buildStart/buildStop/timeoutMs；族层删除 start_/stop_/timeoutMs_ 缓存及默认实现，只保留公共到位/驻留逻辑。GMBParameters 不再声明 final，以允许该受保护继承，但其受保护构造、只读字段和 paramsFor 唯一入口保持，仍不作为自由派生的多态参数类型。铭辰、亚安、仿真官邸和测试收集器同步直接实现三个虚函数。
+
+验证：build-family Release 零警告，CTest 16/16；主程序原 build Release 零警告，CTest 8/8；simonly Release 构建零警告，CTest 11/11，QML lint 返回 0。仅本地提交，不推送，不更新远端固定版本。
+
 ## 2026-11-19：云台请求强制携带两轴速度（用户定）
 
 删除 GMBParameters::Speeds 及 optional 速度状态，GMBParameters 直接以 const double 保存 panSpeed 和 tiltSpeed，构造时必须成组提供。GMBFamily::paramsFor 与三个任务协程同步改为分别接收两轴速度；铭辰、亚安和仿真官邸按新字段组包或保留快照，亚安协议不编码速度但请求仍携带速度。删除“速度可缺席”的测试分支，非有限速度仍按型号规则拒绝。

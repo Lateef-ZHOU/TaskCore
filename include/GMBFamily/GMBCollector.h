@@ -23,7 +23,7 @@ protected:
 };
 
 // 一次到位请求：目标位形、停稳等待与（型号量化后的）速度。只能由官邸 paramsFor 校验后构造，存在即有效；字段只读。
-struct GMBParameters final
+struct GMBParameters
 {
     GMBParameters(const GMBParamsKey &, PanTiltModel target, const std::chrono::milliseconds hold,
                   const double panSpeed, const double tiltSpeed)
@@ -38,19 +38,17 @@ struct GMBParameters final
 // 云台族公共到位/驻留判据与位形读口；具体官邸实现自己的收集器。
 // 指示区不可变，收集区只由收包线程写，完成后按 const 份额交付。
 // 对象不可复制或移动的约束由 Collector 基类统一提供，调用方只共享指针份额。
-class GMBCollector : public Collector<PanTiltModel, GMBParameters>
+class GMBCollector : public Collector<PanTiltModel, GMBParameters>, protected GMBParameters
 {
 public:
     static constexpr std::chrono::milliseconds kMinHold{2000}; // 驻留下限：任务页的输入框同此下限，斗再兜一道
 
-    // 型号收集器交齐一次尝试的不可变配置：已校验的运动参数、容差（°）、启动 / 停机指令和看门狗时限
-    // （ms，非正 = 不设看门狗）。hold 对应任务页的“停稳等待”，不足 kMinHold 时取下限。进圈后开始计时，
+    // 官邸实现 buildStart/buildStop/timeoutMs；族层只保留公共到位/驻留判据与位形读口。
+    // hold 对应任务页的“停稳等待”，不足 kMinHold 时取下限。进圈后开始计时，
     // 出圈即清零重新计时；须连续在圈内（样本首末时刻相差达到 hold）才完成。
 protected:
-    GMBCollector(const GMBParameters &parameters, const double tolerance, std::vector<std::vector<unsigned char>> start,
-                 std::vector<std::vector<unsigned char>> stop, const int timeoutMs)
-        : Collector(parameters), tolerance_(tolerance),
-          start_(std::move(start)), stop_(std::move(stop)), timeoutMs_(timeoutMs)
+    explicit GMBCollector(const GMBParameters &parameters, const double tolerance)
+        : Collector(parameters), GMBParameters(parameters), tolerance_(tolerance)
     {
     }
     // 族基不拥有对象，销毁由具体类型的 shared_ptr 控制块负责。
@@ -70,11 +68,6 @@ public:
     // 收集期间不得与 feed 并发读取；完成交付后结果冻结，可在保活范围内只读使用。
     [[nodiscard]] const std::optional<PanTiltModel> &measured() const & noexcept { return last_; }
     const std::optional<PanTiltModel> &measured() const && = delete;
-
-    [[nodiscard]] std::vector<std::vector<unsigned char>> buildStart() const override { return start_; }
-    [[nodiscard]] std::vector<std::vector<unsigned char>> buildStop() const override { return stop_; }
-    [[nodiscard]] int timeoutMs() const override { return timeoutMs_; }
-
 
 private:
     using Clock = std::chrono::steady_clock;
@@ -97,11 +90,7 @@ private:
             hitInterval_->second = now;
     }
 
-    // 本层独持的不可变配置；型号仅在构造时提供，不直接访问成员。
     const double tolerance_;
-    const std::vector<std::vector<unsigned char>> start_;
-    const std::vector<std::vector<unsigned char>> stop_;
-    const int timeoutMs_;
     // ── 收集区（[仅 worker] 可写；判齐后 worker 不再触斗，主线程只读）──
     std::optional<PanTiltModel> last_;       // 最近一次采样（给 measured()，与判据无关）
     // 本段连续圈内回报的首末时刻；空 = 尚未进圈或已出圈。
