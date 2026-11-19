@@ -61,12 +61,23 @@ private:
     double value_;
 };
 
-class GimbalModel;
+// 无数据的模型标记，仅供 GimbalModelLike 识别本族；不公开基类析构或容器入口。
+class GimbalModelBase
+{
+public:
+    GimbalModelBase() = default;
+    GimbalModelBase(const GimbalModelBase &) = default;
+    GimbalModelBase &operator=(const GimbalModelBase &) = default;
+    GimbalModelBase(GimbalModelBase &&) = default;
+    GimbalModelBase &operator=(GimbalModelBase &&) = default;
+protected:
+    ~GimbalModelBase() = default;
+};
 
-// 完整模型接口：公开继承共同实现，反解返回自身类型；不证明有解、唯一或正反解互逆。
+// 完整模型接口：反解返回自身类型；不证明有解、唯一或正反解互逆。
 // 仅在完整类型的使用处检查，不能在派生类定义完成前求值。
 template <class T>
-concept GimbalModelLike = std::derived_from<T, GimbalModel> && requires(const SO3 &orientation)
+concept GimbalModelLike = std::derived_from<T, GimbalModelBase> && requires(const SO3 &orientation)
 {
     { T::fromOrientation(orientation) } -> std::same_as<T>;
 };
@@ -84,16 +95,17 @@ concept GimbalModelLike = std::derived_from<T, GimbalModel> && requires(const SO
 // 关节列表构造与析构为 protected，复制和移动构造为 public；外部不能直接创建并销毁基类值。
 // 一袋任意关节没有已知反解，不算一台完整模型。
 //
-// 私有继承 vector 仅用于关节存储；容器转换、写入口及比较不向外公开。
+// 私有继承 std::array 仅用于定长关节存储；容器转换、写入口及比较不向外公开。
 // axis() 仅供派生模型只读访问；整体赋值使用具体模型类型。
 // 调用方不得经 GimbalModel 引用或指针对基类子对象赋值，以免破坏具体模型的轴数、轴序与固定轴配置。
-// 移动转交关节存储；移出后的对象仅用于析构或重新赋值，恢复前不读角度、不做正解或距离计算。
+// 轴数由模板实参固定；移动按元素进行，移出后的对象仅用于析构或重新赋值，恢复前不读角度、不做正解或距离计算。
 //
 // 「两个模型间换算」（世界 ↔ 云台）**不做成成员**——它是两台模型 + 一个安装朝向的关系，不属于
 // 任一模型；就是几行 SO3 复合（`toOrientation` / `inverseRotation` / `fromOrientation`），住在持有安装标定的
 // 云台族基（GMBFamily::gimbalOf / worldOf）。
 // ============================================================
-class GimbalModel : private std::vector<Joint>
+template <std::size_t N>
+class GimbalModel : public GimbalModelBase, private std::array<Joint, N>
 {
 public:
     GimbalModel(const GimbalModel &) = default;
@@ -133,7 +145,7 @@ protected:
     // 派生模型按自身固定轴数访问；不提供分量写入口。
     [[nodiscard]] constexpr const Joint &axis(const std::size_t i) const noexcept { return (*this)[i]; }
 
-    explicit GimbalModel(std::vector<Joint> joints) noexcept : std::vector<Joint>(std::move(joints)) {}
+    explicit GimbalModel(std::array<Joint, N> joints) noexcept : std::array<Joint, N>(std::move(joints)) {}
     // **非虚 + protected**：本类一个虚函数都没有，而位形从不经基类指针删除（它们是被按值造、
     // 按值传的东西）。protected 禁止外部通过 GimbalModel 基类指针删除对象。
     ~GimbalModel() = default;
@@ -152,15 +164,15 @@ protected:
 // R·SO(2)，翻滚是那根纤维的坐标。对"我要指哪"而言它不关心，给个代表元即可；对"基座架成什么样"
 // 而言它是实打实的物理，那一处必须显式给。
 // ============================================================
-class WorldModel : public GimbalModel
+class WorldModel : public GimbalModel<3>
 {
 public:
     // 摆到这个世界朝向：三个角任意实数，各折进自己的窗、不坍缩。翻滚默认 0（见类注）。
     // 本模型构造时归一化：方位 [0°, 360°)（罗盘方向），高度 [−90°, 270°)（连续覆盖越顶分支），翻滚 [−180°, 180°)；读口与界面用同一张窗。
     WorldModel(const double azimuth, const double elevation, const double roll = 0.0)
-        : GimbalModel({{kAxes[0], Wrap360(azimuth)},
-                       {kAxes[1], Wrap270(elevation)},
-                       {kAxes[2], Wrap180(roll)}})
+        : GimbalModel<3>(std::array<Joint, 3>{Joint{kAxes[0], Wrap360(azimuth)},
+                                              Joint{kAxes[1], Wrap270(elevation)},
+                                              Joint{kAxes[2], Wrap180(roll)}})
     {
     }
     WorldModel() : WorldModel(0.0, 0.0, 0.0) {} // 归零位：水平正北
@@ -244,14 +256,14 @@ private:
 // **反解 `fromOrientation`：朝向 → 位形**：目标的翻滚直接忽略（用户定：双轴对翻滚无计可施，需求只要指向），
 // 前两轴与 WorldModel 一致，复用其反解的前两个分量——水平 [0°,360°)、俯仰 [−90°,90°]，两极折进水平角，与 WorldModel 同一套。
 // ============================================================
-class PanTiltModel : public GimbalModel
+class PanTiltModel : public GimbalModel<2>
 {
 public:
     // 摆到这个位形：两个角任意实数，各折进自己的窗、不坍缩；设备行程不在此判（归官邸）。
     // 本模型构造时归一化：水平 [0°, 360°)，俯仰 [−90°, 270°)（连续覆盖越顶分支）；读口与界面用同一张窗。
     PanTiltModel(const double pan, const double tilt)
-        : GimbalModel({{{0.0, 0.0, -1.0}, Wrap360(pan)}, // pan：绕 −ẑ
-                       {{1.0, 0.0, 0.0}, Wrap270(tilt)}}) // tilt：绕 x̂
+        : GimbalModel<2>(std::array<Joint, 2>{Joint{{0.0, 0.0, -1.0}, Wrap360(pan)}, // pan：绕 −ẑ
+                                              Joint{{1.0, 0.0, 0.0}, Wrap270(tilt)}}) // tilt：绕 x̂
     {
     }
     PanTiltModel() : PanTiltModel(0.0, 0.0) {} // 归零位，一个真实合法的位形

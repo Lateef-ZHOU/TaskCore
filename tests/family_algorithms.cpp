@@ -19,41 +19,42 @@ static_assert(std::is_same_v<decltype(&SiteCalibration::estimateFromSamples),
     std::optional<SiteCalibration::Estimate> (*)(const std::span<const SiteCalibration::Sample>&) noexcept>);
 static_assert(noexcept(SiteCalibration::estimateFromSamples(std::span<const SiteCalibration::Sample>{})));
 static_assert(noexcept(Wrap360(0.0)));
-static_assert(std::is_base_of_v<std::vector<Joint>, GimbalModel>);
+static_assert(std::is_base_of_v<std::array<Joint, 3>, WorldModel>);
+static_assert(std::is_base_of_v<std::array<Joint, 2>, PanTiltModel>);
 template<class T> concept PublicArrayAccess = requires(T &v) { v[0]; v.data(); v.fill(0.0); };
 static_assert(!PublicArrayAccess<Joint>);
-struct MissingInverse : GimbalModel {};
-struct WrongInverseResult : GimbalModel {
+struct MissingInverse : GimbalModel<1> {};
+struct WrongInverseResult : GimbalModel<1> {
     static WorldModel fromOrientation(const SO3 &);
 };
 struct InheritedInverse : WorldModel {};
 struct UnrelatedModel {
     static UnrelatedModel fromOrientation(const SO3 &);
 };
-class PrivateModel : private GimbalModel {
+class PrivateModel : private GimbalModel<1> {
 public:
     static PrivateModel fromOrientation(const SO3 &);
 };
-static_assert(!GimbalModelLike<GimbalModel> && !GimbalModelLike<MissingInverse>);
+static_assert(!GimbalModelLike<GimbalModel<1>> && !GimbalModelLike<MissingInverse>);
 static_assert(!GimbalModelLike<WrongInverseResult> && !GimbalModelLike<InheritedInverse>);
 static_assert(!GimbalModelLike<UnrelatedModel> && !GimbalModelLike<PrivateModel>);
 template<class T> concept ModelDistanceAvailable = requires(const T &a, const T &b) {
-    { GimbalModel::distance(a, b) } -> std::same_as<double>;
+    { GimbalModel<1>::distance(a, b) } -> std::same_as<double>;
 };
 static_assert(ModelDistanceAvailable<WorldModel> && ModelDistanceAvailable<PanTiltModel>);
-static_assert(!ModelDistanceAvailable<GimbalModel> && !ModelDistanceAvailable<MissingInverse>);
+static_assert(!ModelDistanceAvailable<GimbalModel<1>> && !ModelDistanceAvailable<MissingInverse>);
 static_assert(!ModelDistanceAvailable<WrongInverseResult> && !ModelDistanceAvailable<InheritedInverse>);
 static_assert(!ModelDistanceAvailable<UnrelatedModel> && !ModelDistanceAvailable<PrivateModel>);
-static_assert(!std::is_convertible_v<WorldModel*, std::vector<Joint>*>);
-static_assert(!std::is_convertible_v<PanTiltModel*, std::vector<Joint>*>);
+static_assert(!std::is_convertible_v<WorldModel*, std::array<Joint, 3>*>);
+static_assert(!std::is_convertible_v<PanTiltModel*, std::array<Joint, 2>*>);
 template<class T> concept PublicJointContainer = requires(T &v) { v.clear(); v[0]; v.begin(); };
 template<class T> concept PublicEquality = requires(const T &a, const T &b) { a == b; };
 static_assert(!PublicJointContainer<WorldModel> && !PublicJointContainer<PanTiltModel>);
 static_assert(!PublicEquality<WorldModel> && !PublicEquality<PanTiltModel>);
 template<class T> concept PublicAxis = requires(const T &v) { v.axis(0); };
-static_assert(!PublicAxis<GimbalModel> && !PublicAxis<WorldModel> && !PublicAxis<PanTiltModel>);
+static_assert(!PublicAxis<GimbalModel<1>> && !PublicAxis<WorldModel> && !PublicAxis<PanTiltModel>);
 // 测试派生类可读关节，生产模型不公开该入口。
-struct AxisProbe : WorldModel { using GimbalModel::axis; };
+struct AxisProbe : WorldModel { using WorldModel::axis; };
 static_assert(std::is_same_v<decltype(std::declval<const AxisProbe&>().axis(0)), const Joint&>);
 static_assert(noexcept(std::declval<const AxisProbe&>().axis(0)));
 static_assert([] {
@@ -67,7 +68,7 @@ static_assert(noexcept(std::declval<const WorldModel&>().elevation()));
 static_assert(noexcept(std::declval<const WorldModel&>().roll()));
 static_assert(noexcept(std::declval<const PanTiltModel&>().pan()));
 static_assert(noexcept(std::declval<const PanTiltModel&>().tilt()));
-static_assert(noexcept(std::declval<const GimbalModel&>().toOrientation()));
+static_assert(noexcept(std::declval<const GimbalModel<1>&>().toOrientation()));
 static_assert(std::is_copy_assignable_v<WorldModel> && std::is_move_assignable_v<WorldModel>);
 static_assert(std::is_copy_assignable_v<PanTiltModel> && std::is_move_assignable_v<PanTiltModel>);
 static_assert(std::is_copy_constructible_v<WorldModel> && std::is_copy_constructible_v<PanTiltModel>);
@@ -79,18 +80,18 @@ bool modelStorageTransfer()
 {
     struct Probe : Model {
         using Model::Model;
-        using GimbalModel::axis;
+        using Model::axis;
     };
     Probe source(35.0, 60.0);
     const Joint *storage = &source.axis(0);
     Probe copied(source);
     if (&copied.axis(0) == storage || copied.axis(0).value() != 35.0) return false;
     Probe moved(std::move(source));
-    if (&moved.axis(0) != storage || moved.axis(1).value() != 60.0) return false;
+    if (&moved.axis(0) == storage || moved.axis(1).value() != 60.0) return false;
     Probe assigned(10.0, 20.0);
     assigned = std::move(moved);
-    if (&assigned.axis(0) != storage || assigned.axis(0).value() != 35.0) return false;
-    // 移出对象先重新赋值，再读取；不依赖移后容器是否为空。
+    if (&assigned.axis(0) == storage || assigned.axis(0).value() != 35.0) return false;
+    // array 按元素复制/移动，存储随对象而不跨对象转移；移出对象先重新赋值，再读取。
     source = copied;
     moved = Probe(15.0, -20.0);
     return &source.axis(0) != &copied.axis(0)

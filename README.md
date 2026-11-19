@@ -1,3 +1,9 @@
+## 2026-11-19：关节存储改为定长数组（用户定）
+
+GimbalModel 按轴数模板化为 GimbalModel<N>，私有存储由 std::vector<Joint> 改为 std::array<Joint, N>；WorldModel 固定 3 轴，PanTiltModel 固定 2 轴。GimbalModelBase 仅作无数据类型标记，保留 GimbalModelLike 约束；轴向、角度窗口、正反解和私有只读轴访问不变。复制/移动按元素完成，不再使用 vector 的存储地址转移语义。
+
+验证：build-family Release 零警告，CTest 16/16；build-models CTest 1/1；主程序原 build Release 零警告，8 秒离屏冒烟与基线一致。仅本地提交，不推送，不更新远端固定版本。
+
 ## 2026-11-19：高度与俯仰采用连续越顶窗口（用户定）
 
 WorldModel 的 elevation 与 PanTiltModel 的 tilt 统一以 Wrap270 归一化到 [-90°, 270°)，保留水平以下及越过天顶的连续表示；roll 继续以 Wrap180 归一化到 [-180°, 180°)。正逆解公式、轴向配置与代表解策略不变，190° 保留原值，270° 折回 −90°。
