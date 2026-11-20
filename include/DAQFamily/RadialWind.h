@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <numbers>
 #include <utility>
@@ -26,6 +27,7 @@ namespace RadialWindCalculation
 template<MappingLike Wind>
 [[nodiscard]] double windAtBin(const double bin) noexcept
 {
+    if (!std::isfinite(bin)) return std::numeric_limits<double>::quiet_NaN();
     const auto last = static_cast<std::size_t>(Wind::count);
     const double clamped = std::clamp(bin, 0.0, static_cast<double>(last));
     const auto low = static_cast<std::size_t>(clamped);

@@ -28,14 +28,11 @@ template<std::size_t N>
 }
 } // namespace DAQDetail
 
-// 映射只有两种模板：均匀与非均匀，二者都继承 MappingTag；派生映射（例如测试里的缺测风速）
-// 也一并符合。识别不依赖前置声明：标签基类先定义，概念放在类型定义之后。
-struct MappingTag {};
 
 // 均匀映射：起点、步长、点数是静态模板值。步长是权威值——用覆盖终点反推步长要做除法，
 // 既有舍入也说不清末点边界归谁；覆盖终点由乘加导出，是末点的右边界（不含在点内）。
 template<double Start, double Step, int Count>
-struct UniformMapping : MappingTag
+struct UniformMapping
 {
     static_assert(Count > 0, "点数须为正");
     static_assert(DAQDetail::finite(Start) && DAQDetail::finite(Step) && Step > 0.0,
@@ -54,7 +51,7 @@ struct UniformMapping : MappingTag
 // 非均匀映射：逐点坐标由模板实参的 constexpr 函数在编译期生成，映射自己静态持有
 // std::array<double, N>（N = 点数 + 1，末项是覆盖终点）；坐标不进类型名，大表也不会撑爆 QML 元类型签名。
 template<auto Edges>
-struct NonUniformMapping : MappingTag
+struct NonUniformMapping
 {
     static constexpr bool uniform = false;
     static constexpr auto edges = Edges();
@@ -66,9 +63,16 @@ struct NonUniformMapping : MappingTag
     [[nodiscard]] static constexpr double at(std::size_t index) noexcept { return edges[index]; }
 };
 
-// 两种映射模板及其派生类型；使用点只写这个概念名。
+// 映射只有两种模板：均匀与非均匀。特化写在类型定义之后，不前置声明；
+// 使用点只写 MappingLike，类型是不是映射由这里的特化回答。
+template<class T> inline constexpr bool isMapping = false;
+template<double Start, double Step, int Count>
+inline constexpr bool isMapping<UniformMapping<Start, Step, Count>> = true;
+template<auto Edges>
+inline constexpr bool isMapping<NonUniformMapping<Edges>> = true;
+
 template<class T>
-concept MappingLike = std::derived_from<std::remove_cvref_t<T>, MappingTag>;
+concept MappingLike = isMapping<std::remove_cvref_t<T>>;
 
 // 新整帧的时间必须在类型上不可变；通用 WallClockElement 的时间提取契约不变。
 template<class Frame>

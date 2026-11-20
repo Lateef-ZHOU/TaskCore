@@ -89,11 +89,6 @@ using SavedASpectrum = Spectrum<SavedARange, SavedAFrequency>;
 using SavedAChannel = DAQChannel<SavedARange, SavedAFrequency>;
 constexpr std::array<double, 3> savedBEdges() { return {0.0, 15.0, 75.0}; }
 using SavedBRange = NonUniformMapping<savedBEdges>;
-// B 路要造缺测风速：频率轴照常，只把「下标 → 风速」映射换成恒 NaN。
-struct MissingWind : UniformMapping<-1.1625, 0.775, 4>
-{
-    [[nodiscard]] static double at(std::size_t) noexcept { return std::numeric_limits<double>::quiet_NaN(); }
-};
 using SavedBSpectrum = Spectrum<SavedBRange, SavedAFrequency>;
 using SavedBChannel = DAQChannel<SavedBRange, SavedAFrequency>;
 // 轴的有效性由映射类型自己校验；这里直接验证表检查本身。
@@ -115,7 +110,9 @@ private:
         auto b = std::make_unique<SavedBSpectrum>();
         std::copy(values.begin(), values.end(), a->begin());
         std::copy(values.begin(), values.end(), b->begin());
-        return Frame{SavedAChannel(std::move(a), SavedAWind{}, "A"), SavedBChannel(std::move(b), MissingWind{}, "B")};
+        // 首门一个非有限值：谱值在 JSON 里写 null；拟合以初始峰位落定，风速仍有限。
+        (*b)[0] = std::numeric_limits<double>::quiet_NaN();
+        return Frame{SavedAChannel(std::move(a), SavedAWind{}, "A"), SavedBChannel(std::move(b), SavedAWind{}, "B")};
     }
 };
 static_assert(DAQCollectorLike<SavedFrame>);
@@ -188,7 +185,9 @@ int main(int argc, char **argv)
     check(spectrum.size() == 2 && spectrum[0].toArray().size() == 4 && spectrum[1].toArray()[2].toDouble() == 8,
           "spectrum rows differ");
     check(a.value("radialWind").toArray().size() == 2 && !a.value("radialWind").toArray()[0].isNull(), "wind missing");
-    check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "missing wind not null");
+    check(b.value("spectrum").toArray()[0].toArray()[0].isNull()
+          && !b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(),
+          "missing spectrum not null");
     check(!a.contains("rangeM") && !b.contains("rangeStartM") && !b.contains("rangeStepM")
               && b.value("rangeM").toArray() == QJsonArray{0, 15}
               && b.value("rangeStopM").toDouble() == 75 && b.value("spectrum").toArray().size() == 2,
