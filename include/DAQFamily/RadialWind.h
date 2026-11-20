@@ -59,10 +59,7 @@ template<MappingLike Range, MappingLike Frequency, MappingLike Wind>
         const GaussFit::Params p = GaussFit(spectrum.row(row)).params;
         const double signal = std::sqrt(2.0 * std::numbers::pi) * std::abs(p.A * p.w);
         const double noise = std::abs(p.d) * Frequency::count;
-        if constexpr (requires { Wind::velocity(p.x0); })
-            (*ws)[row] = Wind::velocity(p.x0); // 分段换算等非线性映射直接给精确值
-        else
-            (*ws)[row] = windAtBin<Wind>(p.x0);
+        (*ws)[row] = windAtBin<Wind>(p.x0);
         (*cnr)[row] = noise > 1e-30 ? 10.0 * std::log10(signal / noise) : 0.0;
     }
     return {std::move(ws), std::move(cnr)};

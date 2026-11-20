@@ -12,7 +12,7 @@
 
 ## 2026-11-21：容器迁入绘图库（用户定）
 
-映射改名 `LinearMapping`（线性）与 `NonLinearMapping`（非线性；逐点表只要求有限且单调，允许相等）。二维谱、一维数组与带时间的剖面帧改由绘图库提供：`Grid2D<RowAxis, ColumnAxis>`、`Array1D<Axis>`（径向风与 CNR 合并为同一容器）、`TimedArray1D<Axis, T>`（墙钟时间 + 运行时缩放；剖面缩放为 sin 仰角）。`DAQChannel<Range, Frequency>` 仍持三帧份额；DAQ 侧别名 `WindProfileFrame<Range> = TimedArray1D<Range, std::optional<LinAlg::Vec3>>`。FamilyCore 的 DAQ 头包含 ChartCore 的 `AxisMapping.h`/`DataArrays.h`，ChartCore 不再包含 `DAQFamily/`；库目标不编译 DAQ 头，测试经 `Lidar::ChartData` 接口目标取头。
+映射改名 `LinearMapping`（线性）与 `NonLinearMapping`（非线性；逐点表只要求有限且单调，允许相等）；非单调的逐点值（如分段风速）用 `TableMapping`，不做单调校验，轴仍用 `NonLinearMapping`。二维谱、一维数组与带时间的剖面帧改由绘图库提供：`Grid2D<RowAxis, ColumnAxis>`、`Array1D<Axis>`（径向风与 CNR 合并为同一容器）、`TimedArray1D<Axis, T>`（墙钟时间 + 运行时缩放；剖面缩放为 sin 仰角）。`DAQChannel<Range, Frequency>` 仍持三帧份额；DAQ 侧别名 `WindProfileFrame<Range> = TimedArray1D<Range, std::optional<LinAlg::Vec3>>`。FamilyCore 的 DAQ 头包含 ChartCore 的 `AxisMapping.h`/`DataArrays.h`，ChartCore 不再包含 `DAQFamily/`；库目标不编译 DAQ 头，测试经 `Lidar::ChartData` 接口目标取头。
 
 ## 2026-11-20：帧直接携带映射，删除 DAQParams（用户定）
 

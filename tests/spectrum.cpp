@@ -51,6 +51,11 @@ using DescendingRange = NonLinearMapping<descendingEdges>;
 static_assert(DescendingRange::count == 2 && DescendingRange::stop == 0.0
     && sizeof(Grid2D<DescendingRange, TestFrequency>) == sizeof(std::array<double, 34>));
 
+// 非单调表映射（风速等值映射）：不做单调校验，逐点取值。
+constexpr std::array<double, 3> windTable() { return {5.0, 1.0, 3.0}; }
+using WindTable = TableMapping<windTable>;
+static_assert(WindTable::count == 2 && WindTable::at(0) == 5.0 && WindTable::at(2) == 3.0);
+
 // 不同的标定即不同类型。
 using ShiftedFrequency = LinearMapping<10.0, 1.0, 17>;
 static_assert(!std::same_as<TestSpectrum, Grid2D<TestRange, ShiftedFrequency>>);
