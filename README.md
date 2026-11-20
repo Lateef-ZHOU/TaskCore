@@ -14,9 +14,9 @@
 
 距离门映射是规格的**类型**，`DAQParams<Range>` 以它作模板参数；波长、频率和频点数仍是规格值。
 
-- 均匀：`UniformRangeMapping<Start, Stop, GateCount>`，三个静态值，步长 = (Stop − Start) / GateCount。
+- 均匀：`UniformRangeMapping<Start, Step, GateCount>`，三个静态值；步长是权威值，覆盖终点 = Start + Step × GateCount（不做除法，末门右边界明确）。
 - 非均匀：小表用 `NonUniformRangeMapping<Edges>`（按值交入逐门边界）；大表由型号定义满足 `RangeMapping` 的具名类型，逐门坐标留在该类型的静态成员里。整张表不能作为模板实参：421 个边界会把 QML 元类型签名撑到约 5.7 KB，编译期求值超出 `/constexpr:steps` 上限（C2131）；具名类型的签名只带类型名。
-- `RangeMapping` 约束静态 `uniform`、`gateCount`、`stop`、`at(gate)`；非均匀类型另需 `edges`（逐门坐标视图）。
+- `RangeMapping` 约束静态 `gateCount`、`stop`、`at(gate)`，并要求类型带 `step`（均匀）或 `edges`（非均匀）；均匀性由类型形状判定，不另存 `uniform` 标志。
 
 功率谱、径向风、CNR 和风廓线通过静态规格确定数组尺寸，共用同一规格，帧内只存各自的载荷。风廓线按斜距和每帧仰角取各门高度，按实际相邻层插值。
 

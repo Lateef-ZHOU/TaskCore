@@ -88,14 +88,14 @@ bool modelStorageTransfer()
 }
 
 template<int Gates, int Start = 0, int Step = 15>
-constexpr DAQParams<UniformRangeMapping<static_cast<double>(Start), static_cast<double>(Start + Step * Gates), Gates>>
+constexpr DAQParams<UniformRangeMapping<static_cast<double>(Start), static_cast<double>(Step), Gates>>
 profileParams() {
     return {.wavelengthM = 1.55e-6, .zeroWindMHz = 80,
             .frequencyStartMHz = 0, .frequencyStepMHz = 1,
             .frequencyBinCount = 1};
 }
 template<int ZeroWind>
-constexpr DAQParams<UniformRangeMapping<30.0, 60.0, 2>> spectrumParams() {
+constexpr DAQParams<UniformRangeMapping<30.0, 15.0, 2>> spectrumParams() {
     return {.wavelengthM = 1.55e-6, .zeroWindMHz = ZeroWind,
             .frequencyStartMHz = 10, .frequencyStepMHz = 2,
             .frequencyBinCount = 9};

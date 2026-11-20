@@ -17,21 +17,21 @@ namespace DAQDetail {
 { return value >= std::numeric_limits<double>::lowest() && value <= std::numeric_limits<double>::max(); }
 } // namespace DAQDetail
 
-// 均匀距离门：起点、终点、门数是静态模板值，步长由此导出（逐门坐标不再进类型）。
-template<double Start, double Stop, int GateCount>
+// 均匀距离门：起点、步长、门数是静态模板值。步长是权威值——用覆盖终点反推步长要做除法，
+// 既有舍入也说不清末门边界归谁；覆盖终点由乘加导出，是末门的右边界（不含在门内）。
+template<double Start, double Step, int GateCount>
 struct UniformRangeMapping
 {
     static_assert(GateCount > 0, "门数须为正");
-    static_assert(DAQDetail::finite(Start) && DAQDetail::finite(Stop) && Stop > Start,
-                  "距离范围须有限且 Stop > Start");
-    static constexpr bool uniform = true;
+    static_assert(DAQDetail::finite(Start) && DAQDetail::finite(Step) && Step > 0.0,
+                  "距离起点须有限、步长须为正");
     static constexpr double start = Start;
-    static constexpr double stop = Stop;
+    static constexpr double step = Step;
     static constexpr int gateCount = GateCount;
-    static constexpr double step = (Stop - Start) / static_cast<double>(GateCount);
+    static constexpr double stop = Start + Step * static_cast<double>(GateCount);
 
     [[nodiscard]] static constexpr double at(std::size_t gate) noexcept
-    { return Start + step * static_cast<double>(gate); }
+    { return Start + Step * static_cast<double>(gate); }
 };
 
 // 非均匀距离门（小表）：逐门起点加末门右边界，按值作为模板实参交入（std::array<double, N>）。
@@ -41,7 +41,6 @@ template<auto Edges>
 struct NonUniformRangeMapping
 {
     static_assert(Edges.size() > 1, "非均匀距离门至少需要首门起点和覆盖终点");
-    static constexpr bool uniform = false;
     static constexpr int gateCount = static_cast<int>(Edges.size()) - 1;
     static constexpr double stop = Edges.back();
     static constexpr std::span<const double> edges{Edges.data(), Edges.size()};
@@ -49,15 +48,17 @@ struct NonUniformRangeMapping
     [[nodiscard]] static constexpr double at(std::size_t gate) noexcept { return Edges[gate]; }
 };
 
-// 距离门映射的接口：均匀用 UniformRangeMapping，非均匀用 NonUniformRangeMapping 或型号自己的
-// 具名类型。具名类型承载大表，类型签名只带类型名；非均匀类型还要提供 edges（逐门坐标视图）。
+// 距离门映射的接口：门数、覆盖终点、逐门起点。均匀映射带 step，非均匀映射带逐门边界 edges；
+// 均匀性由这个形状直接判定，不另存 uniform 标志。
 template<class T>
 concept RangeMapping = requires(std::size_t gate) {
-    { T::uniform } -> std::convertible_to<bool>;
     { T::gateCount } -> std::convertible_to<int>;
     { T::stop } -> std::convertible_to<double>;
     { T::at(gate) } -> std::same_as<double>;
-} && (T::uniform || requires { T::edges; });
+} && (requires { T::step; } || requires { T::edges; });
+
+template<class T>
+concept UniformRange = RangeMapping<T> && requires { T::step; };
 
 // 通道数值规格：距离门映射由类型给出，波长、频率与频点数仍是值。
 // 帧类按规格值确定数组尺寸，因此同一映射类型加同一组数值就是同一规格。
@@ -72,7 +73,7 @@ struct DAQParams
 
     static constexpr Range range{};
     static constexpr int rangeGateCount = Range::gateCount;
-    static constexpr bool uniformRange = Range::uniform;
+    static constexpr bool uniformRange = UniformRange<Range>;
 
     [[nodiscard]] static constexpr double rangeAt(std::size_t gate) noexcept { return Range::at(gate); }
     [[nodiscard]] static constexpr double rangeStopM() noexcept { return Range::stop; }
