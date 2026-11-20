@@ -25,6 +25,7 @@ struct UniformRangeMapping
     static_assert(GateCount > 0, "门数须为正");
     static_assert(DAQDetail::finite(Start) && DAQDetail::finite(Step) && Step > 0.0,
                   "距离起点须有限、步长须为正");
+    static constexpr bool uniform = true;
     static constexpr double start = Start;
     static constexpr double step = Step;
     static constexpr int gateCount = GateCount;
@@ -39,6 +40,7 @@ struct UniformRangeMapping
 template<auto Edges>
 struct NonUniformRangeMapping
 {
+    static constexpr bool uniform = false;
     static constexpr auto edges = Edges();
     static_assert(edges.size() > 1, "非均匀距离门至少需要首门起点和覆盖终点");
     static constexpr int gateCount = static_cast<int>(edges.size()) - 1;
@@ -47,21 +49,15 @@ struct NonUniformRangeMapping
     [[nodiscard]] static constexpr double at(std::size_t gate) noexcept { return edges[gate]; }
 };
 
-// 均匀性由具体映射类型判定：UniformRangeMapping 是唯一的均匀映射，其余映射一律按非均匀处理，
-// 必须提供逐门边界 edges。这样不必再凭 step 之类的成员做结构探测。
-template<class T>
-inline constexpr bool isUniformRange = false;
-template<double Start, double Step, int GateCount>
-inline constexpr bool isUniformRange<UniformRangeMapping<Start, Step, GateCount>> = true;
-
-// 距离门映射的公共接口：门数、覆盖终点、逐门起点；均匀映射由上面的具体类型识别，
-// 非均匀映射还须带逐门边界 edges。
+// 距离门映射的公共接口：门数、覆盖终点、逐门起点，以及映射种类 uniform。
+// 均匀性由映射类型自己声明（与 gateCount/stop 同为静态常量）；非均匀映射还须带逐门边界 edges。
 template<class T>
 concept RangeMapping = requires(std::size_t gate) {
+    { T::uniform } -> std::convertible_to<bool>;
     { T::gateCount } -> std::convertible_to<int>;
     { T::stop } -> std::convertible_to<double>;
     { T::at(gate) } -> std::same_as<double>;
-} && (isUniformRange<T> || requires { T::edges; });
+} && (T::uniform || requires { T::edges; });
 
 // 通道数值规格：距离门映射由类型给出，波长、频率与频点数仍是值。
 // 帧类按规格值确定数组尺寸，因此同一映射类型加同一组数值就是同一规格。
@@ -76,7 +72,7 @@ struct DAQParams
 
     static constexpr Range range{};
     static constexpr int rangeGateCount = Range::gateCount;
-    static constexpr bool uniformRange = isUniformRange<Range>;
+    static constexpr bool uniformRange = Range::uniform;
 
     [[nodiscard]] static constexpr double rangeAt(std::size_t gate) noexcept { return Range::at(gate); }
     [[nodiscard]] static constexpr double rangeStopM() noexcept { return Range::stop; }
