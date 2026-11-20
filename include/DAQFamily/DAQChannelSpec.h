@@ -28,22 +28,9 @@ template<std::size_t N>
 }
 } // namespace DAQDetail
 
-// 映射只有两种模板：均匀与非均匀。用封闭集合识别，使用点不必再逐个检查成员接口；
-// 派生映射（例如测试里的缺测风速）经 MappingTag 一并符合。
+// 映射只有两种模板：均匀与非均匀，二者都继承 MappingTag；派生映射（例如测试里的缺测风速）
+// 也一并符合。识别不依赖前置声明：标签基类先定义，概念放在类型定义之后。
 struct MappingTag {};
-
-template<double Start, double Step, int Count> struct UniformMapping;
-template<auto Edges> struct NonUniformMapping;
-
-template<class T> inline constexpr bool isMapping = false;
-template<double Start, double Step, int Count>
-inline constexpr bool isMapping<UniformMapping<Start, Step, Count>> = true;
-template<auto Edges>
-inline constexpr bool isMapping<NonUniformMapping<Edges>> = true;
-
-template<class T>
-concept MappingLike = isMapping<std::remove_cvref_t<T>>
-    || std::derived_from<std::remove_cvref_t<T>, MappingTag>;
 
 // 均匀映射：起点、步长、点数是静态模板值。步长是权威值——用覆盖终点反推步长要做除法，
 // 既有舍入也说不清末点边界归谁；覆盖终点由乘加导出，是末点的右边界（不含在点内）。
@@ -78,6 +65,10 @@ struct NonUniformMapping : MappingTag
 
     [[nodiscard]] static constexpr double at(std::size_t index) noexcept { return edges[index]; }
 };
+
+// 两种映射模板及其派生类型；使用点只写这个概念名。
+template<class T>
+concept MappingLike = std::derived_from<std::remove_cvref_t<T>, MappingTag>;
 
 // 新整帧的时间必须在类型上不可变；通用 WallClockElement 的时间提取契约不变。
 template<class Frame>
