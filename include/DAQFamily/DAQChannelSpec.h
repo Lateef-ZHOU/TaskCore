@@ -34,18 +34,18 @@ struct UniformRangeMapping
     { return Start + Step * static_cast<double>(gate); }
 };
 
-// 非均匀距离门（小表）：逐门起点加末门右边界，按值作为模板实参交入（std::array<double, N>）。
-// 大表放不进值模板：421 个边界写进类型会让 QML 元类型签名膨胀到超出 constexpr 步数上限，
-// 这种型号改为定义满足 RangeMapping 的具名类型，逐门坐标留在类型的静态成员里。
+// 非均匀距离门：逐门起点加末门右边界。表由模板实参的 constexpr 函数在编译期生成，
+// 映射自己静态持有 std::array<double, N>；逐门坐标不进类型名，大表也不会撑爆 QML 元类型签名。
 template<auto Edges>
 struct NonUniformRangeMapping
 {
-    static_assert(Edges.size() > 1, "非均匀距离门至少需要首门起点和覆盖终点");
-    static constexpr int gateCount = static_cast<int>(Edges.size()) - 1;
-    static constexpr double stop = Edges.back();
-    static constexpr std::span<const double> edges{Edges.data(), Edges.size()};
+    static constexpr auto values = Edges();
+    static_assert(values.size() > 1, "非均匀距离门至少需要首门起点和覆盖终点");
+    static constexpr int gateCount = static_cast<int>(values.size()) - 1;
+    static constexpr double stop = values.back();
+    static constexpr std::span<const double> edges{values.data(), values.size()};
 
-    [[nodiscard]] static constexpr double at(std::size_t gate) noexcept { return Edges[gate]; }
+    [[nodiscard]] static constexpr double at(std::size_t gate) noexcept { return values[gate]; }
 };
 
 // 距离门映射的接口：门数、覆盖终点、逐门起点。均匀映射带 step，非均匀映射带逐门边界 edges；

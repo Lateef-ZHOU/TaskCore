@@ -87,13 +87,13 @@ inline constexpr DAQParams<UniformRangeMapping<0.0, 15.0, 2>> savedA{
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 4,
 };
-inline constexpr std::array savedBEdges{0.0, 15.0, 75.0};
+constexpr std::array<double, 3> savedBEdges() { return {0.0, 15.0, 75.0}; }
 inline constexpr DAQParams<NonUniformRangeMapping<savedBEdges>> savedB{
     .wavelengthM = 1.55e-6, .zeroWindMHz = std::numeric_limits<double>::quiet_NaN(),
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 4,
 };
-inline constexpr std::array badEdges{0.0, 15.0, 15.0};
+constexpr std::array<double, 3> badEdges() { return {0.0, 15.0, 15.0}; }
 inline constexpr DAQParams<NonUniformRangeMapping<badEdges>> badRange{.frequencyStepMHz = 1, .frequencyBinCount = 4};
 static_assert(ValidDAQGrid<savedB> && !ValidDAQGrid<badRange>);
 inline constexpr DAQParams<UniformRangeMapping<10.0, 10.0, 4>> profileSpec{
