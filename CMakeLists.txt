@@ -12,8 +12,6 @@ if(NOT TARGET Lidar::DeviceCore OR NOT TARGET Lidar::Algorithm)
     message(FATAL_ERROR "FamilyCore requires Lidar::DeviceCore and Lidar::Algorithm")
 endif()
 add_library(LidarFamilyCore STATIC
-    include/DAQFamily/AcqSaver.h
-    include/DAQFamily/DAQDevice.h
     include/GMBFamily/GMBDevice.h)
 set_target_properties(LidarFamilyCore PROPERTIES AUTOMOC ON)
 qt_extract_metatypes(LidarFamilyCore)
@@ -26,6 +24,24 @@ target_link_libraries(LidarFamilyCore PUBLIC Lidar::DeviceCore Lidar::FamilyMode
 
 option(FAMILYCORE_WITH_TASK_SUPPORT "Build the optional acquisition-task business base" OFF)
 option(FAMILYCORE_WITH_QML "Build optional family controls and task reference pages" OFF)
+if(FAMILYCORE_WITH_TASK_SUPPORT OR FAMILYCORE_WITH_QML)
+    # DAQ 头用绘图库的数据容器：先取 UICore/ChartCore，任务库与 QML 页共用。
+    find_package(Qt6 6.11.2 REQUIRED COMPONENTS Quick Qml GuiPrivate ShaderTools)
+    include(FetchContent)
+    if(NOT TARGET Lidar::UICore)
+        FetchContent_Declare(lidar_uicore
+            GIT_REPOSITORY https://github.com/Lateef-ZHOU/UICore.git
+            GIT_TAG 3a855fdcfd12b33e8d7d1079090380f1c09183fc)
+        FetchContent_MakeAvailable(lidar_uicore)
+    endif()
+    if(NOT TARGET Lidar::ChartCore)
+        FetchContent_Declare(lidar_chartcore
+            GIT_REPOSITORY https://github.com/Lateef-ZHOU/ChartCore.git
+            GIT_TAG 3febdbebdf2e35d717ff8de777d6b822e0a62830)
+        FetchContent_MakeAvailable(lidar_chartcore)
+    endif()
+endif()
+
 if(FAMILYCORE_WITH_TASK_SUPPORT OR FAMILYCORE_WITH_QML)
     add_subdirectory(optional/task-support)
 endif()

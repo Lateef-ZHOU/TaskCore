@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "GaussFit.h"
-#include "DAQFamily/DAQChannelSpec.h"
+#include "DataArrays.h"
 
 // ============================================================
 // RadialWindCalculation — 功率谱 → 逐距离点的径向风速 + CNR
@@ -42,17 +42,17 @@ template<MappingLike Wind>
 template<class Range>
 struct Result
 {
-    std::shared_ptr<const RadialWind<Range>> ws;
-    std::shared_ptr<const CNR<Range>> cnr;
+    std::shared_ptr<const Array1D<Range>> ws;
+    std::shared_ptr<const Array1D<Range>> cnr;
 };
 
 template<MappingLike Range, MappingLike Frequency, MappingLike Wind>
-[[nodiscard]] Result<Range> Calc(const Spectrum<Range, Frequency> &spectrum, Wind)
+[[nodiscard]] Result<Range> Calc(const Grid2D<Range, Frequency> &spectrum, Wind)
 {
     static_assert(Wind::count == Frequency::count, "风速映射的点数须与频率轴一致");
     if constexpr (Frequency::count < 2) return {};
-    auto ws = std::make_shared<RadialWind<Range>>();
-    auto cnr = std::make_shared<CNR<Range>>();
+    auto ws = std::make_shared<Array1D<Range>>();
+    auto cnr = std::make_shared<Array1D<Range>>();
 #pragma omp parallel for
     for (int row = 0; row < Range::count; ++row)
     {

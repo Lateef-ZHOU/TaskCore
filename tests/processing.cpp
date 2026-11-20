@@ -65,10 +65,10 @@ private:
 
 // 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。
 // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
-using TestRange = UniformMapping<100.0, 30.0, 2>;
-using TestFrequency = UniformMapping<0.0, 1.0, 8>;
-using TestWind = UniformMapping<-3.5, 1.0, 8>;
-using TestSpectrum = Spectrum<TestRange, TestFrequency>;
+using TestRange = LinearMapping<100.0, 30.0, 2>;
+using TestFrequency = LinearMapping<0.0, 1.0, 8>;
+using TestWind = LinearMapping<-3.5, 1.0, 8>;
+using TestSpectrum = Grid2D<TestRange, TestFrequency>;
 using TestChannel = DAQChannel<TestRange, TestFrequency>;
 class TestCollector final : public TypedDAQCollector<TestChannel>
 {
@@ -153,8 +153,8 @@ int main(int argc, char **argv)
     QObject::connect(&device, &TestDevice::profilesReady, &app, [&](const TestDevice::Profiles &result) {
         const auto &profile = std::get<0>(result);
         // 第 0 束 100 m 起、30 m 门距，60° 仰角：高度起点 100·sin60°、层距 30·sin60°。
-        if (!profile || profile->size() != 2 || std::abs(profile->heightStartM() - 100 * std::sin(std::numbers::pi / 3)) > 1e-9
-            || std::abs(profile->heightStepM() - 30 * std::sin(std::numbers::pi / 3)) > 1e-9) qFatal("wind profile differs");
+        if (!profile || profile->size() != 2 || std::abs(profile->start() - 100 * std::sin(std::numbers::pi / 3)) > 1e-9
+            || std::abs(profile->step() - 30 * std::sin(std::numbers::pi / 3)) > 1e-9) qFatal("wind profile differs");
         ++profiles;
     });
     if (!device.open(Parameters{std::make_shared<Transport>()}) || !until([&] { return device.isOpen(); })) return 1;

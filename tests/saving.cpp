@@ -82,25 +82,26 @@ QString waitDiagnostic(const std::size_t index)
 }
 
 // 两路：A 正常换算；B 以 NaN 参考造出缺测风速，检查缺测写成 null。
-using SavedARange = UniformMapping<0.0, 15.0, 2>;
-using SavedAFrequency = UniformMapping<0.0, 1.0, 4>;
-using SavedAWind = UniformMapping<-1.1625, 0.775, 4>;
-using SavedASpectrum = Spectrum<SavedARange, SavedAFrequency>;
+using SavedARange = LinearMapping<0.0, 15.0, 2>;
+using SavedAFrequency = LinearMapping<0.0, 1.0, 4>;
+using SavedAWind = LinearMapping<-1.1625, 0.775, 4>;
+using SavedASpectrum = Grid2D<SavedARange, SavedAFrequency>;
 using SavedAChannel = DAQChannel<SavedARange, SavedAFrequency>;
 constexpr std::array<double, 3> savedBEdges() { return {0.0, 15.0, 75.0}; }
-using SavedBRange = NonUniformMapping<savedBEdges>;
+using SavedBRange = NonLinearMapping<savedBEdges>;
 // B 路要造缺测风速：频率轴照常，只把「下标 → 风速」映射换成恒 NaN。
-struct MissingWind : UniformMapping<-1.1625, 0.775, 4>
+struct MissingWind : LinearMapping<-1.1625, 0.775, 4>
 {
     [[nodiscard]] static double at(std::size_t) noexcept { return std::numeric_limits<double>::quiet_NaN(); }
 };
-using SavedBSpectrum = Spectrum<SavedBRange, SavedAFrequency>;
+using SavedBSpectrum = Grid2D<SavedBRange, SavedAFrequency>;
 using SavedBChannel = DAQChannel<SavedBRange, SavedAFrequency>;
 // 轴的有效性由映射类型自己校验；这里直接验证表检查本身。
-static_assert(DAQDetail::strictlyMonotonic(std::array{0.0, 15.0, 75.0}));
-static_assert(DAQDetail::strictlyMonotonic(std::array{75.0, 15.0, 0.0}));
-static_assert(!DAQDetail::strictlyMonotonic(std::array{0.0, 15.0, 15.0}));
-using ProfileRange = UniformMapping<10.0, 10.0, 4>;
+static_assert(MappingDetail::monotonic(std::array{0.0, 15.0, 75.0}));
+static_assert(MappingDetail::monotonic(std::array{75.0, 15.0, 0.0}));
+static_assert(MappingDetail::monotonic(std::array{0.0, 15.0, 15.0}));
+static_assert(!MappingDetail::monotonic(std::array{0.0, 15.0, 10.0}));
+using ProfileRange = LinearMapping<10.0, 10.0, 4>;
 class SavedFrame final : public TypedDAQCollector<SavedAChannel, SavedBChannel>
 {
 public:
@@ -121,10 +122,10 @@ private:
 };
 static_assert(DAQCollectorLike<SavedFrame>);
 
-using SingleBinRange = UniformMapping<0.0, 15.0, 2>;
-using SingleBinFrequency = UniformMapping<0.0, 1.0, 1>;
-using SingleBinWind = UniformMapping<-1.1625, 0.775, 1>;
-using SingleBinSpectrum = Spectrum<SingleBinRange, SingleBinFrequency>;
+using SingleBinRange = LinearMapping<0.0, 15.0, 2>;
+using SingleBinFrequency = LinearMapping<0.0, 1.0, 1>;
+using SingleBinWind = LinearMapping<-1.1625, 0.775, 1>;
+using SingleBinSpectrum = Grid2D<SingleBinRange, SingleBinFrequency>;
 using SingleBinChannel = DAQChannel<SingleBinRange, SingleBinFrequency>;
 class SingleBinFrame final : public TypedDAQCollector<SingleBinChannel>
 {
@@ -197,11 +198,11 @@ int main(int argc, char **argv)
 
     auto mixedSource = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, saveRoot, "mixed-profile", true));
     check(mixedSource->feed(payload, at), "mixed profile source did not complete");
-    auto mixedResult = std::make_shared<VerticalWindProfileUnit<SavedBRange>>(at, 30.0);
+    auto mixedResult = std::make_shared<WindProfileFrame<SavedBRange>>(at, 0.5);
     (*mixedResult)[1] = LinAlg::Vec3(1, 0, 2);
     AcqSaver::saveWindProfiles(std::shared_ptr<const SavedFrame>(std::move(mixedSource)),
-        std::tuple{std::shared_ptr<const VerticalWindProfileUnit<SavedBRange>>{},
-                   std::shared_ptr<const VerticalWindProfileUnit<SavedBRange>>(std::move(mixedResult))});
+        std::tuple{std::shared_ptr<const WindProfileFrame<SavedBRange>>{},
+                   std::shared_ptr<const WindProfileFrame<SavedBRange>>(std::move(mixedResult))});
     const auto mixed = readCompleted(root.filePath("mixed-profile/profile_" + AcqSaver::fileStem(at) + ".json"))
         .value("channels").toArray()[0].toObject();
     const auto mixedHeights = mixed.value("heightM").toArray();
@@ -222,13 +223,13 @@ int main(int argc, char **argv)
         && singleSaved.value("cnr").isArray() && singleSaved.value("cnr").toArray().isEmpty(), "single-bin save format differs");
 
     // 风廓线：东风 5 m/s、上升 0.5 m/s → 来向 90°。
-    auto filling = std::make_shared<VerticalWindProfileUnit<ProfileRange>>(at, 90.0);
+    auto filling = std::make_shared<WindProfileFrame<ProfileRange>>(at, 1.0);
     (*filling)[0] = LinAlg::Vec3(-5, 0, 0.5);
     (*filling)[1] = LinAlg::Vec3(0, -3, 0);
     (*filling)[3] = LinAlg::Vec3::Zeros();
-    const std::shared_ptr<const VerticalWindProfileUnit<ProfileRange>> frozen = std::move(filling);
+    const std::shared_ptr<const WindProfileFrame<ProfileRange>> frozen = std::move(filling);
     const auto unit = frozen;
-    AcqSaver::saveWindProfiles(frame, std::tuple{std::shared_ptr<const VerticalWindProfileUnit<ProfileRange>>{}, unit});
+    AcqSaver::saveWindProfiles(frame, std::tuple{std::shared_ptr<const WindProfileFrame<ProfileRange>>{}, unit});
     const auto profile = readCompleted(root.filePath(sessionName + "/profile_" + AcqSaver::fileStem(at) + ".json"));
     const auto first = profile.value("channels").toArray()[0].toObject();
     check(profile.value("frame").toObject().value("session").toString() == sessionName
@@ -258,11 +259,11 @@ int main(int argc, char **argv)
     check(source->feed(payload, at), "lifetime frame did not complete");
     std::shared_ptr<const SavedFrame> sourceFrame = std::move(source);
     const std::weak_ptr<const SavedFrame> sourceWeak = sourceFrame;
-    auto result = std::make_shared<VerticalWindProfileUnit<ProfileRange>>(at + std::chrono::seconds(10), 90.0);
+    auto result = std::make_shared<WindProfileFrame<ProfileRange>>(at + std::chrono::seconds(10), 1.0);
     (*result)[0] = LinAlg::Vec3(-5, 0, 0.5);
     (*result)[1] = LinAlg::Vec3(0, -3, 0);
     (*result)[3] = LinAlg::Vec3::Zeros();
-    std::shared_ptr<const VerticalWindProfileUnit<ProfileRange>> onlyResult = std::move(result);
+    std::shared_ptr<const WindProfileFrame<ProfileRange>> onlyResult = std::move(result);
     AcqSaver::saveWindProfiles(std::move(sourceFrame), std::tuple{decltype(onlyResult){}, std::move(onlyResult)});
     check(sourceWeak.expired() && destroyedHere.load(), "profile saver retained Collector or destroyed it off-thread");
     const auto independent = readCompleted(root.filePath("released/profile_" + AcqSaver::fileStem(at) + ".json"));

@@ -20,7 +20,8 @@
 #include <QStringList>
 
 #include "DAQFamily/DAQCollector.h"
-#include "DAQFamily/DAQChannelSpec.h"
+#include "DataArrays.h"
+#include "DAQFamily/DAQFrames.h"
 #include "RunBase.h" // RxTime
 
 // ============================================================
@@ -66,7 +67,7 @@ public:
     // 同步点的一组风廓线落盘；线程只保留上下文、同步帧时刻和结果份额，不延长 Collector 寿命。
     template<DAQCollectorLike C, class... Ranges>
     static void saveWindProfiles(std::shared_ptr<const C> frame,
-        std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Ranges>>...> channels)
+        std::tuple<std::shared_ptr<const TimedArray1D<Ranges, std::optional<LinAlg::Vec3>>>...> channels)
     {
         if (!frame || !frame->parameters.saveRoot
             || !std::apply([](const auto &...p) { return (bool(p) || ...); }, channels)) return;
@@ -227,7 +228,7 @@ private:
     // [独立线程] 同步点一份风廓线 JSON；风向为气象来向，0–360°。
     template<class... Ranges>
     static void writeWindProfiles(const DAQParameters &context, const RxTime at,
-        const std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Ranges>>...> &channels,
+        const std::tuple<std::shared_ptr<const TimedArray1D<Ranges, std::optional<LinAlg::Vec3>>>...> &channels,
         const QStringList &names)
     {
         const auto session = QString::fromStdString(context.sessionDir);
@@ -240,7 +241,7 @@ private:
         out.raw("[");
         bool first = true;
         int nameIndex = 0;
-        const auto writeChannel = [&]<class Range>(const std::shared_ptr<const VerticalWindProfileUnit<Range>> &pointer) {
+        const auto writeChannel = [&]<class Range>(const std::shared_ptr<const TimedArray1D<Range, std::optional<LinAlg::Vec3>>> &pointer) {
             const int index = nameIndex++;
             if (!pointer) return;
             const auto &profile = *pointer;
@@ -250,16 +251,16 @@ private:
             out.key("name"); out.text(names.value(index)); out.raw(",");
             if constexpr (Range::uniform)
             {
-                out.key("heightStartM"); out.number(profile.heightStartM()); out.raw(",");
-                out.key("heightStepM"); out.number(profile.heightStepM()); out.raw(",");
+                out.key("heightStartM"); out.number(profile.start()); out.raw(",");
+                out.key("heightStepM"); out.number(profile.step()); out.raw(",");
             }
             else
             {
                 constexpr int precision = std::numeric_limits<double>::max_digits10;
-                const auto scale = profile.heightScale();
-                out.key("heightM"); out.numbers(std::span<const double>(Range::edges).first(Range::count)
-                    | std::views::transform([scale](double range) { return range * scale; }), precision); out.raw(",");
-                out.key("heightStopM"); out.number(Range::stop * scale, precision); out.raw(",");
+                const auto height = [&profile](std::size_t gate) { return profile.position(gate); };
+                out.key("heightM"); out.numbers(std::views::iota(std::size_t{0}, static_cast<std::size_t>(Range::count))
+                    | std::views::transform(height), precision); out.raw(",");
+                out.key("heightStopM"); out.number(profile.position(Range::count), precision); out.raw(",");
             }
             out.key("horizontalDirectionDeg"); out.numbers(profile.values() | std::views::transform([](const auto &wind) {
                 if (!wind) return std::numeric_limits<double>::quiet_NaN();

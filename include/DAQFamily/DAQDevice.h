@@ -52,7 +52,7 @@ class DAQDevice : public FamilyDevice<HandleT, CollectorT, DAQFamily>
     // 仅推导各通道结果类型，不构造数据或擦除轴。
     template<class... Ranges, class... Frequencies>
     static auto profileTypes(const std::tuple<DAQChannel<Ranges, Frequencies>...> &)
-        -> std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Ranges>>...>;
+        -> std::tuple<std::shared_ptr<const TimedArray1D<Ranges, std::optional<LinAlg::Vec3>>>...>;
 public:
     // 元组仅复制小型只读份额；不保活 Collector 的原始收包缓冲。Qt 边界传递此共享元组。
     using Channels = std::shared_ptr<const typename CollectorT::Frame>;

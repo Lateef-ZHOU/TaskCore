@@ -10,7 +10,8 @@
 #include <memory>
 #include <chrono>
 
-#include "DAQFamily/DAQChannelSpec.h"
+#include "DataArrays.h"
+#include "DAQFamily/DAQFrames.h"
 #include "Matrix.h"
 #include "GMBFamily/GimbalModel.h"
 
@@ -35,51 +36,50 @@ namespace WindProfile
         /// **参考系由类型钉住**：只收 `WorldModel`，由编排层经云台族口 `worldOf` 换好再交——
         /// 收一袋裸数的话，喂进来的若是云台角，基座一歪就指错且不响。
         std::optional<WorldModel> dir;
-        std::shared_ptr<const RadialWind<Range>> ws; ///< 逐点径向风速；距离轴由类型确定
+        std::shared_ptr<const Array1D<Range>> ws; ///< 逐点径向风速；距离轴由类型确定
     };
 
     // 正仰角对应递增高度网格；距离轴顺序在编译期校验。
     template<MappingLike Range>
-    [[nodiscard]] bool hasValidGrid(const VerticalWindProfileUnit<Range> &frame) noexcept
+    [[nodiscard]] bool hasValidGrid(const TimedArray1D<Range, std::optional<LinAlg::Vec3>> &frame) noexcept
     {
-        if constexpr (Range::uniform)
-            return frame.heightStepM() > 0.0 && std::isfinite(frame.heightStartM())
-                && std::isfinite(frame.heightAt(frame.size() - 1));
-        else
-            return frame.heightScale() > 0.0 && std::isfinite(frame.heightStartM())
-                && std::isfinite(frame.heightAt(frame.size() - 1));
+        if (!(frame.scale > 0.0) || !std::isfinite(frame.start())
+            || !std::isfinite(frame.position(frame.size() - 1))) return false;
+        if constexpr (Range::uniform) return frame.step() > 0.0;
+        else return frame.size() < 2 || frame.position(0) < frame.position(1);
     }
 
     template<MappingLike Range>
-    [[nodiscard]] std::optional<LinAlg::Vec3> windAt(const VerticalWindProfileUnit<Range> &frame,
+    [[nodiscard]] std::optional<LinAlg::Vec3> windAt(const TimedArray1D<Range, std::optional<LinAlg::Vec3>> &frame,
                                                    const double heightM) noexcept
     {
         if (!hasValidGrid(frame) || !std::isfinite(heightM)) return std::nullopt;
-        const double start = frame.heightStartM();
+        const double start = frame.start();
         if (heightM <= start || frame.size() == 1) return frame.front();
-        if (heightM >= frame.heightAt(frame.size() - 1)) return frame.back();
+        if (heightM >= frame.position(frame.size() - 1)) return frame.back();
         std::size_t low;
         double fraction;
         if constexpr (Range::uniform)
         {
-            const double step = frame.heightStepM();
+            const double step = frame.step();
             const double position = (heightM - start) / step;
             low = static_cast<std::size_t>(position);
             if (low >= frame.size() - 1) return frame.back();
-            if (heightM == frame.heightAt(low)) return frame[low];
-            if (heightM == frame.heightAt(low + 1)) return frame[low + 1];
+            if (heightM == frame.position(low)) return frame[low];
+            if (heightM == frame.position(low + 1)) return frame[low + 1];
             fraction = position - static_cast<double>(low);
         }
         else
         {
             const auto gates = std::views::iota(std::size_t{0}, frame.size());
             const auto high = *std::ranges::lower_bound(gates, heightM, {}, [&frame](std::size_t gate) {
-                return frame.heightAt(gate);
+                return frame.position(gate);
             });
-            const auto upper = frame.heightAt(high);
+            const auto upper = frame.position(high);
             if (heightM == upper) return frame[high];
             low = high - 1;
-            const auto lower = frame.heightAt(low);
+            const auto lower = frame.position(low);
+            if (!(upper > lower)) return frame[high]; // 允许相等的坐标表：退化区间直接取端点
             fraction = (heightM - lower) / (upper - lower);
         }
         if (!frame[low] || !frame[low + 1]) return std::nullopt;
@@ -88,7 +88,7 @@ namespace WindProfile
 
     // 反演直接生成带到料时刻的只读整帧；层数组属于该帧，失败返回空份额。
     template<MappingLike Range>
-    [[nodiscard]] std::shared_ptr<const VerticalWindProfileUnit<Range>> Calc(std::span<const Input<Range>> beams,
+    [[nodiscard]] std::shared_ptr<const TimedArray1D<Range, std::optional<LinAlg::Vec3>>> Calc(std::span<const Input<Range>> beams,
         std::chrono::system_clock::time_point at)
     {
         const int N = static_cast<int>(beams.size());
@@ -145,7 +145,7 @@ namespace WindProfile
         meanEl /= N;
         const double sinEl = std::sin(meanEl);
         if (!(sinEl > 0.0)) return {};
-        auto result = std::make_shared<VerticalWindProfileUnit<Range>>(at, meanEl / DEG_TO_RAD);
+        auto result = std::make_shared<TimedArray1D<Range, std::optional<LinAlg::Vec3>>>(at, sinEl);
         const double *pinvU = Pinv.data() + 0 * N;
         const double *pinvV = Pinv.data() + 1 * N;
         const double *pinvW = Pinv.data() + 2 * N;

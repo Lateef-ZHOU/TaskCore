@@ -88,14 +88,14 @@ bool modelStorageTransfer()
 }
 
 template<int Gates, int Start = 0, int Step = 15>
-using ProfileRange = UniformMapping<static_cast<double>(Start), static_cast<double>(Step), Gates>;
-using SpectrumFrequency = UniformMapping<10.0, 2.0, 9>;
-using SpectrumSpec = Spectrum<ProfileRange<2, 30, 15>, SpectrumFrequency>;
+using ProfileRange = LinearMapping<static_cast<double>(Start), static_cast<double>(Step), Gates>;
+using SpectrumFrequency = LinearMapping<10.0, 2.0, 9>;
+using SpectrumSpec = Grid2D<ProfileRange<2, 30, 15>, SpectrumFrequency>;
 template<double ZeroWind>
-using SpectrumWind = UniformMapping<(10.0 - ZeroWind) * 0.775, 2.0 * 0.775, 9>;
+using SpectrumWind = LinearMapping<(10.0 - ZeroWind) * 0.775, 2.0 * 0.775, 9>;
 template<class Range> auto wind(std::initializer_list<double> values)
 {
-    auto frame = std::make_shared<RadialWind<Range>>();
+    auto frame = std::make_shared<Array1D<Range>>();
     std::copy(values.begin(), values.end(), frame->begin());
     return frame;
 }
@@ -103,11 +103,11 @@ template<class Range> auto wind(std::initializer_list<double> values)
 int main()
 {
     const auto now = std::chrono::system_clock::now();
-    using Frame = VerticalWindProfileUnit<ProfileRange<1, 100, 25>>;
-    auto frameOwner = std::make_shared<Frame>(now, 90.0);
+    using Frame = WindProfileFrame<ProfileRange<1, 100, 25>>;
+    auto frameOwner = std::make_shared<Frame>(now, 1.0);
     (*frameOwner)[0] = LinAlg::Vec3{1,2,3};
     auto &frame = *frameOwner;
-    if (!WindProfile::hasValidGrid(frame) || frame.heightStartM() != 100.0 || frame.at != now) return 1;
+    if (!WindProfile::hasValidGrid(frame) || frame.start() != 100.0 || frame.at != now) return 1;
     const WorldModel world(35.0, 60.0);
     const WorldPoseHistory history{{now, world}};
     if (history.front().first != now) return 2;
@@ -129,7 +129,7 @@ int main()
         beams[i] = {WorldModel(90.0 * i, 30.0), wind<ProfileRange<3>>({1, 2, 3})};
     // 30° 仰角：高度 = 斜距 / 2；起点 0、门距 15 m。
     const auto column3 = WindProfile::Calc<ProfileRange<3>>(beams, now);
-    if (!column3 || column3->at != now || column3->heightStartM() != 0 || std::abs((column3->heightStartM() + 2 * column3->heightStepM()) - 15) > 1e-9
+    if (!column3 || column3->at != now || column3->start() != 0 || std::abs((column3->start() + 2 * column3->step()) - 15) > 1e-9
         || std::abs(column3->values()[2]->z() - 6) > 1e-9) return 7;
     // 不同网格不能装入同一输入；缺失实测份额仍拒绝反演。
     beams[3].ws.reset();
@@ -151,14 +151,14 @@ int main()
     if (std::abs((*outOfBand.ws)[0] - (18.0 - 80.0) * 0.775) > 0.01 || (*outOfBand.cnr)[0] != (*calm.cnr)[0]) return 13;
     const auto zero = [](const LinAlg::Vec3 &v) { return v.x() == 0 && v.y() == 0 && v.z() == 0; };
     const LinAlg::Vec3 a(1, 2, 3), b(4, 5, 6);
-    VerticalWindProfileUnit<ProfileRange<3, 0, 10>> hole(now, 90);
+    WindProfileFrame<ProfileRange<3, 0, 10>> hole(now, 1.0);
     hole[0] = a; hole[2] = b;
     if (!WindProfile::windAt(hole, 0) || WindProfile::windAt(hole, 5) || WindProfile::windAt(hole, 10) || WindProfile::windAt(hole, 15)
         || !WindProfile::windAt(hole, 20) || WindProfile::windAt(hole, 0)->x() != 1 || WindProfile::windAt(hole, 20)->z() != 6) return 17;
-    VerticalWindProfileUnit<ProfileRange<2, 0, 10>> still(now, 90);
+    WindProfileFrame<ProfileRange<2, 0, 10>> still(now, 1.0);
     still.fill(LinAlg::Vec3::Zeros());
     if (!WindProfile::windAt(still, 5) || !zero(*WindProfile::windAt(still, 5))) return 18;
-    VerticalWindProfileUnit<ProfileRange<2, 0, 10>> ramp(now, 90);
+    WindProfileFrame<ProfileRange<2, 0, 10>> ramp(now, 1.0);
     ramp[0] = a; ramp[1] = b;
     if (!WindProfile::windAt(ramp, 5) || WindProfile::windAt(ramp, 5)->x() != 2.5 || WindProfile::windAt(ramp, 5)->z() != 4.5) return 19;
     std::array<WindProfile::Input<ProfileRange<2>>, 4> missingBeams;

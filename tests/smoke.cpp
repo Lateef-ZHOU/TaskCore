@@ -52,8 +52,8 @@ static_assert(!CanNameFamilyDevice<ContractCollectorBase, ContractFamily>);
 static_assert(!CanNameFamilyDevice<int, ContractFamily>);
 static_assert(!CanNameFamilyDevice<MatchingCollector, int>);
 }
-using ProbeRange = UniformMapping<100.0, 25.0, 1>;
-using Frame = VerticalWindProfileUnit<ProbeRange>;
+using ProbeRange = LinearMapping<100.0, 25.0, 1>;
+using Frame = WindProfileFrame<ProbeRange>;
 static_assert(std::is_same_v<RxTime, std::chrono::system_clock::time_point>);
 static_assert(std::is_same_v<decltype(Frame::at), const RxTime>);
 static_assert(!std::is_copy_constructible_v<DeviceLock>);
@@ -63,9 +63,9 @@ int main(int argc, char **argv)
     if (!QMetaType::fromType<WorldModel>().isValid()
         || !QMetaType::fromType<PanTiltModel>().isValid()) return 37;
     const auto now = std::chrono::system_clock::now();
-    Frame frame{now, 90.0};
+    Frame frame{now, 1.0};
     frame[0] = LinAlg::Vec3{1,2,3};
-    if (!WindProfile::hasValidGrid(frame) || frame.heightStartM() != 100.0 || frame.at != now) return 1;
+    if (!WindProfile::hasValidGrid(frame) || frame.start() != 100.0 || frame.at != now) return 1;
     const WorldModel world(35.0, 60.0);
     const WorldPoseHistory history{{now, world}};
     if (history.front().first != now) return 2;
