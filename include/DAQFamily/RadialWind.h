@@ -23,7 +23,7 @@ namespace RadialWindCalculation
 {
 
 // 风速映射在下标处的取值；分数下标（拟合峰位）在相邻两点间线性插值。
-template<class Wind> requires Mapping<Wind>
+template<MappingLike Wind>
 [[nodiscard]] double windAtBin(const double bin) noexcept
 {
     const auto last = static_cast<std::size_t>(Wind::count);
@@ -44,7 +44,7 @@ struct Result
     std::shared_ptr<const CNR<Range>> cnr;
 };
 
-template<class Range, class Frequency, class Wind> requires Mapping<Wind>
+template<MappingLike Range, MappingLike Frequency, MappingLike Wind>
 [[nodiscard]] Result<Range> Calc(const Spectrum<Range, Frequency> &spectrum, Wind)
 {
     static_assert(Wind::count == Frequency::count, "风速映射的点数须与频率轴一致");

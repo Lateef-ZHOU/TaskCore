@@ -11,6 +11,7 @@
 #include <numbers>
 #include <optional>
 #include <span>
+#include <type_traits>
 
 namespace DAQDetail {
 [[nodiscard]] constexpr bool finite(double value) noexcept
@@ -27,20 +28,27 @@ template<std::size_t N>
 }
 } // namespace DAQDetail
 
-// 映射的公共接口：坐标轴种类 uniform、点数 count、覆盖终点 stop、逐点坐标 at；
-// 非均匀映射还须带逐点边界 edges。均匀性由映射类型自己声明，不另存标志。
+// 映射只有两种模板：均匀与非均匀。用封闭集合识别，使用点不必再逐个检查成员接口；
+// 派生映射（例如测试里的缺测风速）经 MappingTag 一并符合。
+struct MappingTag {};
+
+template<double Start, double Step, int Count> struct UniformMapping;
+template<auto Edges> struct NonUniformMapping;
+
+template<class T> inline constexpr bool isMapping = false;
+template<double Start, double Step, int Count>
+inline constexpr bool isMapping<UniformMapping<Start, Step, Count>> = true;
+template<auto Edges>
+inline constexpr bool isMapping<NonUniformMapping<Edges>> = true;
+
 template<class T>
-concept Mapping = requires(std::size_t index) {
-    { T::uniform } -> std::convertible_to<bool>;
-    { T::count } -> std::convertible_to<int>;
-    { T::stop } -> std::convertible_to<double>;
-    { T::at(index) } -> std::same_as<double>;
-} && (T::uniform || requires { T::edges; });
+concept MappingLike = isMapping<std::remove_cvref_t<T>>
+    || std::derived_from<std::remove_cvref_t<T>, MappingTag>;
 
 // 均匀映射：起点、步长、点数是静态模板值。步长是权威值——用覆盖终点反推步长要做除法，
 // 既有舍入也说不清末点边界归谁；覆盖终点由乘加导出，是末点的右边界（不含在点内）。
 template<double Start, double Step, int Count>
-struct UniformMapping
+struct UniformMapping : MappingTag
 {
     static_assert(Count > 0, "点数须为正");
     static_assert(DAQDetail::finite(Start) && DAQDetail::finite(Step) && Step > 0.0,
@@ -59,7 +67,7 @@ struct UniformMapping
 // 非均匀映射：逐点坐标由模板实参的 constexpr 函数在编译期生成，映射自己静态持有
 // std::array<double, N>（N = 点数 + 1，末项是覆盖终点）；坐标不进类型名，大表也不会撑爆 QML 元类型签名。
 template<auto Edges>
-struct NonUniformMapping
+struct NonUniformMapping : MappingTag
 {
     static constexpr bool uniform = false;
     static constexpr auto edges = Edges();
@@ -78,7 +86,7 @@ concept ImmutableWallClockFrame = requires {
 };
 
 // 一帧功率谱：距离点逐行、频点逐列；规格不占实例空间，唯一数据存储是固定长度 double 数组。
-template<class Range, class Frequency> requires Mapping<Range> && Mapping<Frequency>
+template<MappingLike Range, MappingLike Frequency>
 class Spectrum : private std::array<double, static_cast<std::size_t>(Range::count) * static_cast<std::size_t>(Frequency::count)>
 {
     using Array = std::array<double, static_cast<std::size_t>(Range::count) * static_cast<std::size_t>(Frequency::count)>;
@@ -108,7 +116,7 @@ public:
 };
 
 // 一帧径向风速：每个距离点一个 double（m/s）。
-template<class Range> requires Mapping<Range>
+template<MappingLike Range>
 class RadialWind : private std::array<double, static_cast<std::size_t>(Range::count)>
 {
 public:
@@ -125,7 +133,7 @@ public:
 };
 
 // 一帧信噪比：每个距离点一个 double（dB）。
-template<class Range> requires Mapping<Range>
+template<MappingLike Range>
 class CNR : private std::array<double, static_cast<std::size_t>(Range::count)>
 {
 public:
@@ -143,7 +151,7 @@ public:
 
 // 通道反演结果：每个距离点一个 ENU 风矢量（m/s）；nullopt 为缺测，零向量为静风。
 // 高度 = 距离点坐标 × sin(仰角)，仰角随帧（运行时）保存。
-template<class Range> requires Mapping<Range>
+template<MappingLike Range>
 struct VerticalWindProfileUnit : public std::array<std::optional<LinAlg::Vec3>, static_cast<std::size_t>(Range::count)>
 {
     using RangeType = Range;

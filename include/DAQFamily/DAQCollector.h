@@ -41,7 +41,7 @@ struct DAQParameters
 
 // 通道只持原帧的只读份额，轴规格不在帧中重复存储。型号直接填满最终谱数组，
 // 交入唯一份额后计算径向风与 CNR；通道本身只复制共享指针，不复制数据。
-template<class Range, class Frequency> requires Mapping<Range> && Mapping<Frequency>
+template<MappingLike Range, MappingLike Frequency>
 struct DAQChannel
 {
     // 型号提供静态寿命的 UTF-8 通道名，供异步保存使用。
@@ -49,7 +49,7 @@ struct DAQChannel
 
     // 前置条件：交入非空、已完整填写的谱；协议完整性由型号 assemble 负责。
     // 风速由型号交入的「下标 → 风速」映射换算；族基不认识波长与零风速参考。
-    template<class Wind> requires Mapping<Wind>
+    template<MappingLike Wind>
     explicit DAQChannel(std::unique_ptr<Spectrum<Range, Frequency>> values, Wind wind, const char* channelName = nullptr)
         : DAQChannel(RadialWindCalculation::Calc(*values, wind), values, channelName) {}
 
