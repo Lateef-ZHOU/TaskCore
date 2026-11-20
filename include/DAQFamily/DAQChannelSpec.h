@@ -11,7 +11,6 @@
 #include <numbers>
 #include <optional>
 #include <span>
-#include <type_traits>
 
 namespace DAQDetail {
 [[nodiscard]] constexpr bool finite(double value) noexcept
@@ -63,16 +62,15 @@ struct NonUniformMapping
     [[nodiscard]] static constexpr double at(std::size_t index) noexcept { return edges[index]; }
 };
 
-// 映射只有两种模板：均匀与非均匀。特化写在类型定义之后，不前置声明；
-// 使用点只写 MappingLike，类型是不是映射由这里的特化回答。
-template<class T> inline constexpr bool isMapping = false;
-template<double Start, double Step, int Count>
-inline constexpr bool isMapping<UniformMapping<Start, Step, Count>> = true;
-template<auto Edges>
-inline constexpr bool isMapping<NonUniformMapping<Edges>> = true;
-
+// 映射的公共接口：坐标轴种类 uniform、点数 count、覆盖终点 stop、逐点坐标 at；
+// 非均匀映射还须带逐点边界 edges。满足这套接口的就是映射，不使用封闭名单。
 template<class T>
-concept MappingLike = isMapping<std::remove_cvref_t<T>>;
+concept MappingLike = requires(std::size_t index) {
+    { T::uniform } -> std::convertible_to<bool>;
+    { T::count } -> std::convertible_to<int>;
+    { T::stop } -> std::convertible_to<double>;
+    { T::at(index) } -> std::same_as<double>;
+} && (T::uniform || requires { T::edges; });
 
 // 新整帧的时间必须在类型上不可变；通用 WallClockElement 的时间提取契约不变。
 template<class Frame>

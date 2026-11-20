@@ -17,7 +17,7 @@
 - 均匀：`UniformMapping<Start, Step, Count>`，步长是权威值，覆盖终点 = Start + Step × Count。
 - 非均匀：`NonUniformMapping<Edges>` 的模板实参是一个 constexpr 函数，表由它生成、映射内部静态持有 `std::array<double, N>`；类型名只带函数符号，421 点表也不会撑爆 QML 元类型签名（按值把 421 个边界写进类型曾触发 C2131）。
 - 频率轴只要求是映射（均匀或非均匀）；风速换算由官邸交入的「下标 → 风速」映射承担，`RadialWindCalculation::Calc(spectrum, wind)` 按分数下标在相邻点间插值——族基不认识波长与零风速参考。
-- 映射是封闭集合：`MappingLike` 只认 `UniformMapping` 与 `NonUniformMapping` 两个模板（对它们的特化写在类型定义之后，不前置声明）；帧与算法直接写 `template<MappingLike Range, ...>`，不再逐个检查 `uniform`/`count`/`stop`/`at`。轴的有效性（点数正、坐标有限且严格递增）由映射自己 `static_assert`。
+- `MappingLike` 直接按公共接口识别映射（`uniform`/`count`/`stop`/`at`，非均匀另带 `edges`），不设封闭名单、不前置声明；帧与算法直接写 `template<MappingLike Range, ...>`。轴的有效性（点数正、坐标有限且严格递增）由映射自己 `static_assert`。
 - 帧：`Spectrum<Range, Frequency>`（两映射）、`RadialWind<Range>`、`CNR<Range>`、`VerticalWindProfileUnit<Range>`、`DAQChannel<Range, Frequency>`；数组尺寸与循环上界取自映射的 `count`。
 
 风廓线高度 = 距离点坐标 × sin(运行时仰角)，按实际相邻层插值。
