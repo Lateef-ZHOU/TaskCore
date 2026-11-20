@@ -79,8 +79,8 @@ public:
     // 与 gimbalOf 一去一回，**两边都只认位形**：编排层先从斗上 `measured()` 取实测位形，再调本口。
     // 回程的翻滚是**被钉死的那个值**（双轴没有第三个自由度），WorldModel 如实带着它；风廓线只读
     // 方位与高度。实测俯仰越过 90°（如 MCZT 协议上沿 92°）照样换得出——那是位形环面的另一半。
-    // **不验锁**：只读；它读到的标定之所以可信，是 setMounting 那一侧验锁保证的。角度图的实时
-    // 世界角也走这里。
+    // **不验锁**：只读；它读到的标定之所以可信，是 setMounting 那一侧验锁保证的。
+    // 实时世界角默认复用此换算，型号可在回显时选择等价的角度分支。
     [[nodiscard]] WorldModel worldOf(const PanTiltModel &pose) const
     {
         return WorldModel::fromOrientation(mounting().toOrientation() * pose.toOrientation());
@@ -154,6 +154,12 @@ public:
     // 同样有效。不持锁：设备正被任务占用时 Device 验锁拒绝，返回 false。
     bool issueStop() { return DeviceT::stop({}); }
 
+protected:
+    // 实时显示可选择等价的世界角分支；任务和落盘使用 worldOf 的指向口径。
+    [[nodiscard]] virtual WorldModel worldForReadout(const PanTiltModel &pose) const
+    {
+        return this->worldOf(pose);
+    }
 
 private:
 
@@ -164,7 +170,7 @@ private:
         const auto pose = decodeStream(raw);
         if (!pose) return std::nullopt;
         QMetaObject::invokeMethod(this, [this, at, p = *pose] {
-            const auto world = this->worldOf(p);
+            const auto world = worldForReadout(p);
             Q_EMIT this->anglesReady(at, p.pan(), p.tilt(), world.azimuth(), world.elevation());
         }, Qt::QueuedConnection);
         return pose;
