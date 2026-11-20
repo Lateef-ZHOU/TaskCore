@@ -88,21 +88,13 @@ bool modelStorageTransfer()
 }
 
 template<int Gates, int Start = 0, int Step = 15>
-constexpr DAQParams<UniformMapping<static_cast<double>(Start), static_cast<double>(Step), Gates>>
-profileParams() {
-    return {.wavelengthM = 1.55e-6, .zeroWindMHz = 80,
-            .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-            .frequencyBinCount = 1};
-}
+using ProfileRange = UniformMapping<static_cast<double>(Start), static_cast<double>(Step), Gates>;
 template<int ZeroWind>
-constexpr DAQParams<UniformMapping<30.0, 15.0, 2>> spectrumParams() {
-    return {.wavelengthM = 1.55e-6, .zeroWindMHz = ZeroWind,
-            .frequencyStartMHz = 10, .frequencyStepMHz = 2,
-            .frequencyBinCount = 9};
-}
-template<auto P> auto wind(std::initializer_list<double> values)
+using SpectrumSpec = Spectrum<ProfileRange<2, 30, 15>,
+    DopplerMapping<UniformMapping<10.0, 2.0, 9>, 1.55e-6, ZeroWind>>;
+template<class Range> auto wind(std::initializer_list<double> values)
 {
-    auto frame = std::make_shared<RadialWind<P>>();
+    auto frame = std::make_shared<RadialWind<Range>>();
     std::copy(values.begin(), values.end(), frame->begin());
     return frame;
 }
@@ -110,7 +102,7 @@ template<auto P> auto wind(std::initializer_list<double> values)
 int main()
 {
     const auto now = std::chrono::system_clock::now();
-    using Frame = VerticalWindProfileUnit<profileParams<1, 100, 25>()>;
+    using Frame = VerticalWindProfileUnit<ProfileRange<1, 100, 25>>;
     auto frameOwner = std::make_shared<Frame>(now, 90.0);
     (*frameOwner)[0] = LinAlg::Vec3{1,2,3};
     auto &frame = *frameOwner;
@@ -131,25 +123,25 @@ int main()
         now + std::chrono::seconds(2), 90.0));
     if (history2.size() != 2 || !old.expired() || history2.at(0)->at != now + std::chrono::seconds(1)
         || history2.back()->at != now + std::chrono::seconds(2)) return 5;
-    std::array<WindProfile::Input<profileParams<3>()>, 4> beams;
+    std::array<WindProfile::Input<ProfileRange<3>>, 4> beams;
     for (int i = 0; i < 4; ++i)
-        beams[i] = {WorldModel(90.0 * i, 30.0), wind<profileParams<3>()>({1, 2, 3})};
+        beams[i] = {WorldModel(90.0 * i, 30.0), wind<ProfileRange<3>>({1, 2, 3})};
     // 30° 仰角：高度 = 斜距 / 2；起点 0、门距 15 m。
-    const auto column3 = WindProfile::Calc<profileParams<3>()>(beams, now);
+    const auto column3 = WindProfile::Calc<ProfileRange<3>>(beams, now);
     if (!column3 || column3->at != now || column3->heightStartM() != 0 || std::abs((column3->heightStartM() + 2 * column3->heightStepM()) - 15) > 1e-9
         || std::abs(column3->values()[2]->z() - 6) > 1e-9) return 7;
     // 不同网格不能装入同一输入；缺失实测份额仍拒绝反演。
     beams[3].ws.reset();
-    if (WindProfile::Calc<profileParams<3>()>(beams, now)) return 8;
-    Spectrum<spectrumParams<18>()> spectrum;
-    Spectrum<spectrumParams<16>()> shiftedSpectrum;
-    Spectrum<spectrumParams<80>()> outOfBandSpectrum;
+    if (WindProfile::Calc<ProfileRange<3>>(beams, now)) return 8;
+    SpectrumSpec<18> spectrum;
+    SpectrumSpec<16> shiftedSpectrum;
+    SpectrumSpec<80> outOfBandSpectrum;
     for (int gate = 0; gate < 2; ++gate)
         for (int bin = 0; bin < 9; ++bin)
             spectrum[gate * 9 + bin] = shiftedSpectrum[gate * 9 + bin] = outOfBandSpectrum[gate * 9 + bin]
                 = 1.0 + 100.0 * std::exp(-(bin - 4.0) * (bin - 4.0) / 2.0);
     const auto calm = RadialWindCalculation::Calc(spectrum);
-    if (calm.ws->size() != 2 || spectrumParams<18>().range.start != 30.0 || spectrumParams<18>().range.step != 15.0
+    if (calm.ws->size() != 2 || ProfileRange<2, 30, 15>::start != 30.0 || ProfileRange<2, 30, 15>::step != 15.0
         || std::abs((*calm.ws)[0]) > 0.01) return 11;
     const auto shifted = RadialWindCalculation::Calc(shiftedSpectrum);
     if (std::abs((*shifted.ws)[1] - 2.0 * 0.775) > 0.01) return 12;
@@ -158,21 +150,21 @@ int main()
     if (std::abs((*outOfBand.ws)[0] - (18.0 - 80.0) * 0.775) > 0.01 || (*outOfBand.cnr)[0] != (*calm.cnr)[0]) return 13;
     const auto zero = [](const LinAlg::Vec3 &v) { return v.x() == 0 && v.y() == 0 && v.z() == 0; };
     const LinAlg::Vec3 a(1, 2, 3), b(4, 5, 6);
-    VerticalWindProfileUnit<profileParams<3, 0, 10>()> hole(now, 90);
+    VerticalWindProfileUnit<ProfileRange<3, 0, 10>> hole(now, 90);
     hole[0] = a; hole[2] = b;
     if (!WindProfile::windAt(hole, 0) || WindProfile::windAt(hole, 5) || WindProfile::windAt(hole, 10) || WindProfile::windAt(hole, 15)
         || !WindProfile::windAt(hole, 20) || WindProfile::windAt(hole, 0)->x() != 1 || WindProfile::windAt(hole, 20)->z() != 6) return 17;
-    VerticalWindProfileUnit<profileParams<2, 0, 10>()> still(now, 90);
+    VerticalWindProfileUnit<ProfileRange<2, 0, 10>> still(now, 90);
     still.fill(LinAlg::Vec3::Zeros());
     if (!WindProfile::windAt(still, 5) || !zero(*WindProfile::windAt(still, 5))) return 18;
-    VerticalWindProfileUnit<profileParams<2, 0, 10>()> ramp(now, 90);
+    VerticalWindProfileUnit<ProfileRange<2, 0, 10>> ramp(now, 90);
     ramp[0] = a; ramp[1] = b;
     if (!WindProfile::windAt(ramp, 5) || WindProfile::windAt(ramp, 5)->x() != 2.5 || WindProfile::windAt(ramp, 5)->z() != 4.5) return 19;
-    std::array<WindProfile::Input<profileParams<2>()>, 4> missingBeams;
+    std::array<WindProfile::Input<ProfileRange<2>>, 4> missingBeams;
     for (int i = 0; i < 4; ++i)
-        missingBeams[i] = {WorldModel(90.0 * i, 30.0), wind<profileParams<2>()>({0, 0})};
-    missingBeams[0].ws = wind<profileParams<2>()>({0, std::numeric_limits<double>::quiet_NaN()});
-    const auto missingLayer = WindProfile::Calc<profileParams<2>()>(missingBeams, now);
+        missingBeams[i] = {WorldModel(90.0 * i, 30.0), wind<ProfileRange<2>>({0, 0})};
+    missingBeams[0].ws = wind<ProfileRange<2>>({0, std::numeric_limits<double>::quiet_NaN()});
+    const auto missingLayer = WindProfile::Calc<ProfileRange<2>>(missingBeams, now);
     if (!missingLayer || !missingLayer->values()[0] || !zero(*missingLayer->values()[0]) || missingLayer->values()[1]) return 26;
     // 多轴样本覆盖标定的外积、补秩及朝向求和；单轴保持原退化行为。
     const auto base = SO3::exp(LinAlg::Vec3(0.1, -0.2, 0.3));

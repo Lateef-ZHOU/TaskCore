@@ -49,10 +49,10 @@ public:
 template <HandleLike HandleT, DAQCollectorLike CollectorT>
 class DAQDevice : public FamilyDevice<HandleT, CollectorT, DAQFamily>
 {
-    // 仅推导各通道结果类型，不构造数据或擦除 Spec。
-    template<auto... Ps>
-    static auto profileTypes(const std::tuple<DAQChannel<Ps>...> &)
-        -> std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Ps>>...>;
+    // 仅推导各通道结果类型，不构造数据或擦除轴。
+    template<class... Ranges, class... Frequencies>
+    static auto profileTypes(const std::tuple<DAQChannel<Ranges, Frequencies>...> &)
+        -> std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Ranges>>...>;
 public:
     // 元组仅复制小型只读份额；不保活 Collector 的原始收包缓冲。Qt 边界传递此共享元组。
     using Channels = std::shared_ptr<const typename CollectorT::Frame>;
@@ -175,11 +175,11 @@ private:
     template <std::size_t I>
     auto invert(const CollectorT &frame) const
     {
-        return [&]<auto P>(const DAQChannel<P> &) {
-            std::array<WindProfile::Input<P>, WindProfile::kBeams> inputs;
+        return [&]<class Range, class Frequency>(const DAQChannel<Range, Frequency> &) {
+            std::array<WindProfile::Input<Range>, WindProfile::kBeams> inputs;
             for (std::size_t beam = 0; beam < inputs.size(); ++beam)
                 inputs[beam] = {beams_[beam]->parameters.pose, std::get<I>(beams_[beam]->channels()).radialWind};
-            return WindProfile::Calc<P>(inputs, frame.frameTime());
+            return WindProfile::Calc<Range>(inputs, frame.frameTime());
         }(std::get<I>(frame.channels()));
     }
 

@@ -82,26 +82,24 @@ QString waitDiagnostic(const std::size_t index)
 }
 
 // 两路：A 正常换算；B 以 NaN 参考造出缺测风速，检查缺测写成 null。
-inline constexpr DAQParams<UniformMapping<0.0, 15.0, 2>> savedA{
-    .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
-    .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .frequencyBinCount = 4,
-};
+using SavedARange = UniformMapping<0.0, 15.0, 2>;
+using SavedAFrequency = DopplerMapping<UniformMapping<0.0, 1.0, 4>, 1.55e-6, 1.5>;
+using SavedASpectrum = Spectrum<SavedARange, SavedAFrequency>;
+using SavedAChannel = DAQChannel<SavedARange, SavedAFrequency>;
 constexpr std::array<double, 3> savedBEdges() { return {0.0, 15.0, 75.0}; }
-inline constexpr DAQParams<NonUniformMapping<savedBEdges>> savedB{
-    .wavelengthM = 1.55e-6, .zeroWindMHz = std::numeric_limits<double>::quiet_NaN(),
-    .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .frequencyBinCount = 4,
+using SavedBRange = NonUniformMapping<savedBEdges>;
+// B 路要造缺测风速：频率映射照常，只把速度视图换成 NaN，避免把 NaN 当非类型模板实参。
+struct MissingWindFrequency : DopplerMapping<UniformMapping<0.0, 1.0, 4>, 1.55e-6, 1.5>
+{
+    [[nodiscard]] static double velocityAt(double) noexcept { return std::numeric_limits<double>::quiet_NaN(); }
 };
+using SavedBSpectrum = Spectrum<SavedBRange, MissingWindFrequency>;
+using SavedBChannel = DAQChannel<SavedBRange, MissingWindFrequency>;
 constexpr std::array<double, 3> badEdges() { return {0.0, 15.0, 15.0}; }
-inline constexpr DAQParams<NonUniformMapping<badEdges>> badRange{.frequencyStepMHz = 1, .frequencyBinCount = 4};
-static_assert(ValidDAQGrid<savedB> && !ValidDAQGrid<badRange>);
-inline constexpr DAQParams<UniformMapping<10.0, 10.0, 4>> profileSpec{
-    .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
-    .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .frequencyBinCount = 4,
-};
-class SavedFrame final : public TypedDAQCollector<DAQChannel<savedA>, DAQChannel<savedB>>
+using BadRange = NonUniformMapping<badEdges>;
+static_assert(ValidGrid<SavedBRange, MissingWindFrequency> && !ValidAxis<BadRange>);
+using ProfileRange = UniformMapping<10.0, 10.0, 4>;
+class SavedFrame final : public TypedDAQCollector<SavedAChannel, SavedBChannel>
 {
 public:
     explicit SavedFrame(const DAQParameters &p) : TypedDAQCollector(p) {}
@@ -112,21 +110,20 @@ private:
     {
         frameTime_ = at;
         const std::array<double, 8> values{1, 2, 9, 2, 1, 3, 8, 3};
-        auto a = std::make_unique<Spectrum<savedA>>();
-        auto b = std::make_unique<Spectrum<savedB>>();
+        auto a = std::make_unique<SavedASpectrum>();
+        auto b = std::make_unique<SavedBSpectrum>();
         std::copy(values.begin(), values.end(), a->begin());
         std::copy(values.begin(), values.end(), b->begin());
-        return Frame{DAQChannel<savedA>(std::move(a), "A"), DAQChannel<savedB>(std::move(b), "B")};
+        return Frame{SavedAChannel(std::move(a), "A"), SavedBChannel(std::move(b), "B")};
     }
 };
 static_assert(DAQCollectorLike<SavedFrame>);
 
-inline constexpr DAQParams<UniformMapping<0.0, 15.0, 2>> singleBinSpec{
-    .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
-    .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .frequencyBinCount = 1,
-};
-class SingleBinFrame final : public TypedDAQCollector<DAQChannel<singleBinSpec>>
+using SingleBinRange = UniformMapping<0.0, 15.0, 2>;
+using SingleBinFrequency = DopplerMapping<UniformMapping<0.0, 1.0, 1>, 1.55e-6, 1.5>;
+using SingleBinSpectrum = Spectrum<SingleBinRange, SingleBinFrequency>;
+using SingleBinChannel = DAQChannel<SingleBinRange, SingleBinFrequency>;
+class SingleBinFrame final : public TypedDAQCollector<SingleBinChannel>
 {
 public:
     explicit SingleBinFrame(const DAQParameters &p) : TypedDAQCollector(p) {}
@@ -136,9 +133,9 @@ private:
     std::optional<Frame> assemble(std::span<const unsigned char>, RxTime at) override
     {
         frameTime_ = at;
-        auto values = std::make_unique<Spectrum<singleBinSpec>>();
+        auto values = std::make_unique<SingleBinSpectrum>();
         (*values)[0] = 3; (*values)[1] = 4;
-        return Frame{DAQChannel<singleBinSpec>(std::move(values), "A")};
+        return Frame{SingleBinChannel(std::move(values), "A")};
     }
 };
 
@@ -198,11 +195,11 @@ int main(int argc, char **argv)
 
     auto mixedSource = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, saveRoot, "mixed-profile", true));
     check(mixedSource->feed(payload, at), "mixed profile source did not complete");
-    auto mixedResult = std::make_shared<VerticalWindProfileUnit<savedB>>(at, 30.0);
+    auto mixedResult = std::make_shared<VerticalWindProfileUnit<SavedBRange>>(at, 30.0);
     (*mixedResult)[1] = LinAlg::Vec3(1, 0, 2);
     AcqSaver::saveWindProfiles(std::shared_ptr<const SavedFrame>(std::move(mixedSource)),
-        std::tuple{std::shared_ptr<const VerticalWindProfileUnit<savedB>>{},
-                   std::shared_ptr<const VerticalWindProfileUnit<savedB>>(std::move(mixedResult))});
+        std::tuple{std::shared_ptr<const VerticalWindProfileUnit<SavedBRange>>{},
+                   std::shared_ptr<const VerticalWindProfileUnit<SavedBRange>>(std::move(mixedResult))});
     const auto mixed = readCompleted(root.filePath("mixed-profile/profile_" + AcqSaver::fileStem(at) + ".json"))
         .value("channels").toArray()[0].toObject();
     const auto mixedHeights = mixed.value("heightM").toArray();
@@ -223,13 +220,13 @@ int main(int argc, char **argv)
         && singleSaved.value("cnr").isArray() && singleSaved.value("cnr").toArray().isEmpty(), "single-bin save format differs");
 
     // 风廓线：东风 5 m/s、上升 0.5 m/s → 来向 90°。
-    auto filling = std::make_shared<VerticalWindProfileUnit<profileSpec>>(at, 90.0);
+    auto filling = std::make_shared<VerticalWindProfileUnit<ProfileRange>>(at, 90.0);
     (*filling)[0] = LinAlg::Vec3(-5, 0, 0.5);
     (*filling)[1] = LinAlg::Vec3(0, -3, 0);
     (*filling)[3] = LinAlg::Vec3::Zeros();
-    const std::shared_ptr<const VerticalWindProfileUnit<profileSpec>> frozen = std::move(filling);
+    const std::shared_ptr<const VerticalWindProfileUnit<ProfileRange>> frozen = std::move(filling);
     const auto unit = frozen;
-    AcqSaver::saveWindProfiles(frame, std::tuple{std::shared_ptr<const VerticalWindProfileUnit<profileSpec>>{}, unit});
+    AcqSaver::saveWindProfiles(frame, std::tuple{std::shared_ptr<const VerticalWindProfileUnit<ProfileRange>>{}, unit});
     const auto profile = readCompleted(root.filePath(sessionName + "/profile_" + AcqSaver::fileStem(at) + ".json"));
     const auto first = profile.value("channels").toArray()[0].toObject();
     check(profile.value("frame").toObject().value("session").toString() == sessionName
@@ -259,11 +256,11 @@ int main(int argc, char **argv)
     check(source->feed(payload, at), "lifetime frame did not complete");
     std::shared_ptr<const SavedFrame> sourceFrame = std::move(source);
     const std::weak_ptr<const SavedFrame> sourceWeak = sourceFrame;
-    auto result = std::make_shared<VerticalWindProfileUnit<profileSpec>>(at + std::chrono::seconds(10), 90.0);
+    auto result = std::make_shared<VerticalWindProfileUnit<ProfileRange>>(at + std::chrono::seconds(10), 90.0);
     (*result)[0] = LinAlg::Vec3(-5, 0, 0.5);
     (*result)[1] = LinAlg::Vec3(0, -3, 0);
     (*result)[3] = LinAlg::Vec3::Zeros();
-    std::shared_ptr<const VerticalWindProfileUnit<profileSpec>> onlyResult = std::move(result);
+    std::shared_ptr<const VerticalWindProfileUnit<ProfileRange>> onlyResult = std::move(result);
     AcqSaver::saveWindProfiles(std::move(sourceFrame), std::tuple{decltype(onlyResult){}, std::move(onlyResult)});
     check(sourceWeak.expired() && destroyedHere.load(), "profile saver retained Collector or destroyed it off-thread");
     const auto independent = readCompleted(root.filePath("released/profile_" + AcqSaver::fileStem(at) + ".json"));

@@ -65,12 +65,11 @@ private:
 
 // 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。
 // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
-inline constexpr DAQParams<UniformMapping<100.0, 30.0, 2>> testChannelParams{
-    .wavelengthM = 2e-6, .zeroWindMHz = 3.5,
-    .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .frequencyBinCount = 8,
-};
-class TestCollector final : public TypedDAQCollector<DAQChannel<testChannelParams>>
+using TestRange = UniformMapping<100.0, 30.0, 2>;
+using TestFrequency = DopplerMapping<UniformMapping<0.0, 1.0, 8>, 2e-6, 3.5>;
+using TestSpectrum = Spectrum<TestRange, TestFrequency>;
+using TestChannel = DAQChannel<TestRange, TestFrequency>;
+class TestCollector final : public TypedDAQCollector<TestChannel>
 {
 public:
     explicit TestCollector(const DAQParameters &p) : TypedDAQCollector(p) {}
@@ -85,11 +84,11 @@ private:
             return std::nullopt;
         frameTime_ = at;
         processedOn_ = QThread::currentThread();
-        auto values = std::make_unique<Spectrum<testChannelParams>>();
-        for (int row = 0; row < testChannelParams.rangeGateCount; ++row)
-            for (int column = 0; column < testChannelParams.frequencyBinCount; ++column)
-                (*values)[row * testChannelParams.frequencyBinCount + column] = 1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0);
-        return Frame{DAQChannel<testChannelParams>(std::move(values))};
+        auto values = std::make_unique<TestSpectrum>();
+        for (int row = 0; row < TestRange::count; ++row)
+            for (int column = 0; column < TestFrequency::count; ++column)
+                (*values)[row * TestFrequency::count + column] = 1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0);
+        return Frame{TestChannel(std::move(values))};
     }
     QThread *processedOn_ = nullptr;
 };
@@ -120,7 +119,7 @@ private:
     }
 };
 struct FakeChannel {};
-static_assert(DAQChannelLike<DAQChannel<testChannelParams>> && !DAQChannelLike<FakeChannel>);
+static_assert(DAQChannelLike<TestChannel> && !DAQChannelLike<FakeChannel>);
 static_assert(!std::derived_from<DAQFamily, QObject> && std::derived_from<TestDevice, TestHandle>);
 
 template<class Predicate> bool until(Predicate predicate)
@@ -139,11 +138,11 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     TestDevice device;
     int spectra = 0, radials = 0, profiles = 0, completed = 0;
-    std::weak_ptr<const Spectrum<testChannelParams>> notifiedSpectrum;
+    std::weak_ptr<const TestSpectrum> notifiedSpectrum;
     QObject::connect(&device, &TestDevice::channelsReady, &app, [&](const TestDevice::Channels &channels) {
         const auto &channel = std::get<0>(*channels);
         if (channel.spectrum->size() != 16 || QThread::currentThread() != app.thread()) qFatal("spectrum signal differs");
-        if (channel.radialWind->size() != 2 || testChannelParams.range.start != 100 || testChannelParams.range.step != 30
+        if (channel.radialWind->size() != 2 || TestRange::start != 100 || TestRange::step != 30
             || channel.cnr->size() != 2 || std::abs((*channel.radialWind)[0] - 0.5) > 0.05)
             qFatal("standard radial processing differs");
         notifiedSpectrum = channel.spectrum;

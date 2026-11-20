@@ -10,15 +10,17 @@
 
 实时回显通过 `worldForReadout` 选择世界角表示，默认复用 `worldOf`。铭辰保留越顶分支，任务读到的世界指向、标定和反演仍使用原换算。
 
-## 2026-11-20：均匀和非均匀距离门（用户定）
+## 2026-11-20：帧直接携带映射，删除 DAQParams（用户定）
 
-距离门映射是规格的**类型**，`DAQParams<Range>` 以它作模板参数；波长、频率和频点数仍是规格值。
+距离轴与频率轴都是映射类型，帧模板直接以它们作参数；`DAQParams` 与帧上的 `params` 已删除。
 
-- 均匀：`UniformMapping<Start, Step, GateCount>`，三个静态值；步长是权威值，覆盖终点 = Start + Step × GateCount（不做除法，末门右边界明确）。
-- 非均匀：`NonUniformMapping<Edges>` 的模板实参是一个 constexpr 函数，逐门边界表由它生成、映射内部静态持有 `std::array<double, N>`；类型名只带函数符号，421 点表也不会撑爆 QML 元类型签名（按值把 421 个边界写进类型曾触发 C2131）。型号只需写一个返回表的 constexpr 函数。
-- `RangeMapping` 约束静态 `uniform`、`gateCount`、`stop`、`at(gate)`；非均匀映射还须带 `edges`。均匀性由映射类型自己声明，`DAQParams::uniformRange` 直接读 `uniform`。
+- 均匀：`UniformMapping<Start, Step, Count>`，步长是权威值，覆盖终点 = Start + Step × Count。
+- 非均匀：`NonUniformMapping<Edges>` 的模板实参是一个 constexpr 函数，表由它生成、映射内部静态持有 `std::array<double, N>`；类型名只带函数符号，421 点表也不会撑爆 QML 元类型签名（按值把 421 个边界写进类型曾触发 C2131）。
+- 频率轴：`DopplerMapping<Frequency, WavelengthM, ZeroWindMHz>` 继承频率映射的坐标接口，另给 MHz→m/s 的 `velocityAt(bin)` 与标定常数；多普勒标定不再单独存放。
+- `Mapping` 约束 `uniform`、`count`、`stop`、`at(index)`，非均匀映射须带 `edges`；均匀性由映射类型自己声明。
+- 帧：`Spectrum<Range, Frequency>`（两映射）、`RadialWind<Range>`、`CNR<Range>`、`VerticalWindProfileUnit<Range>`、`DAQChannel<Range, Frequency>`；数组尺寸与循环上界取自映射的 `count`。
 
-功率谱、径向风、CNR 和风廓线通过静态规格确定数组尺寸，共用同一规格，帧内只存各自的载荷。风廓线按斜距和每帧仰角取各门高度，按实际相邻层插值。
+风廓线高度 = 距离点坐标 × sin(运行时仰角)，按实际相邻层插值。
 
 均匀通道的 JSON 字段保持。非均匀采集数据使用 `rangeM` 和 `rangeStopM`，非均匀风廓线使用 `heightM` 和 `heightStopM`。各坐标表分别对应当前文件的每个距离门或高度层，覆盖终点单独保存。Windows Release：FamilyCore CTest 16/16、ChartCore 4/4、四个采集卡官邸 CTest 通过，主程序整编零警告、8 秒离屏冒烟与基线一致。
 
@@ -42,7 +44,7 @@ Windows Release CTest 16/16。落盘测试核对带中文、空格及特殊字�
 
 ## 2026-11-20：采集通道规格按值进入模板
 
-官邸定义 `constexpr DAQParams`，功率谱、径向风、CNR 和风廓线以该值实例化。网格约束仍在编译期检查，运行帧不重复保存轴配置。通道名由官邸提供，属于采集结果的元数据。风廓线保存按原通道下标取名称，跳过缺测通道时仍保留其余通道的正确名称。
+官邸定义映射类型与帧别名，功率谱、径向风、CNR 和风廓线以映射类型实例化。网格约束仍在编译期检查，运行帧不重复保存轴配置。通道名由官邸提供，属于采集结果的元数据。风廓线保存按原通道下标取名称，跳过缺测通道时仍保留其余通道的正确名称。
 
 ## 2026-11-20：测试移除 LinearArray 依赖
 

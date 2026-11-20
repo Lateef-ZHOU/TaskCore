@@ -39,29 +39,29 @@ struct DAQParameters
     const bool sync;
 };
 
-// 通道只持原帧的只读份额，规格不在帧中重复存储。型号直接填满最终谱数组，
+// 通道只持原帧的只读份额，轴规格不在帧中重复存储。型号直接填满最终谱数组，
 // 交入唯一份额后计算径向风与 CNR；通道本身只复制共享指针，不复制数据。
-template<auto P>
+template<class Range, class Frequency> requires ValidGrid<Range, Frequency>
 struct DAQChannel
 {
     // 型号提供静态寿命的 UTF-8 通道名，供异步保存使用。
     const char *name = nullptr;
 
     // 前置条件：交入非空、已完整填写的谱；协议完整性由型号 assemble 负责。
-    explicit DAQChannel(std::unique_ptr<Spectrum<P>> values, const char* channelName = nullptr)
+    explicit DAQChannel(std::unique_ptr<Spectrum<Range, Frequency>> values, const char* channelName = nullptr)
         : DAQChannel(RadialWindCalculation::Calc(*values), values, channelName) {}
 
-    std::shared_ptr<const Spectrum<P>> spectrum;
-    std::shared_ptr<const RadialWind<P>> radialWind;
-    std::shared_ptr<const CNR<P>> cnr;
+    std::shared_ptr<const Spectrum<Range, Frequency>> spectrum;
+    std::shared_ptr<const RadialWind<Range>> radialWind;
+    std::shared_ptr<const CNR<Range>> cnr;
 private:
     // 以引用交接唯一份额：拟合结束后才移入成员，不依赖实参求值顺序。
-    DAQChannel(RadialWindCalculation::Result<P> wind, std::unique_ptr<Spectrum<P>> &values, const char* channelName)
+    DAQChannel(RadialWindCalculation::Result<Range> wind, std::unique_ptr<Spectrum<Range, Frequency>> &values, const char* channelName)
         : name(channelName), spectrum(std::move(values)), radialWind(std::move(wind.ws)), cnr(std::move(wind.cnr)) {}
 };
 
 template<class> inline constexpr bool isDAQChannel = false;
-template<auto P> inline constexpr bool isDAQChannel<DAQChannel<P>> = true;
+template<class Range, class Frequency> inline constexpr bool isDAQChannel<DAQChannel<Range, Frequency>> = true;
 template<class C> concept DAQChannelLike = isDAQChannel<C>;
 
 // 族基：等待器、任务与完成回调只认它（参数、帧时刻、是否判齐），不读通道；交付后只读。
