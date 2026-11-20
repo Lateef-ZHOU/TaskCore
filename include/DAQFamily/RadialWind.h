@@ -21,12 +21,6 @@
 // ============================================================
 namespace RadialWindCalculation
 {
-// 相干多普勒测风：径向风速 v = λ·f_D / 2，每 MHz 频移对应 λ/2 × 10⁶ m/s（λ 以米计；1550 nm → 0.775）。
-// 这是型号侧的换算式，族基不持有波长；官邸用它构造「下标 → 风速」映射。
-[[nodiscard]] constexpr double metersPerSecondPerMHz(const double wavelengthM) noexcept
-{
-    return wavelengthM / 2.0 * 1e6;
-}
 
 // 风速映射在下标处的取值；分数下标（拟合峰位）在相邻两点间线性插值。
 template<class Wind> requires Mapping<Wind>
