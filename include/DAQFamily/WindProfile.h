@@ -1,8 +1,10 @@
 #pragma once
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <vector>
 #include <memory>
@@ -26,7 +28,7 @@ namespace WindProfile
     // 这是业务约束，不是解出三个风分量的数学最小束数；改变扫描束数还须同步修改计划页面与编排。
     inline constexpr int kBeams = 4;
 
-    template<DAQParams P>
+    template<auto P>
     struct Input
     {
         /// 该波束的**世界朝向**（只读方位与高度；翻滚与光束无关）。**空 = 朝向未知**。
@@ -36,36 +38,56 @@ namespace WindProfile
         std::shared_ptr<const RadialWind<P>> ws; ///< 逐门径向风速；斜距由 Spec 确定
     };
 
-    // 按高度采样原帧；网格有限且步长为正，覆盖外取端值，邻点缺测时不插值。
-    template<DAQParams P>
+    // 正仰角对应递增高度网格；斜距门序在编译期校验。
+    template<auto P>
     [[nodiscard]] bool hasValidGrid(const VerticalWindProfileUnit<P> &frame) noexcept
     {
-        const double start = frame.heightStartM(), step = frame.heightStepM();
-        return std::isfinite(start) && std::isfinite(step) && step > 0.0
-            && std::isfinite(start + step * (frame.size() - 1));
+        if constexpr (P.uniformRange)
+            return frame.heightStepM() > 0.0 && std::isfinite(frame.heightStartM())
+                && std::isfinite(frame.heightAt(frame.size() - 1));
+        else
+            return frame.heightScale() > 0.0 && std::isfinite(frame.heightStartM())
+                && std::isfinite(frame.heightAt(frame.size() - 1));
     }
 
-    template<DAQParams P>
+    template<auto P>
     [[nodiscard]] std::optional<LinAlg::Vec3> windAt(const VerticalWindProfileUnit<P> &frame,
                                                    const double heightM) noexcept
     {
         if (!hasValidGrid(frame) || !std::isfinite(heightM)) return std::nullopt;
-        const double start = frame.heightStartM(), step = frame.heightStepM();
+        const double start = frame.heightStartM();
         if (heightM <= start || frame.size() == 1) return frame.front();
-        if (heightM >= start + step * (frame.size() - 1)) return frame.back();
-        const double position = (heightM - start) / step;
-        const auto low = static_cast<std::size_t>(position);
-        if (low >= frame.size() - 1) return frame.back();
-        // 与正向高度映射一致，避免小数步长使节点被误当作插值。
-        if (heightM == start + step * low) return frame[low];
-        if (heightM == start + step * (low + 1)) return frame[low + 1];
-        const double fraction = position - static_cast<double>(low);
+        if (heightM >= frame.heightAt(frame.size() - 1)) return frame.back();
+        std::size_t low;
+        double fraction;
+        if constexpr (P.uniformRange)
+        {
+            const double step = frame.heightStepM();
+            const double position = (heightM - start) / step;
+            low = static_cast<std::size_t>(position);
+            if (low >= frame.size() - 1) return frame.back();
+            if (heightM == frame.heightAt(low)) return frame[low];
+            if (heightM == frame.heightAt(low + 1)) return frame[low + 1];
+            fraction = position - static_cast<double>(low);
+        }
+        else
+        {
+            const auto gates = std::views::iota(std::size_t{0}, frame.size());
+            const auto high = *std::ranges::lower_bound(gates, heightM, {}, [&frame](std::size_t gate) {
+                return frame.heightAt(gate);
+            });
+            const auto upper = frame.heightAt(high);
+            if (heightM == upper) return frame[high];
+            low = high - 1;
+            const auto lower = frame.heightAt(low);
+            fraction = (heightM - lower) / (upper - lower);
+        }
         if (!frame[low] || !frame[low + 1]) return std::nullopt;
         return *frame[low] * (1.0 - fraction) + *frame[low + 1] * fraction;
     }
 
     // 反演直接生成带到料时刻的只读整帧；层数组属于该帧，失败返回空份额。
-    template<DAQParams P>
+    template<auto P>
     [[nodiscard]] std::shared_ptr<const VerticalWindProfileUnit<P>> Calc(std::span<const Input<P>> beams,
         std::chrono::system_clock::time_point at)
     {

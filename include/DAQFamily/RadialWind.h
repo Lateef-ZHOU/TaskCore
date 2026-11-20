@@ -26,14 +26,14 @@ namespace RadialWindCalculation
 }
 
 // 两个独立量纲的静态产物；只读份额保留原通道规格。
-template<DAQParams P>
+template<auto P>
 struct Result
 {
     std::shared_ptr<const RadialWind<P>> ws;
     std::shared_ptr<const CNR<P>> cnr;
 };
 
-template<DAQParams P>
+template<auto P>
 [[nodiscard]] Result<P> Calc(const Spectrum<P> &spectrum)
 {
     if constexpr (P.frequencyBinCount < 2) return {};

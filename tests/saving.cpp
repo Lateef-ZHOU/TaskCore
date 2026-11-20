@@ -88,12 +88,15 @@ inline constexpr DAQParams savedA{
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .rangeGateCount = 2, .frequencyBinCount = 4,
 };
-inline constexpr DAQParams savedB{
+inline constexpr std::array savedBEdges{0.0, 15.0, 75.0};
+inline constexpr NonUniformDAQParams<savedBEdges> savedB{
     .wavelengthM = 1.55e-6, .zeroWindMHz = std::numeric_limits<double>::quiet_NaN(),
-    .rangeStartM = 0, .rangeStepM = 15,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .rangeGateCount = 2, .frequencyBinCount = 4,
+    .frequencyBinCount = 4,
 };
+inline constexpr std::array badEdges{0.0, 15.0, 15.0};
+inline constexpr NonUniformDAQParams<badEdges> badRange{.frequencyStepMHz = 1, .frequencyBinCount = 4};
+static_assert(ValidDAQGrid<savedB> && !ValidDAQGrid<badRange>);
 inline constexpr DAQParams profileSpec{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
     .rangeStartM = 10, .rangeStepM = 10,
@@ -191,6 +194,26 @@ int main(int argc, char **argv)
           "spectrum rows differ");
     check(a.value("radialWind").toArray().size() == 2 && !a.value("radialWind").toArray()[0].isNull(), "wind missing");
     check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "missing wind not null");
+    check(!a.contains("rangeM") && !b.contains("rangeStartM") && !b.contains("rangeStepM")
+              && b.value("rangeM").toArray() == QJsonArray{0, 15}
+              && b.value("rangeStopM").toDouble() == 75 && b.value("spectrum").toArray().size() == 2,
+          "uniform and non-uniform range axes did not retain their own JSON layout");
+
+    auto mixedSource = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, saveRoot, "mixed-profile", true));
+    check(mixedSource->feed(payload, at), "mixed profile source did not complete");
+    auto mixedResult = std::make_shared<VerticalWindProfileUnit<savedB>>(at, 30.0);
+    (*mixedResult)[1] = LinAlg::Vec3(1, 0, 2);
+    AcqSaver::saveWindProfiles(std::shared_ptr<const SavedFrame>(std::move(mixedSource)),
+        std::tuple{std::shared_ptr<const VerticalWindProfileUnit<savedB>>{},
+                   std::shared_ptr<const VerticalWindProfileUnit<savedB>>(std::move(mixedResult))});
+    const auto mixed = readCompleted(root.filePath("mixed-profile/profile_" + AcqSaver::fileStem(at) + ".json"))
+        .value("channels").toArray()[0].toObject();
+    const auto mixedHeights = mixed.value("heightM").toArray();
+    check(!mixed.contains("heightStepM") && mixedHeights.size() == 2 && mixedHeights[0].toDouble(-1) == 0
+              && std::abs(mixedHeights[1].toDouble() - 7.5) < 1e-12
+              && std::abs(mixed.value("heightStopM").toDouble() - 37.5) < 1e-12 && mixed.value("verticalSpeed").toArray()[0].isNull()
+              && mixed.value("verticalSpeed").toArray()[1].toDouble() == 2,
+          "non-uniform profile height and missing gate were not saved");
 
     // 频点不足仍保存原谱；旧格式中无法拟合的两个产物保持空数组。
     auto single = std::make_shared<SingleBinFrame>(DAQParameters(TestKey(), 1, std::nullopt, saveRoot, "single", false));

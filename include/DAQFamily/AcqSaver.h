@@ -64,7 +64,7 @@ public:
     }
 
     // 同步点的一组风廓线落盘；线程只保留上下文、同步帧时刻和结果份额，不延长 Collector 寿命。
-    template<DAQCollectorLike C, DAQParams... Ps>
+    template<DAQCollectorLike C, auto... Ps>
     static void saveWindProfiles(std::shared_ptr<const C> frame,
         std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Ps>>...> channels)
     {
@@ -130,18 +130,18 @@ private:
             }
             file_.write("\"" + escaped + "\"");
         }
-        void number(const double value)
+        void number(const double value, const int precision = 6)
         {
-            file_.write(std::isfinite(value) ? QByteArray::number(value, 'g', 6) : QByteArrayLiteral("null"));
+            file_.write(std::isfinite(value) ? QByteArray::number(value, 'g', precision) : QByteArrayLiteral("null"));
         }
         template<class Values>
-        void numbers(const Values &values)
+        void numbers(const Values &values, const int precision = 6)
         {
             file_.write("[");
             bool first = true;
             for (const double value : values) {
                 if (!first) file_.write(",");
-                number(value);
+                number(value, precision);
                 first = false;
             }
             file_.write("]");
@@ -190,7 +190,7 @@ private:
     }
 
     // 一路通道：规格、功率谱、径向风与 CNR。
-    template <DAQParams P>
+    template <auto P>
     static void writeChannel(Writer &out, const DAQChannel<P> &channel, bool &first)
     {
         if (!first) out.raw(",");
@@ -198,8 +198,17 @@ private:
         out.raw("{");
         out.key("name"); out.text(QString::fromUtf8(channel.name ? channel.name : "")); out.raw(",");
         const auto &spectrum = *channel.spectrum;
-        out.key("rangeStartM"); out.number(P.rangeStartM); out.raw(",");
-        out.key("rangeStepM"); out.number(P.rangeStepM); out.raw(",");
+        if constexpr (P.uniformRange)
+        {
+            out.key("rangeStartM"); out.number(P.rangeStartM); out.raw(",");
+            out.key("rangeStepM"); out.number(P.rangeStepM); out.raw(",");
+        }
+        else
+        {
+            constexpr int precision = std::numeric_limits<double>::max_digits10;
+            out.key("rangeM"); out.numbers(P.range.edges.first(P.rangeGateCount), precision); out.raw(",");
+            out.key("rangeStopM"); out.number(P.rangeStopM(), precision); out.raw(",");
+        }
         out.key("freqStartMHz"); out.number(P.frequencyStartMHz); out.raw(",");
         out.key("freqStepMHz"); out.number(P.frequencyStepMHz); out.raw(",");
         out.key("zeroWindMHz"); out.number(P.zeroWindMHz); out.raw(",");
@@ -216,7 +225,7 @@ private:
     }
 
     // [独立线程] 同步点一份风廓线 JSON；风向为气象来向，0–360°。
-    template<DAQParams... Ps>
+    template<auto... Ps>
     static void writeWindProfiles(const DAQParameters &context, const RxTime at,
         const std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Ps>>...> &channels,
         const QStringList &names)
@@ -231,7 +240,7 @@ private:
         out.raw("[");
         bool first = true;
         int nameIndex = 0;
-        const auto writeChannel = [&]<DAQParams P>(const std::shared_ptr<const VerticalWindProfileUnit<P>> &pointer) {
+        const auto writeChannel = [&]<auto P>(const std::shared_ptr<const VerticalWindProfileUnit<P>> &pointer) {
             const int index = nameIndex++;
             if (!pointer) return;
             const auto &profile = *pointer;
@@ -239,8 +248,19 @@ private:
             first = false;
             out.raw("{");
             out.key("name"); out.text(names.value(index)); out.raw(",");
-            out.key("heightStartM"); out.number(profile.heightStartM()); out.raw(",");
-            out.key("heightStepM"); out.number(profile.heightStepM()); out.raw(",");
+            if constexpr (P.uniformRange)
+            {
+                out.key("heightStartM"); out.number(profile.heightStartM()); out.raw(",");
+                out.key("heightStepM"); out.number(profile.heightStepM()); out.raw(",");
+            }
+            else
+            {
+                constexpr int precision = std::numeric_limits<double>::max_digits10;
+                const auto scale = profile.heightScale();
+                out.key("heightM"); out.numbers(P.range.edges.first(P.rangeGateCount)
+                    | std::views::transform([scale](double range) { return range * scale; }), precision); out.raw(",");
+                out.key("heightStopM"); out.number(P.rangeStopM() * scale, precision); out.raw(",");
+            }
             out.key("horizontalDirectionDeg"); out.numbers(profile.values() | std::views::transform([](const auto &wind) {
                 if (!wind) return std::numeric_limits<double>::quiet_NaN();
                 double from = std::atan2(-wind->x(), -wind->y()) * 180.0 / std::numbers::pi;

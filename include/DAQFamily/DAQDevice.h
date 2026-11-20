@@ -50,7 +50,7 @@ template <HandleLike HandleT, DAQCollectorLike CollectorT>
 class DAQDevice : public FamilyDevice<HandleT, CollectorT, DAQFamily>
 {
     // 仅推导各通道结果类型，不构造数据或擦除 Spec。
-    template<DAQParams... Ps>
+    template<auto... Ps>
     static auto profileTypes(const std::tuple<DAQChannel<Ps>...> &)
         -> std::tuple<std::shared_ptr<const VerticalWindProfileUnit<Ps>>...>;
 public:
@@ -175,7 +175,7 @@ private:
     template <std::size_t I>
     auto invert(const CollectorT &frame) const
     {
-        return [&]<DAQParams P>(const DAQChannel<P> &) {
+        return [&]<auto P>(const DAQChannel<P> &) {
             std::array<WindProfile::Input<P>, WindProfile::kBeams> inputs;
             for (std::size_t beam = 0; beam < inputs.size(); ++beam)
                 inputs[beam] = {beams_[beam]->parameters.pose, std::get<I>(beams_[beam]->channels()).radialWind};
