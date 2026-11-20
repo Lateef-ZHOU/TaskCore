@@ -96,9 +96,9 @@ struct MissingWind : UniformMapping<-1.1625, 0.775, 4>
 };
 using SavedBSpectrum = Spectrum<SavedBRange, SavedAFrequency>;
 using SavedBChannel = DAQChannel<SavedBRange, SavedAFrequency>;
-constexpr std::array<double, 3> badEdges() { return {0.0, 15.0, 15.0}; }
-using BadRange = NonUniformMapping<badEdges>;
-static_assert(ValidGrid<SavedBRange, SavedAFrequency> && !ValidAxis<BadRange>);
+// 轴的有效性由映射类型自己校验；这里直接验证表检查本身。
+static_assert(DAQDetail::strictlyIncreasing(std::array{0.0, 15.0, 75.0}));
+static_assert(!DAQDetail::strictlyIncreasing(std::array{0.0, 15.0, 15.0}));
 using ProfileRange = UniformMapping<10.0, 10.0, 4>;
 class SavedFrame final : public TypedDAQCollector<SavedAChannel, SavedBChannel>
 {

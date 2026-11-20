@@ -28,7 +28,7 @@ namespace WindProfile
     // 这是业务约束，不是解出三个风分量的数学最小束数；改变扫描束数还须同步修改计划页面与编排。
     inline constexpr int kBeams = 4;
 
-    template<class Range> requires ValidAxis<Range>
+    template<class Range> requires Mapping<Range>
     struct Input
     {
         /// 该波束的**世界朝向**（只读方位与高度；翻滚与光束无关）。**空 = 朝向未知**。
@@ -39,7 +39,7 @@ namespace WindProfile
     };
 
     // 正仰角对应递增高度网格；距离轴顺序在编译期校验。
-    template<class Range> requires ValidAxis<Range>
+    template<class Range> requires Mapping<Range>
     [[nodiscard]] bool hasValidGrid(const VerticalWindProfileUnit<Range> &frame) noexcept
     {
         if constexpr (Range::uniform)
@@ -50,7 +50,7 @@ namespace WindProfile
                 && std::isfinite(frame.heightAt(frame.size() - 1));
     }
 
-    template<class Range> requires ValidAxis<Range>
+    template<class Range> requires Mapping<Range>
     [[nodiscard]] std::optional<LinAlg::Vec3> windAt(const VerticalWindProfileUnit<Range> &frame,
                                                    const double heightM) noexcept
     {
@@ -87,7 +87,7 @@ namespace WindProfile
     }
 
     // 反演直接生成带到料时刻的只读整帧；层数组属于该帧，失败返回空份额。
-    template<class Range> requires ValidAxis<Range>
+    template<class Range> requires Mapping<Range>
     [[nodiscard]] std::shared_ptr<const VerticalWindProfileUnit<Range>> Calc(std::span<const Input<Range>> beams,
         std::chrono::system_clock::time_point at)
     {

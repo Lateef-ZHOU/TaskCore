@@ -16,24 +16,14 @@ namespace DAQDetail {
 [[nodiscard]] constexpr bool finite(double value) noexcept
 { return value >= std::numeric_limits<double>::lowest() && value <= std::numeric_limits<double>::max(); }
 
-// 一条轴：均匀轴查起点/步长/终点，非均匀轴逐点验严格递增。
-template<class T>
-[[nodiscard]] consteval bool validAxis() noexcept
+// 非均匀轴：逐点有限且严格递增。有效性由映射自己在类型上保证，帧不再重复校验。
+template<std::size_t N>
+[[nodiscard]] constexpr bool strictlyIncreasing(const std::array<double, N> &values) noexcept
 {
-    if constexpr (T::uniform)
-        return finite(T::start) && T::step > 0.0 && finite(T::stop);
-    else
-    {
-        auto before = T::at(0);
-        if (!finite(before)) return false;
-        for (std::size_t i = 1; i <= static_cast<std::size_t>(T::count); ++i)
-        {
-            const auto current = T::at(i);
-            if (!finite(current) || current <= before) return false;
-            before = current;
-        }
-        return true;
-    }
+    if (!finite(values[0])) return false;
+    for (std::size_t i = 1; i < N; ++i)
+        if (!finite(values[i]) || !(values[i] > values[i - 1])) return false;
+    return true;
 }
 } // namespace DAQDetail
 
@@ -60,6 +50,7 @@ struct UniformMapping
     static constexpr double step = Step;
     static constexpr int count = Count;
     static constexpr double stop = Start + Step * static_cast<double>(Count);
+    static_assert(DAQDetail::finite(stop), "轴的覆盖终点须有限");
 
     [[nodiscard]] static constexpr double at(std::size_t index) noexcept
     { return Start + Step * static_cast<double>(index); }
@@ -73,21 +64,12 @@ struct NonUniformMapping
     static constexpr bool uniform = false;
     static constexpr auto edges = Edges();
     static_assert(edges.size() > 1, "非均匀映射至少需要首点坐标和覆盖终点");
+    static_assert(DAQDetail::strictlyIncreasing(edges), "非均匀映射的坐标须有限且严格递增");
     static constexpr int count = static_cast<int>(edges.size()) - 1;
     static constexpr double stop = edges.back();
 
     [[nodiscard]] static constexpr double at(std::size_t index) noexcept { return edges[index]; }
 };
-
-// 一条轴可作帧维度：映射有效、点数正、坐标严格递增。
-template<class Range>
-concept ValidAxis = Mapping<Range> && Range::count > 0 && DAQDetail::validAxis<Range>();
-
-// 功率谱两维：距离轴与频率轴。频率轴可以是均匀或非均匀映射，族基不假设线性。
-template<class Range, class Frequency>
-concept ValidGrid = ValidAxis<Range> && ValidAxis<Frequency>
-    && static_cast<std::size_t>(Range::count) <= std::numeric_limits<std::size_t>::max()
-        / sizeof(double) / static_cast<std::size_t>(Frequency::count);
 
 // 新整帧的时间必须在类型上不可变；通用 WallClockElement 的时间提取契约不变。
 template<class Frame>
@@ -96,7 +78,7 @@ concept ImmutableWallClockFrame = requires {
 };
 
 // 一帧功率谱：距离点逐行、频点逐列；规格不占实例空间，唯一数据存储是固定长度 double 数组。
-template<class Range, class Frequency> requires ValidGrid<Range, Frequency>
+template<class Range, class Frequency> requires Mapping<Range> && Mapping<Frequency>
 class Spectrum : private std::array<double, static_cast<std::size_t>(Range::count) * static_cast<std::size_t>(Frequency::count)>
 {
     using Array = std::array<double, static_cast<std::size_t>(Range::count) * static_cast<std::size_t>(Frequency::count)>;
@@ -126,7 +108,7 @@ public:
 };
 
 // 一帧径向风速：每个距离点一个 double（m/s）。
-template<class Range> requires ValidAxis<Range>
+template<class Range> requires Mapping<Range>
 class RadialWind : private std::array<double, static_cast<std::size_t>(Range::count)>
 {
 public:
@@ -143,7 +125,7 @@ public:
 };
 
 // 一帧信噪比：每个距离点一个 double（dB）。
-template<class Range> requires ValidAxis<Range>
+template<class Range> requires Mapping<Range>
 class CNR : private std::array<double, static_cast<std::size_t>(Range::count)>
 {
 public:
@@ -161,7 +143,7 @@ public:
 
 // 通道反演结果：每个距离点一个 ENU 风矢量（m/s）；nullopt 为缺测，零向量为静风。
 // 高度 = 距离点坐标 × sin(仰角)，仰角随帧（运行时）保存。
-template<class Range> requires ValidAxis<Range>
+template<class Range> requires Mapping<Range>
 struct VerticalWindProfileUnit : public std::array<std::optional<LinAlg::Vec3>, static_cast<std::size_t>(Range::count)>
 {
     using RangeType = Range;
