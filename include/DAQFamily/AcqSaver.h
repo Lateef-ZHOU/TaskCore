@@ -212,7 +212,6 @@ private:
         static_assert(Frequency::uniform, "非均匀频率轴尚无保存格式");
         out.key("freqStartMHz"); out.number(Frequency::start); out.raw(",");
         out.key("freqStepMHz"); out.number(Frequency::step); out.raw(",");
-        out.key("zeroWindMHz"); out.number(Frequency::zeroWindMHz); out.raw(",");
         out.key("spectrum");
         out.raw("[");
         for (int row = 0; row < Range::count; ++row) {

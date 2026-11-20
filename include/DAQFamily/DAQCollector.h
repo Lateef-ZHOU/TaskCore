@@ -48,8 +48,10 @@ struct DAQChannel
     const char *name = nullptr;
 
     // 前置条件：交入非空、已完整填写的谱；协议完整性由型号 assemble 负责。
-    explicit DAQChannel(std::unique_ptr<Spectrum<Range, Frequency>> values, const char* channelName = nullptr)
-        : DAQChannel(RadialWindCalculation::Calc(*values), values, channelName) {}
+    // 风速由型号交入的「下标 → 风速」映射换算；族基不认识波长与零风速参考。
+    template<class Wind> requires Mapping<Wind>
+    explicit DAQChannel(std::unique_ptr<Spectrum<Range, Frequency>> values, Wind wind, const char* channelName = nullptr)
+        : DAQChannel(RadialWindCalculation::Calc(*values, wind), values, channelName) {}
 
     std::shared_ptr<const Spectrum<Range, Frequency>> spectrum;
     std::shared_ptr<const RadialWind<Range>> radialWind;

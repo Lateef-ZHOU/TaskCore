@@ -66,7 +66,8 @@ private:
 // 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。
 // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
 using TestRange = UniformMapping<100.0, 30.0, 2>;
-using TestFrequency = DopplerMapping<UniformMapping<0.0, 1.0, 8>, 2e-6, 3.5>;
+using TestFrequency = UniformMapping<0.0, 1.0, 8>;
+using TestWind = UniformMapping<-3.5, 1.0, 8>;
 using TestSpectrum = Spectrum<TestRange, TestFrequency>;
 using TestChannel = DAQChannel<TestRange, TestFrequency>;
 class TestCollector final : public TypedDAQCollector<TestChannel>
@@ -88,7 +89,7 @@ private:
         for (int row = 0; row < TestRange::count; ++row)
             for (int column = 0; column < TestFrequency::count; ++column)
                 (*values)[row * TestFrequency::count + column] = 1.0 + 100.0 * std::exp(-(column - 4.0) * (column - 4.0) / 2.0);
-        return Frame{TestChannel(std::move(values))};
+        return Frame{TestChannel(std::move(values), TestWind{})};
     }
     QThread *processedOn_ = nullptr;
 };

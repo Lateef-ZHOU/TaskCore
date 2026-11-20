@@ -4,7 +4,7 @@
 #include <utility>
 
 using ImmutableRange = UniformMapping<30.0, 15.0, 3>;
-using ImmutableFrequency = DopplerMapping<UniformMapping<79.0, 1.0, 2>, 1.55e-6, 80.0>;
+using ImmutableFrequency = UniformMapping<79.0, 1.0, 2>;
 using ImmutableSpectrum = Spectrum<ImmutableRange, ImmutableFrequency>;
 using Frame = VerticalWindProfileUnit<ImmutableRange>;
 static_assert(std::is_nothrow_constructible_v<Frame, std::chrono::system_clock::time_point, double>);

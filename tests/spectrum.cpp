@@ -8,7 +8,8 @@
 #include <span>
 
 using TestRange = UniformMapping<30.0, 15.0, 2>;
-using TestFrequency = DopplerMapping<UniformMapping<10.0, 2.0, 17>, 1.55e-6, 18.0>;
+using TestFrequency = UniformMapping<10.0, 2.0, 17>;
+using TestWind = UniformMapping<0.0, 1.0, 17>;
 using TestSpectrum = Spectrum<TestRange, TestFrequency>;
 
 // 帧类型的基本布局和行为。
@@ -40,17 +41,17 @@ static_assert(StationaryObject<TestSpectrum> && StationaryObject<RadialWind<Test
 static_assert(!std::same_as<RadialWind<TestRange>, CNR<TestRange>>);
 
 // 映射的静态成员。
-static_assert(TestFrequency::wavelengthM == 1.55e-6);
-static_assert(TestFrequency::zeroWindMHz == 18.0);
+static_assert(TestFrequency::count == 17);
+static_assert(TestWind::count == TestFrequency::count);
 static_assert(TestRange::count == 2);
 
 // 不同的标定即不同类型。
-using ShiftedFrequency = DopplerMapping<UniformMapping<10.0, 2.0, 17>, 1.6e-6, 16.0>;
+using ShiftedFrequency = UniformMapping<10.0, 1.0, 17>;
 static_assert(!std::same_as<TestSpectrum, Spectrum<TestRange, ShiftedFrequency>>);
 
 // 径向风计算入口。
 template<class T>
-concept CanCalculate = requires(const T &value) { RadialWindCalculation::Calc(value); };
+concept CanCalculate = requires(const T &value, TestWind wind) { RadialWindCalculation::Calc(value, wind); };
 static_assert(CanCalculate<TestSpectrum>);
 
 // 径向风帧的基本读写。

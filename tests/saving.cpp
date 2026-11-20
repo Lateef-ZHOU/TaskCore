@@ -83,21 +83,22 @@ QString waitDiagnostic(const std::size_t index)
 
 // 两路：A 正常换算；B 以 NaN 参考造出缺测风速，检查缺测写成 null。
 using SavedARange = UniformMapping<0.0, 15.0, 2>;
-using SavedAFrequency = DopplerMapping<UniformMapping<0.0, 1.0, 4>, 1.55e-6, 1.5>;
+using SavedAFrequency = UniformMapping<0.0, 1.0, 4>;
+using SavedAWind = UniformMapping<-1.1625, 0.775, 4>;
 using SavedASpectrum = Spectrum<SavedARange, SavedAFrequency>;
 using SavedAChannel = DAQChannel<SavedARange, SavedAFrequency>;
 constexpr std::array<double, 3> savedBEdges() { return {0.0, 15.0, 75.0}; }
 using SavedBRange = NonUniformMapping<savedBEdges>;
-// B 路要造缺测风速：频率映射照常，只把速度视图换成 NaN，避免把 NaN 当非类型模板实参。
-struct MissingWindFrequency : DopplerMapping<UniformMapping<0.0, 1.0, 4>, 1.55e-6, 1.5>
+// B 路要造缺测风速：频率轴照常，只把「下标 → 风速」映射换成恒 NaN。
+struct MissingWind : UniformMapping<-1.1625, 0.775, 4>
 {
-    [[nodiscard]] static double velocityAt(double) noexcept { return std::numeric_limits<double>::quiet_NaN(); }
+    [[nodiscard]] static double at(std::size_t) noexcept { return std::numeric_limits<double>::quiet_NaN(); }
 };
-using SavedBSpectrum = Spectrum<SavedBRange, MissingWindFrequency>;
-using SavedBChannel = DAQChannel<SavedBRange, MissingWindFrequency>;
+using SavedBSpectrum = Spectrum<SavedBRange, SavedAFrequency>;
+using SavedBChannel = DAQChannel<SavedBRange, SavedAFrequency>;
 constexpr std::array<double, 3> badEdges() { return {0.0, 15.0, 15.0}; }
 using BadRange = NonUniformMapping<badEdges>;
-static_assert(ValidGrid<SavedBRange, MissingWindFrequency> && !ValidAxis<BadRange>);
+static_assert(ValidGrid<SavedBRange, SavedAFrequency> && !ValidAxis<BadRange>);
 using ProfileRange = UniformMapping<10.0, 10.0, 4>;
 class SavedFrame final : public TypedDAQCollector<SavedAChannel, SavedBChannel>
 {
@@ -114,13 +115,14 @@ private:
         auto b = std::make_unique<SavedBSpectrum>();
         std::copy(values.begin(), values.end(), a->begin());
         std::copy(values.begin(), values.end(), b->begin());
-        return Frame{SavedAChannel(std::move(a), "A"), SavedBChannel(std::move(b), "B")};
+        return Frame{SavedAChannel(std::move(a), SavedAWind{}, "A"), SavedBChannel(std::move(b), MissingWind{}, "B")};
     }
 };
 static_assert(DAQCollectorLike<SavedFrame>);
 
 using SingleBinRange = UniformMapping<0.0, 15.0, 2>;
-using SingleBinFrequency = DopplerMapping<UniformMapping<0.0, 1.0, 1>, 1.55e-6, 1.5>;
+using SingleBinFrequency = UniformMapping<0.0, 1.0, 1>;
+using SingleBinWind = UniformMapping<-1.1625, 0.775, 1>;
 using SingleBinSpectrum = Spectrum<SingleBinRange, SingleBinFrequency>;
 using SingleBinChannel = DAQChannel<SingleBinRange, SingleBinFrequency>;
 class SingleBinFrame final : public TypedDAQCollector<SingleBinChannel>
@@ -135,7 +137,7 @@ private:
         frameTime_ = at;
         auto values = std::make_unique<SingleBinSpectrum>();
         (*values)[0] = 3; (*values)[1] = 4;
-        return Frame{SingleBinChannel(std::move(values), "A")};
+        return Frame{SingleBinChannel(std::move(values), SingleBinWind{}, "A")};
     }
 };
 
@@ -181,8 +183,7 @@ int main(int argc, char **argv)
     const auto a = channels[0].toObject(), b = channels[1].toObject();
     check(a.value("name").toString() == "A" && b.value("name").toString() == "B", "channel order or names differ");
     check(a.value("rangeStartM").toDouble() == 0 && a.value("rangeStepM").toDouble() == 15
-          && a.value("freqStartMHz").toDouble() == 0 && a.value("freqStepMHz").toDouble() == 1
-          && a.value("zeroWindMHz").toDouble() == 1.5, "channel axes differ");
+          && a.value("freqStartMHz").toDouble() == 0 && a.value("freqStepMHz").toDouble() == 1, "channel axes differ");
     const auto spectrum = a.value("spectrum").toArray();
     check(spectrum.size() == 2 && spectrum[0].toArray().size() == 4 && spectrum[1].toArray()[2].toDouble() == 8,
           "spectrum rows differ");

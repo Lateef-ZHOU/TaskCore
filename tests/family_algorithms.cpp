@@ -89,9 +89,10 @@ bool modelStorageTransfer()
 
 template<int Gates, int Start = 0, int Step = 15>
 using ProfileRange = UniformMapping<static_cast<double>(Start), static_cast<double>(Step), Gates>;
-template<int ZeroWind>
-using SpectrumSpec = Spectrum<ProfileRange<2, 30, 15>,
-    DopplerMapping<UniformMapping<10.0, 2.0, 9>, 1.55e-6, ZeroWind>>;
+using SpectrumFrequency = UniformMapping<10.0, 2.0, 9>;
+using SpectrumSpec = Spectrum<ProfileRange<2, 30, 15>, SpectrumFrequency>;
+template<double ZeroWind>
+using SpectrumWind = UniformMapping<(10.0 - ZeroWind) * 0.775, 2.0 * 0.775, 9>;
 template<class Range> auto wind(std::initializer_list<double> values)
 {
     auto frame = std::make_shared<RadialWind<Range>>();
@@ -133,20 +134,20 @@ int main()
     // 不同网格不能装入同一输入；缺失实测份额仍拒绝反演。
     beams[3].ws.reset();
     if (WindProfile::Calc<ProfileRange<3>>(beams, now)) return 8;
-    SpectrumSpec<18> spectrum;
-    SpectrumSpec<16> shiftedSpectrum;
-    SpectrumSpec<80> outOfBandSpectrum;
+    SpectrumSpec spectrum;
+    SpectrumSpec shiftedSpectrum;
+    SpectrumSpec outOfBandSpectrum;
     for (int gate = 0; gate < 2; ++gate)
         for (int bin = 0; bin < 9; ++bin)
             spectrum[gate * 9 + bin] = shiftedSpectrum[gate * 9 + bin] = outOfBandSpectrum[gate * 9 + bin]
                 = 1.0 + 100.0 * std::exp(-(bin - 4.0) * (bin - 4.0) / 2.0);
-    const auto calm = RadialWindCalculation::Calc(spectrum);
+    const auto calm = RadialWindCalculation::Calc(spectrum, SpectrumWind<18>{});
     if (calm.ws->size() != 2 || ProfileRange<2, 30, 15>::start != 30.0 || ProfileRange<2, 30, 15>::step != 15.0
         || std::abs((*calm.ws)[0]) > 0.01) return 11;
-    const auto shifted = RadialWindCalculation::Calc(shiftedSpectrum);
+    const auto shifted = RadialWindCalculation::Calc(shiftedSpectrum, SpectrumWind<16>{});
     if (std::abs((*shifted.ws)[1] - 2.0 * 0.775) > 0.01) return 12;
     // 参考频率在不在频带内是硬件配置的事，算法照常换算。
-    const auto outOfBand = RadialWindCalculation::Calc(outOfBandSpectrum);
+    const auto outOfBand = RadialWindCalculation::Calc(outOfBandSpectrum, SpectrumWind<80>{});
     if (std::abs((*outOfBand.ws)[0] - (18.0 - 80.0) * 0.775) > 0.01 || (*outOfBand.cnr)[0] != (*calm.cnr)[0]) return 13;
     const auto zero = [](const LinAlg::Vec3 &v) { return v.x() == 0 && v.y() == 0 && v.z() == 0; };
     const LinAlg::Vec3 a(1, 2, 3), b(4, 5, 6);

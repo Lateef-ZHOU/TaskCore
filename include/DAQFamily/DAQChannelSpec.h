@@ -2,7 +2,6 @@
 #include "Matrix.h"
 #include "ObjectPolicy.h"
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -80,50 +79,13 @@ struct NonUniformMapping
     [[nodiscard]] static constexpr double at(std::size_t index) noexcept { return edges[index]; }
 };
 
-// 频率映射：在频率轴之上并入多普勒标定，同一类型给出 MHz 与 m/s 两个视图。
-// 频谱只带「距离映射 + 频率映射」两个参数，标定不再单独存放。
-template<Mapping Frequency, double WavelengthM, double ZeroWindMHz>
-struct DopplerMapping : Frequency
-{
-    static_assert(DAQDetail::finite(WavelengthM) && WavelengthM > 0.0, "波长须为有限正数");
-    static constexpr double wavelengthM = WavelengthM;
-    static constexpr double zeroWindMHz = ZeroWindMHz;
-
-    // 拟合峰位置（可为分数 bin）→ 径向风速（m/s）。均匀轴退化为线性式，非均匀轴在相邻点间插值。
-    [[nodiscard]] static double velocityAt(const double bin) noexcept
-    {
-        const double perMHz = WavelengthM / 2.0 * 1e6;
-        if constexpr (Frequency::uniform)
-            return (Frequency::start + Frequency::step * bin - ZeroWindMHz) * perMHz;
-        else
-        {
-            const auto last = static_cast<std::size_t>(Frequency::count);
-            const double clamped = std::clamp(bin, 0.0, static_cast<double>(last));
-            const auto low = static_cast<std::size_t>(clamped);
-            const auto high = std::min(low + 1, last);
-            const double t = clamped - static_cast<double>(low);
-            const double lowVelocity = (Frequency::at(low) - ZeroWindMHz) * perMHz;
-            const double highVelocity = (Frequency::at(high) - ZeroWindMHz) * perMHz;
-            return lowVelocity + (highVelocity - lowVelocity) * t;
-        }
-    }
-};
-
-// 频率映射必须能换算风速：带标定常数与速度视图。
-template<class T>
-concept Doppler = Mapping<T> && requires(double bin) {
-    { T::velocityAt(bin) } -> std::same_as<double>;
-    { T::zeroWindMHz } -> std::convertible_to<double>;
-    { T::wavelengthM } -> std::convertible_to<double>;
-};
-
 // 一条轴可作帧维度：映射有效、点数正、坐标严格递增。
 template<class Range>
 concept ValidAxis = Mapping<Range> && Range::count > 0 && DAQDetail::validAxis<Range>();
 
-// 功率谱两维：距离轴与频率轴（带多普勒标定）。
+// 功率谱两维：距离轴与频率轴。频率轴可以是均匀或非均匀映射，族基不假设线性。
 template<class Range, class Frequency>
-concept ValidGrid = ValidAxis<Range> && ValidAxis<Frequency> && Doppler<Frequency>
+concept ValidGrid = ValidAxis<Range> && ValidAxis<Frequency>
     && static_cast<std::size_t>(Range::count) <= std::numeric_limits<std::size_t>::max()
         / sizeof(double) / static_cast<std::size_t>(Frequency::count);
 

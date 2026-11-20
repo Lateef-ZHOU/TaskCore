@@ -16,7 +16,7 @@
 
 - 均匀：`UniformMapping<Start, Step, Count>`，步长是权威值，覆盖终点 = Start + Step × Count。
 - 非均匀：`NonUniformMapping<Edges>` 的模板实参是一个 constexpr 函数，表由它生成、映射内部静态持有 `std::array<double, N>`；类型名只带函数符号，421 点表也不会撑爆 QML 元类型签名（按值把 421 个边界写进类型曾触发 C2131）。
-- 频率轴：`DopplerMapping<Frequency, WavelengthM, ZeroWindMHz>` 继承频率映射的坐标接口，另给 MHz→m/s 的 `velocityAt(bin)` 与标定常数；多普勒标定不再单独存放。
+- 频率轴只要求是映射（均匀或非均匀）；风速换算由官邸交入的「下标 → 风速」映射承担，`RadialWindCalculation::Calc(spectrum, wind)` 按分数下标在相邻点间插值——族基不认识波长与零风速参考。
 - `Mapping` 约束 `uniform`、`count`、`stop`、`at(index)`，非均匀映射须带 `edges`；均匀性由映射类型自己声明。
 - 帧：`Spectrum<Range, Frequency>`（两映射）、`RadialWind<Range>`、`CNR<Range>`、`VerticalWindProfileUnit<Range>`、`DAQChannel<Range, Frequency>`；数组尺寸与循环上界取自映射的 `count`。
 
