@@ -16,13 +16,16 @@ namespace DAQDetail {
 [[nodiscard]] constexpr bool finite(double value) noexcept
 { return value >= std::numeric_limits<double>::lowest() && value <= std::numeric_limits<double>::max(); }
 
-// 非均匀轴：逐点有限且严格递增。有效性由映射自己在类型上保证，帧不再重复校验。
+// 非均匀轴：逐点有限且严格单调（递增或递减皆可）。有效性由映射自己在类型上保证，帧不再重复校验；
+// 绘图等按下标递增定位的消费者自行要求递增。
 template<std::size_t N>
-[[nodiscard]] constexpr bool strictlyIncreasing(const std::array<double, N> &values) noexcept
+[[nodiscard]] constexpr bool strictlyMonotonic(const std::array<double, N> &values) noexcept
 {
-    if (!finite(values[0])) return false;
+    if (N < 2 || !finite(values[0]) || !finite(values[1])) return false;
+    const bool rising = values[1] > values[0];
     for (std::size_t i = 1; i < N; ++i)
-        if (!finite(values[i]) || !(values[i] > values[i - 1])) return false;
+        if (!finite(values[i]) || (rising ? !(values[i] > values[i - 1]) : !(values[i] < values[i - 1])))
+            return false;
     return true;
 }
 } // namespace DAQDetail
@@ -55,7 +58,7 @@ struct NonUniformMapping
     static constexpr bool uniform = false;
     static constexpr auto edges = Edges();
     static_assert(edges.size() > 1, "非均匀映射至少需要首点坐标和覆盖终点");
-    static_assert(DAQDetail::strictlyIncreasing(edges), "非均匀映射的坐标须有限且严格递增");
+    static_assert(DAQDetail::strictlyMonotonic(edges), "非均匀映射的坐标须有限且严格单调（递增或递减）");
     static constexpr int count = static_cast<int>(edges.size()) - 1;
     static constexpr double stop = edges.back();
 

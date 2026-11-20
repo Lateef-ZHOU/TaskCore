@@ -45,6 +45,12 @@ static_assert(TestFrequency::count == 17);
 static_assert(TestWind::count == TestFrequency::count);
 static_assert(TestRange::count == 2);
 
+// 非均匀轴允许递减：映射本身只要求严格单调。
+constexpr std::array<double, 3> descendingEdges() { return {75.0, 15.0, 0.0}; }
+using DescendingRange = NonUniformMapping<descendingEdges>;
+static_assert(DescendingRange::count == 2 && DescendingRange::stop == 0.0
+    && sizeof(Spectrum<DescendingRange, TestFrequency>) == sizeof(std::array<double, 34>));
+
 // 不同的标定即不同类型。
 using ShiftedFrequency = UniformMapping<10.0, 1.0, 17>;
 static_assert(!std::same_as<TestSpectrum, Spectrum<TestRange, ShiftedFrequency>>);
