@@ -88,14 +88,14 @@ inline constexpr DAQParams savedA{
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .rangeGateCount = 2, .frequencyBinCount = 4,
 };
-inline constexpr std::array savedBEdges{0.0, 15.0, 75.0};
-inline constexpr NonUniformDAQParams<savedBEdges> savedB{
+inline constexpr std::array savedBSegments{0.0, 1.0, 15.0, 1.0, 60.0};
+inline constexpr NonUniformDAQParams<savedBSegments> savedB{
     .wavelengthM = 1.55e-6, .zeroWindMHz = std::numeric_limits<double>::quiet_NaN(),
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 4,
 };
-inline constexpr std::array badEdges{0.0, 15.0, 15.0};
-inline constexpr NonUniformDAQParams<badEdges> badRange{.frequencyStepMHz = 1, .frequencyBinCount = 4};
+inline constexpr std::array badSegments{0.0, 1.0, 0.0};
+inline constexpr NonUniformDAQParams<badSegments> badRange{.frequencyStepMHz = 1, .frequencyBinCount = 4};
 static_assert(ValidDAQGrid<savedB> && !ValidDAQGrid<badRange>);
 inline constexpr DAQParams profileSpec{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,

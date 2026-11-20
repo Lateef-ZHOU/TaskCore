@@ -12,6 +12,53 @@
 #include <optional>
 #include <span>
 
+namespace DAQDetail {
+[[nodiscard]] constexpr bool finite(double value) noexcept
+{ return value >= std::numeric_limits<double>::lowest() && value <= std::numeric_limits<double>::max(); }
+
+// 分段距离参数的结构检查：形状为 {起点, 门数, 门宽, …}，门数须为正整数。
+// 起点、门宽与展开后的边界是否可用由 ValidDAQGrid 判定，不在这里拒绝。
+template<auto Segments>
+[[nodiscard]] consteval bool segmentedShape() noexcept
+{
+    if (Segments.size() < 3 || Segments.size() % 2 == 0) return false;
+    for (std::size_t i = 1; i < Segments.size(); i += 2)
+    {
+        const double count = Segments[i];
+        if (!finite(count) || count < 1.0 || count > static_cast<double>(std::numeric_limits<int>::max()))
+            return false;
+        if (count != static_cast<double>(static_cast<int>(count))) return false; // 门数须是整数
+    }
+    return true;
+}
+
+template<auto Segments>
+[[nodiscard]] consteval int segmentedGateCount() noexcept
+{
+    int gates = 0;
+    for (std::size_t i = 1; i < Segments.size(); i += 2)
+        gates += static_cast<int>(Segments[i]);
+    return gates;
+}
+
+// 按段展开成逐门边界：段内等宽，段间可不等；末项是覆盖终点。
+template<auto Segments>
+[[nodiscard]] consteval auto segmentedEdges() noexcept
+{
+    std::array<double, static_cast<std::size_t>(segmentedGateCount<Segments>()) + 1> edges{};
+    double position = Segments[0];
+    std::size_t gate = 0;
+    for (std::size_t i = 1; i < Segments.size(); i += 2)
+        for (int k = 0, count = static_cast<int>(Segments[i]); k < count; ++k)
+        {
+            edges[gate++] = position;
+            position += Segments[i + 1];
+        }
+    edges[gate] = position;
+    return edges;
+}
+} // namespace DAQDetail
+
 struct UniformRangeMapping
 {
     double start;
@@ -21,12 +68,18 @@ struct UniformRangeMapping
     { return start + step * static_cast<double>(gate); }
 };
 
-// 门起点及最后一门的右边界。模板只引用型号的静态数组，帧与规格实例均不持有副本。
-template<const auto &Edges>
+// 非均匀距离门的分段参数：{首门起点, 门数₁, 门宽₁, 门数₂, 门宽₂, …}，按值作为模板实参交入
+// （std::array<double, N>）。段内等宽、段间可不等；门数须是正整数。类型即值：同一组分段在不同位置
+// 声明得到同一类型，帧与规格实例均不持有副本；展开后的边界表按类型保留一个静态副本，末项是覆盖终点。
+template<auto Segments>
 struct NonUniformRangeMapping
 {
-    static constexpr std::span<const double> edges = Edges;
-    static_assert(edges.size() > 1 && edges.size() - 1 <= std::numeric_limits<int>::max());
+    static_assert(DAQDetail::segmentedShape<Segments>(),
+                  "分段距离参数须为 {起点, 门数, 门宽, …}，门数须为正整数");
+    static constexpr int gateCount = DAQDetail::segmentedGateCount<Segments>();
+    static constexpr std::array<double, static_cast<std::size_t>(gateCount) + 1> kEdges =
+        DAQDetail::segmentedEdges<Segments>();
+    static constexpr std::span<const double> edges{kEdges.data(), kEdges.size()};
 
     [[nodiscard]] constexpr double operator[](std::size_t gate) const noexcept { return edges[gate]; }
 };
@@ -49,7 +102,7 @@ struct DAQParams
     [[nodiscard]] constexpr double rangeStopM() const noexcept { return rangeAt(rangeGateCount); }
 };
 
-template<const auto &Edges>
+template<auto Segments>
 struct NonUniformDAQParams
 {
     double wavelengthM = 0.0;
@@ -57,8 +110,8 @@ struct NonUniformDAQParams
     double frequencyStartMHz = 0.0;
     double frequencyStepMHz = 0.0;
     int frequencyBinCount = 0;
-    static constexpr NonUniformRangeMapping<Edges> range{};
-    static constexpr int rangeGateCount = static_cast<int>(range.edges.size() - 1);
+    static constexpr NonUniformRangeMapping<Segments> range{};
+    static constexpr int rangeGateCount = NonUniformRangeMapping<Segments>::gateCount;
     static constexpr bool uniformRange = false;
 
     [[nodiscard]] static constexpr double rangeAt(std::size_t gate) noexcept { return range[gate]; }
@@ -66,9 +119,6 @@ struct NonUniformDAQParams
 };
 
 namespace DAQDetail {
-[[nodiscard]] constexpr bool finite(double value) noexcept
-{ return value >= std::numeric_limits<double>::lowest() && value <= std::numeric_limits<double>::max(); }
-
 template<auto P>
 [[nodiscard]] consteval bool validRange()
 {
