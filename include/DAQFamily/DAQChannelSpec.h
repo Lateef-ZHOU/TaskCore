@@ -47,17 +47,21 @@ struct NonUniformRangeMapping
     [[nodiscard]] static constexpr double at(std::size_t gate) noexcept { return edges[gate]; }
 };
 
-// 距离门映射的接口：门数、覆盖终点、逐门起点。均匀映射带 step，非均匀映射带逐门边界 edges；
-// 均匀性由这个形状直接判定，不另存 uniform 标志。
+// 均匀性由具体映射类型判定：UniformRangeMapping 是唯一的均匀映射，其余映射一律按非均匀处理，
+// 必须提供逐门边界 edges。这样不必再凭 step 之类的成员做结构探测。
+template<class T>
+inline constexpr bool isUniformRange = false;
+template<double Start, double Step, int GateCount>
+inline constexpr bool isUniformRange<UniformRangeMapping<Start, Step, GateCount>> = true;
+
+// 距离门映射的公共接口：门数、覆盖终点、逐门起点；均匀映射由上面的具体类型识别，
+// 非均匀映射还须带逐门边界 edges。
 template<class T>
 concept RangeMapping = requires(std::size_t gate) {
     { T::gateCount } -> std::convertible_to<int>;
     { T::stop } -> std::convertible_to<double>;
     { T::at(gate) } -> std::same_as<double>;
-} && (requires { T::step; } || requires { T::edges; });
-
-template<class T>
-concept UniformRange = RangeMapping<T> && requires { T::step; };
+} && (isUniformRange<T> || requires { T::edges; });
 
 // 通道数值规格：距离门映射由类型给出，波长、频率与频点数仍是值。
 // 帧类按规格值确定数组尺寸，因此同一映射类型加同一组数值就是同一规格。
@@ -72,7 +76,7 @@ struct DAQParams
 
     static constexpr Range range{};
     static constexpr int rangeGateCount = Range::gateCount;
-    static constexpr bool uniformRange = UniformRange<Range>;
+    static constexpr bool uniformRange = isUniformRange<Range>;
 
     [[nodiscard]] static constexpr double rangeAt(std::size_t gate) noexcept { return Range::at(gate); }
     [[nodiscard]] static constexpr double rangeStopM() noexcept { return Range::stop; }

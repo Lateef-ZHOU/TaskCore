@@ -16,7 +16,7 @@
 
 - 均匀：`UniformRangeMapping<Start, Step, GateCount>`，三个静态值；步长是权威值，覆盖终点 = Start + Step × GateCount（不做除法，末门右边界明确）。
 - 非均匀：`NonUniformRangeMapping<Edges>` 的模板实参是一个 constexpr 函数，逐门边界表由它生成、映射内部静态持有 `std::array<double, N>`；类型名只带函数符号，421 点表也不会撑爆 QML 元类型签名（按值把 421 个边界写进类型曾触发 C2131）。型号只需写一个返回表的 constexpr 函数。
-- `RangeMapping` 约束静态 `gateCount`、`stop`、`at(gate)`，并要求类型带 `step`（均匀）或 `edges`（非均匀）；均匀性由类型形状判定，不另存 `uniform` 标志。
+- `RangeMapping` 约束静态 `gateCount`、`stop`、`at(gate)`，并要求是均匀映射或带 `edges`；均匀性由具体映射类型判定（`UniformRangeMapping` 是唯一的均匀映射，其余一律非均匀），不另存 `uniform` 标志。
 
 功率谱、径向风、CNR 和风廓线通过静态规格确定数组尺寸，共用同一规格，帧内只存各自的载荷。风廓线按斜距和每帧仰角取各门高度，按实际相邻层插值。
 
