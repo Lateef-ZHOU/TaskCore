@@ -39,13 +39,12 @@ struct UniformRangeMapping
 template<auto Edges>
 struct NonUniformRangeMapping
 {
-    static constexpr auto values = Edges();
-    static_assert(values.size() > 1, "非均匀距离门至少需要首门起点和覆盖终点");
-    static constexpr int gateCount = static_cast<int>(values.size()) - 1;
-    static constexpr double stop = values.back();
-    static constexpr std::span<const double> edges{values.data(), values.size()};
+    static constexpr auto edges = Edges();
+    static_assert(edges.size() > 1, "非均匀距离门至少需要首门起点和覆盖终点");
+    static constexpr int gateCount = static_cast<int>(edges.size()) - 1;
+    static constexpr double stop = edges.back();
 
-    [[nodiscard]] static constexpr double at(std::size_t gate) noexcept { return values[gate]; }
+    [[nodiscard]] static constexpr double at(std::size_t gate) noexcept { return edges[gate]; }
 };
 
 // 距离门映射的接口：门数、覆盖终点、逐门起点。均匀映射带 step，非均匀映射带逐门边界 edges；

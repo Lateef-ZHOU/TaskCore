@@ -206,7 +206,7 @@ private:
         else
         {
             constexpr int precision = std::numeric_limits<double>::max_digits10;
-            out.key("rangeM"); out.numbers(P.range.edges.first(P.rangeGateCount), precision); out.raw(",");
+            out.key("rangeM"); out.numbers(std::span<const double>(P.range.edges).first(P.rangeGateCount), precision); out.raw(",");
             out.key("rangeStopM"); out.number(P.rangeStopM(), precision); out.raw(",");
         }
         out.key("freqStartMHz"); out.number(P.frequencyStartMHz); out.raw(",");
@@ -257,7 +257,7 @@ private:
             {
                 constexpr int precision = std::numeric_limits<double>::max_digits10;
                 const auto scale = profile.heightScale();
-                out.key("heightM"); out.numbers(P.range.edges.first(P.rangeGateCount)
+                out.key("heightM"); out.numbers(std::span<const double>(P.range.edges).first(P.rangeGateCount)
                     | std::views::transform([scale](double range) { return range * scale; }), precision); out.raw(",");
                 out.key("heightStopM"); out.number(P.rangeStopM() * scale, precision); out.raw(",");
             }
