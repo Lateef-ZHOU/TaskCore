@@ -3,7 +3,7 @@
 #include <type_traits>
 #include <utility>
 
-inline constexpr DAQParams<UniformRangeMapping<30.0, 15.0, 3>> immutableParams{
+inline constexpr DAQParams<UniformMapping<30.0, 15.0, 3>> immutableParams{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 80,
     .frequencyStartMHz = 79, .frequencyStepMHz = 1,
     .frequencyBinCount = 2,

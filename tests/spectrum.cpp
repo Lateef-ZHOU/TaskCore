@@ -7,7 +7,7 @@
 #include <limits>
 #include <span>
 
-inline constexpr DAQParams<UniformRangeMapping<30.0, 15.0, 2>> testParams{
+inline constexpr DAQParams<UniformMapping<30.0, 15.0, 2>> testParams{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 18,
     .frequencyStartMHz = 10, .frequencyStepMHz = 2,
     .frequencyBinCount = 17,
@@ -46,7 +46,7 @@ static_assert(Spectrum<testParams>::params.wavelengthM == testParams.wavelengthM
 static_assert(RadialWind<testParams>::params.rangeGateCount == testParams.rangeGateCount);
 
 // 不同参数产生不同类型。
-inline constexpr DAQParams<UniformRangeMapping<30.0, 15.0, 2>> shifted{.wavelengthM = 1.6e-6, .zeroWindMHz = 16,
+inline constexpr DAQParams<UniformMapping<30.0, 15.0, 2>> shifted{.wavelengthM = 1.6e-6, .zeroWindMHz = 16,
     .frequencyStartMHz = 10, .frequencyStepMHz = 2, .frequencyBinCount = 17};
 static_assert(!std::same_as<Spectrum<testParams>, Spectrum<shifted>>);
 

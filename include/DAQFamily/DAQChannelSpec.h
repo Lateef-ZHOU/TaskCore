@@ -17,10 +17,10 @@ namespace DAQDetail {
 { return value >= std::numeric_limits<double>::lowest() && value <= std::numeric_limits<double>::max(); }
 } // namespace DAQDetail
 
-// 均匀距离门：起点、步长、门数是静态模板值。步长是权威值——用覆盖终点反推步长要做除法，
+// 均匀映射：起点、步长、门数是静态模板值。步长是权威值——用覆盖终点反推步长要做除法，
 // 既有舍入也说不清末门边界归谁；覆盖终点由乘加导出，是末门的右边界（不含在门内）。
 template<double Start, double Step, int GateCount>
-struct UniformRangeMapping
+struct UniformMapping
 {
     static_assert(GateCount > 0, "门数须为正");
     static_assert(DAQDetail::finite(Start) && DAQDetail::finite(Step) && Step > 0.0,
@@ -35,21 +35,21 @@ struct UniformRangeMapping
     { return Start + Step * static_cast<double>(gate); }
 };
 
-// 非均匀距离门：逐门起点加末门右边界。表由模板实参的 constexpr 函数在编译期生成，
+// 非均匀映射：逐门起点加末门右边界。表由模板实参的 constexpr 函数在编译期生成，
 // 映射自己静态持有 std::array<double, N>；逐门坐标不进类型名，大表也不会撑爆 QML 元类型签名。
 template<auto Edges>
-struct NonUniformRangeMapping
+struct NonUniformMapping
 {
     static constexpr bool uniform = false;
     static constexpr auto edges = Edges();
-    static_assert(edges.size() > 1, "非均匀距离门至少需要首门起点和覆盖终点");
+    static_assert(edges.size() > 1, "非均匀映射至少需要首门起点和覆盖终点");
     static constexpr int gateCount = static_cast<int>(edges.size()) - 1;
     static constexpr double stop = edges.back();
 
     [[nodiscard]] static constexpr double at(std::size_t gate) noexcept { return edges[gate]; }
 };
 
-// 距离门映射的公共接口：门数、覆盖终点、逐门起点，以及映射种类 uniform。
+// 映射的公共接口：门数、覆盖终点、逐门起点，以及映射种类 uniform；DAQParams 按距离门轴使用它。
 // 均匀性由映射类型自己声明（与 gateCount/stop 同为静态常量）；非均匀映射还须带逐门边界 edges。
 template<class T>
 concept RangeMapping = requires(std::size_t gate) {

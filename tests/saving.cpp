@@ -82,21 +82,21 @@ QString waitDiagnostic(const std::size_t index)
 }
 
 // 两路：A 正常换算；B 以 NaN 参考造出缺测风速，检查缺测写成 null。
-inline constexpr DAQParams<UniformRangeMapping<0.0, 15.0, 2>> savedA{
+inline constexpr DAQParams<UniformMapping<0.0, 15.0, 2>> savedA{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 4,
 };
 constexpr std::array<double, 3> savedBEdges() { return {0.0, 15.0, 75.0}; }
-inline constexpr DAQParams<NonUniformRangeMapping<savedBEdges>> savedB{
+inline constexpr DAQParams<NonUniformMapping<savedBEdges>> savedB{
     .wavelengthM = 1.55e-6, .zeroWindMHz = std::numeric_limits<double>::quiet_NaN(),
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 4,
 };
 constexpr std::array<double, 3> badEdges() { return {0.0, 15.0, 15.0}; }
-inline constexpr DAQParams<NonUniformRangeMapping<badEdges>> badRange{.frequencyStepMHz = 1, .frequencyBinCount = 4};
+inline constexpr DAQParams<NonUniformMapping<badEdges>> badRange{.frequencyStepMHz = 1, .frequencyBinCount = 4};
 static_assert(ValidDAQGrid<savedB> && !ValidDAQGrid<badRange>);
-inline constexpr DAQParams<UniformRangeMapping<10.0, 10.0, 4>> profileSpec{
+inline constexpr DAQParams<UniformMapping<10.0, 10.0, 4>> profileSpec{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 4,
@@ -121,7 +121,7 @@ private:
 };
 static_assert(DAQCollectorLike<SavedFrame>);
 
-inline constexpr DAQParams<UniformRangeMapping<0.0, 15.0, 2>> singleBinSpec{
+inline constexpr DAQParams<UniformMapping<0.0, 15.0, 2>> singleBinSpec{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 1,

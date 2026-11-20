@@ -14,8 +14,8 @@
 
 距离门映射是规格的**类型**，`DAQParams<Range>` 以它作模板参数；波长、频率和频点数仍是规格值。
 
-- 均匀：`UniformRangeMapping<Start, Step, GateCount>`，三个静态值；步长是权威值，覆盖终点 = Start + Step × GateCount（不做除法，末门右边界明确）。
-- 非均匀：`NonUniformRangeMapping<Edges>` 的模板实参是一个 constexpr 函数，逐门边界表由它生成、映射内部静态持有 `std::array<double, N>`；类型名只带函数符号，421 点表也不会撑爆 QML 元类型签名（按值把 421 个边界写进类型曾触发 C2131）。型号只需写一个返回表的 constexpr 函数。
+- 均匀：`UniformMapping<Start, Step, GateCount>`，三个静态值；步长是权威值，覆盖终点 = Start + Step × GateCount（不做除法，末门右边界明确）。
+- 非均匀：`NonUniformMapping<Edges>` 的模板实参是一个 constexpr 函数，逐门边界表由它生成、映射内部静态持有 `std::array<double, N>`；类型名只带函数符号，421 点表也不会撑爆 QML 元类型签名（按值把 421 个边界写进类型曾触发 C2131）。型号只需写一个返回表的 constexpr 函数。
 - `RangeMapping` 约束静态 `uniform`、`gateCount`、`stop`、`at(gate)`；非均匀映射还须带 `edges`。均匀性由映射类型自己声明，`DAQParams::uniformRange` 直接读 `uniform`。
 
 功率谱、径向风、CNR 和风廓线通过静态规格确定数组尺寸，共用同一规格，帧内只存各自的载荷。风廓线按斜距和每帧仰角取各门高度，按实际相邻层插值。

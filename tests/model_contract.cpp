@@ -1,6 +1,6 @@
 #include "DAQFamily/DAQChannelSpec.h"
 #include "GMBFamily/GimbalModel.h"
-inline constexpr DAQParams<UniformRangeMapping<0.0, 6.0, 3>> policyParams{
+inline constexpr DAQParams<UniformMapping<0.0, 6.0, 3>> policyParams{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 80,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 4,

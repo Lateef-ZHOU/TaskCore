@@ -65,7 +65,7 @@ private:
 
 // 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。
 // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
-inline constexpr DAQParams<UniformRangeMapping<100.0, 30.0, 2>> testChannelParams{
+inline constexpr DAQParams<UniformMapping<100.0, 30.0, 2>> testChannelParams{
     .wavelengthM = 2e-6, .zeroWindMHz = 3.5,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 8,
