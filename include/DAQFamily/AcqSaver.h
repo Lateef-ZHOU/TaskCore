@@ -190,9 +190,17 @@ private:
         out.commit();
     }
 
-    // 一路通道：距离轴、频率轴（含标定）、功率谱、径向风与 CNR。
-    template<class Range, class Frequency>
-    static void writeChannel(Writer &out, const DAQChannel<Range, Frequency> &channel, bool &first)
+    // 轴一律写成「起点 + 步长」；非线性映射改写逐点坐标数组。
+    template<MappingLike Axis>
+    static auto axisValues()
+    {
+        return std::views::iota(std::size_t{0}, static_cast<std::size_t>(Axis::count))
+            | std::views::transform([](std::size_t index) { return Axis::at(index); });
+    }
+
+    // 一路通道：三条轴、功率谱、径向风与 CNR。
+    template<class Range, class Frequency, class Wind>
+    static void writeChannel(Writer &out, const DAQChannel<Range, Frequency, Wind> &channel, bool &first)
     {
         if (!first) out.raw(",");
         first = false;
@@ -201,18 +209,31 @@ private:
         const auto &spectrum = *channel.spectrum;
         if constexpr (Range::uniform)
         {
-            out.key("rangeStartM"); out.number(Range::start); out.raw(",");
-            out.key("rangeStepM"); out.number(Range::step); out.raw(",");
+            out.key("startRange"); out.number(Range::start); out.raw(",");
+            out.key("rangeStep"); out.number(Range::step); out.raw(",");
         }
         else
         {
-            constexpr int precision = std::numeric_limits<double>::max_digits10;
-            out.key("rangeM"); out.numbers(std::span<const double>(Range::edges).first(Range::count), precision); out.raw(",");
-            out.key("rangeStopM"); out.number(Range::stop, precision); out.raw(",");
+            out.key("ranges"); out.numbers(axisValues<Range>(), std::numeric_limits<double>::max_digits10); out.raw(",");
         }
-        static_assert(Frequency::uniform, "非均匀频率轴尚无保存格式");
-        out.key("freqStartMHz"); out.number(Frequency::start); out.raw(",");
-        out.key("freqStepMHz"); out.number(Frequency::step); out.raw(",");
+        if constexpr (Frequency::uniform)
+        {
+            out.key("startFreq"); out.number(Frequency::start); out.raw(",");
+            out.key("freqStep"); out.number(Frequency::step); out.raw(",");
+        }
+        else
+        {
+            out.key("freqs"); out.numbers(axisValues<Frequency>(), std::numeric_limits<double>::max_digits10); out.raw(",");
+        }
+        if constexpr (Wind::uniform)
+        {
+            out.key("startWind"); out.number(Wind::start); out.raw(",");
+            out.key("windStep"); out.number(Wind::step); out.raw(",");
+        }
+        else
+        {
+            out.key("winds"); out.numbers(axisValues<Wind>(), std::numeric_limits<double>::max_digits10); out.raw(",");
+        }
         out.key("spectrum");
         out.raw("[");
         for (int row = 0; row < Range::count; ++row) {
@@ -251,16 +272,14 @@ private:
             out.key("name"); out.text(names.value(index)); out.raw(",");
             if constexpr (Range::uniform)
             {
-                out.key("heightStartM"); out.number(profile.start()); out.raw(",");
-                out.key("heightStepM"); out.number(profile.step()); out.raw(",");
+                out.key("startHeight"); out.number(profile.start()); out.raw(",");
+                out.key("heightStep"); out.number(profile.step()); out.raw(",");
             }
             else
             {
-                constexpr int precision = std::numeric_limits<double>::max_digits10;
                 const auto height = [&profile](std::size_t gate) { return profile.position(gate); };
-                out.key("heightM"); out.numbers(std::views::iota(std::size_t{0}, static_cast<std::size_t>(Range::count))
-                    | std::views::transform(height), precision); out.raw(",");
-                out.key("heightStopM"); out.number(profile.position(Range::count), precision); out.raw(",");
+                out.key("heights"); out.numbers(std::views::iota(std::size_t{0}, static_cast<std::size_t>(Range::count))
+                    | std::views::transform(height), std::numeric_limits<double>::max_digits10); out.raw(",");
             }
             out.key("horizontalDirectionDeg"); out.numbers(profile.values() | std::views::transform([](const auto &wind) {
                 if (!wind) return std::numeric_limits<double>::quiet_NaN();

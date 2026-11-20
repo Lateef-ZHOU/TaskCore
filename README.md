@@ -193,7 +193,7 @@ TaskModule 接收两个 `list<QtObject>`（云台与采集卡设备本身），�
 
 ### 采集卡数据的保存
 
-`AcqSaver` 只有两个入口，均为 detached 线程逐段写 JSON，官邸不参与：`saveFrame` 每帧写 `<保存根>/<会话>/<帧时间>.json`，`saveWindProfiles` 在同步点写 `profile_<同步时间>.json`。每通道写名称、`rangeStartM`/`rangeStepM`、`freqStartMHz`/`freqStepMHz`、零风速参考、功率谱（行 = 门）、径向风与 CNR；风廓线写 `heightStartM`/`heightStepM` 与逐层水平风向、水平风速、垂直风速。非有限值写 `null`。
+`AcqSaver` 只有两个入口，均为 detached 线程逐段写 JSON，官邸不参与：`saveFrame` 每帧写 `<保存根>/<会话>/<帧时间>.json`，`saveWindProfiles` 在同步点写 `profile_<同步时间>.json`。每通道写名称、`startRange`/`rangeStep`、`startFreq`/`freqStep`、`startWind`/`windStep`（非线性映射改写 `ranges`/`freqs`/`winds` 逐点数组）、功率谱（行 = 门）、径向风与 CNR；风廓线写 `startHeight`/`heightStep`（非线性写 `heights`）与逐层水平风向、水平风速、垂直风速。非有限值写 `null`。
 
 
 `saveFrame` 只接收 `std::shared_ptr<const C>`，C 满足 DAQCollectorLike；完成帧从消费链到保存线程始终使用只读份额，不再兼容可写份额的模板推导或在入口转换类型。DAQDevice 直接提交帧与风廓线，由 AcqSaver 的两个入口统一检查 saveRoot；为空时返回，不启动写盘线程。保存格式、独立线程及退出不排空策略不变。

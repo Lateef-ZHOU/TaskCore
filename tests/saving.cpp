@@ -86,7 +86,7 @@ using SavedARange = LinearMapping<0.0, 15.0, 2>;
 using SavedAFrequency = LinearMapping<0.0, 1.0, 4>;
 using SavedAWind = LinearMapping<-1.1625, 0.775, 4>;
 using SavedASpectrum = Grid2D<SavedARange, SavedAFrequency>;
-using SavedAChannel = DAQChannel<SavedARange, SavedAFrequency>;
+using SavedAChannel = DAQChannel<SavedARange, SavedAFrequency, SavedAWind>;
 constexpr std::array<double, 3> savedBEdges() { return {0.0, 15.0, 75.0}; }
 using SavedBRange = NonLinearMapping<savedBEdges>;
 // B 路要造缺测风速：频率轴照常，只把「下标 → 风速」映射换成恒 NaN。
@@ -95,7 +95,7 @@ struct MissingWind : LinearMapping<-1.1625, 0.775, 4>
     [[nodiscard]] static double at(std::size_t) noexcept { return std::numeric_limits<double>::quiet_NaN(); }
 };
 using SavedBSpectrum = Grid2D<SavedBRange, SavedAFrequency>;
-using SavedBChannel = DAQChannel<SavedBRange, SavedAFrequency>;
+using SavedBChannel = DAQChannel<SavedBRange, SavedAFrequency, MissingWind>;
 // 轴的有效性由映射类型自己校验；这里直接验证表检查本身。
 static_assert(MappingDetail::monotonic(std::array{0.0, 15.0, 75.0}));
 static_assert(MappingDetail::monotonic(std::array{75.0, 15.0, 0.0}));
@@ -126,7 +126,7 @@ using SingleBinRange = LinearMapping<0.0, 15.0, 2>;
 using SingleBinFrequency = LinearMapping<0.0, 1.0, 1>;
 using SingleBinWind = LinearMapping<-1.1625, 0.775, 1>;
 using SingleBinSpectrum = Grid2D<SingleBinRange, SingleBinFrequency>;
-using SingleBinChannel = DAQChannel<SingleBinRange, SingleBinFrequency>;
+using SingleBinChannel = DAQChannel<SingleBinRange, SingleBinFrequency, SingleBinWind>;
 class SingleBinFrame final : public TypedDAQCollector<SingleBinChannel>
 {
 public:
@@ -184,16 +184,18 @@ int main(int argc, char **argv)
     check(channels.size() == 2, "channel count differs");
     const auto a = channels[0].toObject(), b = channels[1].toObject();
     check(a.value("name").toString() == "A" && b.value("name").toString() == "B", "channel order or names differ");
-    check(a.value("rangeStartM").toDouble() == 0 && a.value("rangeStepM").toDouble() == 15
-          && a.value("freqStartMHz").toDouble() == 0 && a.value("freqStepMHz").toDouble() == 1, "channel axes differ");
+    check(a.value("startRange").toDouble() == 0 && a.value("rangeStep").toDouble() == 15
+          && a.value("startFreq").toDouble() == 0 && a.value("freqStep").toDouble() == 1
+          && a.value("startWind").toDouble() == -1.1625 && a.value("windStep").toDouble() == 0.775,
+          "channel axes differ");
     const auto spectrum = a.value("spectrum").toArray();
     check(spectrum.size() == 2 && spectrum[0].toArray().size() == 4 && spectrum[1].toArray()[2].toDouble() == 8,
           "spectrum rows differ");
     check(a.value("radialWind").toArray().size() == 2 && !a.value("radialWind").toArray()[0].isNull(), "wind missing");
     check(b.value("radialWind").toArray()[0].isNull() && !b.value("cnr").toArray()[0].isNull(), "missing wind not null");
-    check(!a.contains("rangeM") && !b.contains("rangeStartM") && !b.contains("rangeStepM")
-              && b.value("rangeM").toArray() == QJsonArray{0, 15}
-              && b.value("rangeStopM").toDouble() == 75 && b.value("spectrum").toArray().size() == 2,
+    check(!a.contains("ranges") && !b.contains("startRange") && !b.contains("rangeStep")
+              && b.value("ranges").toArray() == QJsonArray{0, 15}
+              && b.value("spectrum").toArray().size() == 2,
           "uniform and non-uniform range axes did not retain their own JSON layout");
 
     auto mixedSource = std::make_shared<SavedFrame>(DAQParameters(TestKey(), 1, std::nullopt, saveRoot, "mixed-profile", true));
@@ -205,10 +207,10 @@ int main(int argc, char **argv)
                    std::shared_ptr<const WindProfileFrame<SavedBRange>>(std::move(mixedResult))});
     const auto mixed = readCompleted(root.filePath("mixed-profile/profile_" + AcqSaver::fileStem(at) + ".json"))
         .value("channels").toArray()[0].toObject();
-    const auto mixedHeights = mixed.value("heightM").toArray();
-    check(!mixed.contains("heightStepM") && mixedHeights.size() == 2 && mixedHeights[0].toDouble(-1) == 0
+    const auto mixedHeights = mixed.value("heights").toArray();
+    check(!mixed.contains("heightStep") && mixedHeights.size() == 2 && mixedHeights[0].toDouble(-1) == 0
               && std::abs(mixedHeights[1].toDouble() - 7.5) < 1e-12
-              && std::abs(mixed.value("heightStopM").toDouble() - 37.5) < 1e-12 && mixed.value("verticalSpeed").toArray()[0].isNull()
+              && mixed.value("verticalSpeed").toArray()[0].isNull()
               && mixed.value("verticalSpeed").toArray()[1].toDouble() == 2,
           "non-uniform profile height and missing gate were not saved");
 
@@ -233,8 +235,8 @@ int main(int argc, char **argv)
     const auto profile = readCompleted(root.filePath(sessionName + "/profile_" + AcqSaver::fileStem(at) + ".json"));
     const auto first = profile.value("channels").toArray()[0].toObject();
     check(profile.value("frame").toObject().value("session").toString() == sessionName
-          && first.value("name").toString() == "B" && first.value("heightStartM").toDouble() == 10
-          && first.value("heightStepM").toDouble() == 10 && first.value("horizontalSpeed").toArray().size() == 4, "profile layout differs");
+          && first.value("name").toString() == "B" && first.value("startHeight").toDouble() == 10
+          && first.value("heightStep").toDouble() == 10 && first.value("horizontalSpeed").toArray().size() == 4, "profile layout differs");
     check(std::abs(first.value("horizontalDirectionDeg").toArray()[0].toDouble() - 90.0) < 1e-3
           && std::abs(first.value("horizontalSpeed").toArray()[0].toDouble() - 5.0) < 1e-3
           && std::abs(first.value("verticalSpeed").toArray()[0].toDouble() - 0.5) < 1e-3

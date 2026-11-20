@@ -69,7 +69,7 @@ using TestRange = LinearMapping<100.0, 30.0, 2>;
 using TestFrequency = LinearMapping<0.0, 1.0, 8>;
 using TestWind = LinearMapping<-3.5, 1.0, 8>;
 using TestSpectrum = Grid2D<TestRange, TestFrequency>;
-using TestChannel = DAQChannel<TestRange, TestFrequency>;
+using TestChannel = DAQChannel<TestRange, TestFrequency, TestWind>;
 class TestCollector final : public TypedDAQCollector<TestChannel>
 {
 public:

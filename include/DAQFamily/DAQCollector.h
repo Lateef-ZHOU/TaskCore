@@ -42,7 +42,7 @@ struct DAQParameters
 
 // 通道只持原帧的只读份额，轴规格不在帧中重复存储。型号直接填满最终谱数组，
 // 交入唯一份额后计算径向风与 CNR；通道本身只复制共享指针，不复制数据。
-template<MappingLike Range, MappingLike Frequency>
+template<MappingLike Range, MappingLike Frequency, MappingLike Wind>
 struct DAQChannel
 {
     // 型号提供静态寿命的 UTF-8 通道名，供异步保存使用。
@@ -50,21 +50,27 @@ struct DAQChannel
 
     // 前置条件：交入非空、已完整填写的谱；协议完整性由型号 assemble 负责。
     // 风速由型号交入的「下标 → 风速」映射换算；族基不认识波长与零风速参考。
-    template<MappingLike Wind>
-    explicit DAQChannel(std::unique_ptr<Grid2D<Range, Frequency>> values, Wind wind, const char* channelName = nullptr)
-        : DAQChannel(RadialWindCalculation::Calc(*values, wind), values, channelName) {}
+    // 有风速映射值时可显式交入；省略则用类型上的 Wind{}。
+    explicit DAQChannel(std::unique_ptr<Grid2D<Range, Frequency>> values, const char* channelName = nullptr)
+        : DAQChannel(RadialWindCalculation::Calc(*values, Wind{}), values, channelName) {}
+    explicit DAQChannel(std::unique_ptr<Grid2D<Range, Frequency>> values, Wind windMapping, const char* channelName = nullptr)
+        : DAQChannel(RadialWindCalculation::Calc(*values, windMapping), values, channelName) {}
+
+    using RangeType = Range;
+    using WindType = Wind;
 
     std::shared_ptr<const Grid2D<Range, Frequency>> spectrum;
     std::shared_ptr<const Array1D<Range>> radialWind;
     std::shared_ptr<const Array1D<Range>> cnr;
+    static constexpr Wind wind{};
 private:
     // 以引用交接唯一份额：拟合结束后才移入成员，不依赖实参求值顺序。
-    DAQChannel(RadialWindCalculation::Result<Range> wind, std::unique_ptr<Grid2D<Range, Frequency>> &values, const char* channelName)
-        : name(channelName), spectrum(std::move(values)), radialWind(std::move(wind.ws)), cnr(std::move(wind.cnr)) {}
+    DAQChannel(RadialWindCalculation::Result<Range> radial, std::unique_ptr<Grid2D<Range, Frequency>> &values, const char* channelName)
+        : name(channelName), spectrum(std::move(values)), radialWind(std::move(radial.ws)), cnr(std::move(radial.cnr)) {}
 };
 
 template<class> inline constexpr bool isDAQChannel = false;
-template<class Range, class Frequency> inline constexpr bool isDAQChannel<DAQChannel<Range, Frequency>> = true;
+template<class Range, class Frequency, class Wind> inline constexpr bool isDAQChannel<DAQChannel<Range, Frequency, Wind>> = true;
 template<class C> concept DAQChannelLike = isDAQChannel<C>;
 
 // 族基：等待器、任务与完成回调只认它（参数、帧时刻、是否判齐），不读通道；交付后只读。
