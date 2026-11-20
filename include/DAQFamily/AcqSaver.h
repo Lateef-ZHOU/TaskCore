@@ -200,8 +200,8 @@ private:
         const auto &spectrum = *channel.spectrum;
         if constexpr (P.uniformRange)
         {
-            out.key("rangeStartM"); out.number(P.rangeStartM); out.raw(",");
-            out.key("rangeStepM"); out.number(P.rangeStepM); out.raw(",");
+            out.key("rangeStartM"); out.number(P.range.start); out.raw(",");
+            out.key("rangeStepM"); out.number(P.range.step); out.raw(",");
         }
         else
         {

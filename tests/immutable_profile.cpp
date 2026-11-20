@@ -3,11 +3,10 @@
 #include <type_traits>
 #include <utility>
 
-inline constexpr DAQParams immutableParams{
+inline constexpr DAQParams<UniformRangeMapping<30.0, 75.0, 3>> immutableParams{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 80,
-    .rangeStartM = 30, .rangeStepM = 15,
     .frequencyStartMHz = 79, .frequencyStepMHz = 1,
-    .rangeGateCount = 3, .frequencyBinCount = 2,
+    .frequencyBinCount = 2,
 };
 using Frame = VerticalWindProfileUnit<immutableParams>;
 static_assert(std::is_nothrow_constructible_v<Frame, std::chrono::system_clock::time_point, double>);

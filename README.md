@@ -12,9 +12,15 @@
 
 ## 2026-11-20：均匀和非均匀距离门（用户定）
 
-均匀通道的 `DAQParams` 用起点和步长描述斜距。非均匀通道用 `NonUniformDAQParams` 按值交入一份分段参数（`std::array<double, N>`，形如 `{首门起点, 门数, 门宽, …}`），段内等宽、段间可不等，编译期展开成逐门边界；类型即值，同一组分段在何处声明都是同一类型，展开后的边界表只保留一个静态副本。整张边界表不进类型：421 个边界作为值模板实参会让 QML 元类型签名膨胀到约 5.7 KB，Qt 注册时超出 constexpr 步数上限（C2131）；分段参数只把 5 个数写进类型。功率谱、径向风、CNR 和风廓线通过静态规格确定数组尺寸，共用同一规格，帧内只存各自的载荷。风廓线按斜距和每帧仰角取各门高度，按实际相邻层插值。
+距离门映射是规格的**类型**，`DAQParams<Range>` 以它作模板参数；波长、频率和频点数仍是规格值。
 
-均匀通道的 JSON 字段保持。非均匀采集数据使用 `rangeM` 和 `rangeStopM`，非均匀风廓线使用 `heightM` 和 `heightStopM`。各坐标表分别对应当前文件的每个距离门或高度层，覆盖终点单独保存。Windows Release CTest 16/16 通过，覆盖编译期范围及两种保存格式。
+- 均匀：`UniformRangeMapping<Start, Stop, GateCount>`，三个静态值，步长 = (Stop − Start) / GateCount。
+- 非均匀：小表用 `NonUniformRangeMapping<Edges>`（按值交入逐门边界）；大表由型号定义满足 `RangeMapping` 的具名类型，逐门坐标留在该类型的静态成员里。整张表不能作为模板实参：421 个边界会把 QML 元类型签名撑到约 5.7 KB，编译期求值超出 `/constexpr:steps` 上限（C2131）；具名类型的签名只带类型名。
+- `RangeMapping` 约束静态 `uniform`、`gateCount`、`stop`、`at(gate)`；非均匀类型另需 `edges`（逐门坐标视图）。
+
+功率谱、径向风、CNR 和风廓线通过静态规格确定数组尺寸，共用同一规格，帧内只存各自的载荷。风廓线按斜距和每帧仰角取各门高度，按实际相邻层插值。
+
+均匀通道的 JSON 字段保持。非均匀采集数据使用 `rangeM` 和 `rangeStopM`，非均匀风廓线使用 `heightM` 和 `heightStopM`。各坐标表分别对应当前文件的每个距离门或高度层，覆盖终点单独保存。Windows Release：FamilyCore CTest 16/16、ChartCore 4/4、四个采集卡官邸 CTest 通过，主程序整编零警告、8 秒离屏冒烟与基线一致。
 
 ## 2026-11-20：本机俯仰保留两个命令端点（用户定）
 

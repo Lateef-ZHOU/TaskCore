@@ -65,11 +65,10 @@ private:
 
 // 一路两门、八个频点：每次进料即一整帧，峰在 4 MHz，零风速参考 3.5 MHz → 径向风 0.5 m/s。
 // 测试型号取 2 μm：λ/2 = 1 m/s/MHz，便于手算。
-inline constexpr DAQParams testChannelParams{
+inline constexpr DAQParams<UniformRangeMapping<100.0, 160.0, 2>> testChannelParams{
     .wavelengthM = 2e-6, .zeroWindMHz = 3.5,
-    .rangeStartM = 100, .rangeStepM = 30,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .rangeGateCount = 2, .frequencyBinCount = 8,
+    .frequencyBinCount = 8,
 };
 class TestCollector final : public TypedDAQCollector<DAQChannel<testChannelParams>>
 {
@@ -144,7 +143,7 @@ int main(int argc, char **argv)
     QObject::connect(&device, &TestDevice::channelsReady, &app, [&](const TestDevice::Channels &channels) {
         const auto &channel = std::get<0>(*channels);
         if (channel.spectrum->size() != 16 || QThread::currentThread() != app.thread()) qFatal("spectrum signal differs");
-        if (channel.radialWind->size() != 2 || testChannelParams.rangeStartM != 100 || testChannelParams.rangeStepM != 30
+        if (channel.radialWind->size() != 2 || testChannelParams.range.start != 100 || testChannelParams.range.step != 30
             || channel.cnr->size() != 2 || std::abs((*channel.radialWind)[0] - 0.5) > 0.05)
             qFatal("standard radial processing differs");
         notifiedSpectrum = channel.spectrum;

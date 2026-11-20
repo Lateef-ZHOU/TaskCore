@@ -52,11 +52,10 @@ static_assert(!CanNameFamilyDevice<ContractCollectorBase, ContractFamily>);
 static_assert(!CanNameFamilyDevice<int, ContractFamily>);
 static_assert(!CanNameFamilyDevice<MatchingCollector, int>);
 }
-inline constexpr DAQParams probeParams{
+inline constexpr DAQParams<UniformRangeMapping<100.0, 125.0, 1>> probeParams{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 80,
-    .rangeStartM = 100, .rangeStepM = 25,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .rangeGateCount = 1, .frequencyBinCount = 1,
+    .frequencyBinCount = 1,
 };
 using Frame = VerticalWindProfileUnit<probeParams>;
 static_assert(std::is_same_v<RxTime, std::chrono::system_clock::time_point>);

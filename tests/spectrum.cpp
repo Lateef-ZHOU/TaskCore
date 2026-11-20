@@ -7,11 +7,10 @@
 #include <limits>
 #include <span>
 
-inline constexpr DAQParams testParams{
+inline constexpr DAQParams<UniformRangeMapping<30.0, 60.0, 2>> testParams{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 18,
-    .rangeStartM = 30, .rangeStepM = 15,
     .frequencyStartMHz = 10, .frequencyStepMHz = 2,
-    .rangeGateCount = 2, .frequencyBinCount = 17,
+    .frequencyBinCount = 17,
 };
 
 // 帧类型的基本布局和行为。
@@ -47,9 +46,8 @@ static_assert(Spectrum<testParams>::params.wavelengthM == testParams.wavelengthM
 static_assert(RadialWind<testParams>::params.rangeGateCount == testParams.rangeGateCount);
 
 // 不同参数产生不同类型。
-inline constexpr DAQParams shifted{.wavelengthM = 1.6e-6, .zeroWindMHz = 16,
-    .rangeStartM = 30, .rangeStepM = 15, .frequencyStartMHz = 10, .frequencyStepMHz = 2,
-    .rangeGateCount = 2, .frequencyBinCount = 17};
+inline constexpr DAQParams<UniformRangeMapping<30.0, 60.0, 2>> shifted{.wavelengthM = 1.6e-6, .zeroWindMHz = 16,
+    .frequencyStartMHz = 10, .frequencyStepMHz = 2, .frequencyBinCount = 17};
 static_assert(!std::same_as<Spectrum<testParams>, Spectrum<shifted>>);
 
 // 径向风计算入口。

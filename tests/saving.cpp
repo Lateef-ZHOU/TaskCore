@@ -82,26 +82,24 @@ QString waitDiagnostic(const std::size_t index)
 }
 
 // 两路：A 正常换算；B 以 NaN 参考造出缺测风速，检查缺测写成 null。
-inline constexpr DAQParams savedA{
+inline constexpr DAQParams<UniformRangeMapping<0.0, 30.0, 2>> savedA{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
-    .rangeStartM = 0, .rangeStepM = 15,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .rangeGateCount = 2, .frequencyBinCount = 4,
+    .frequencyBinCount = 4,
 };
-inline constexpr std::array savedBSegments{0.0, 1.0, 15.0, 1.0, 60.0};
-inline constexpr NonUniformDAQParams<savedBSegments> savedB{
+inline constexpr std::array savedBEdges{0.0, 15.0, 75.0};
+inline constexpr DAQParams<NonUniformRangeMapping<savedBEdges>> savedB{
     .wavelengthM = 1.55e-6, .zeroWindMHz = std::numeric_limits<double>::quiet_NaN(),
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
     .frequencyBinCount = 4,
 };
-inline constexpr std::array badSegments{0.0, 1.0, 0.0};
-inline constexpr NonUniformDAQParams<badSegments> badRange{.frequencyStepMHz = 1, .frequencyBinCount = 4};
+inline constexpr std::array badEdges{0.0, 15.0, 15.0};
+inline constexpr DAQParams<NonUniformRangeMapping<badEdges>> badRange{.frequencyStepMHz = 1, .frequencyBinCount = 4};
 static_assert(ValidDAQGrid<savedB> && !ValidDAQGrid<badRange>);
-inline constexpr DAQParams profileSpec{
+inline constexpr DAQParams<UniformRangeMapping<10.0, 50.0, 4>> profileSpec{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
-    .rangeStartM = 10, .rangeStepM = 10,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .rangeGateCount = 4, .frequencyBinCount = 4,
+    .frequencyBinCount = 4,
 };
 class SavedFrame final : public TypedDAQCollector<DAQChannel<savedA>, DAQChannel<savedB>>
 {
@@ -123,11 +121,10 @@ private:
 };
 static_assert(DAQCollectorLike<SavedFrame>);
 
-inline constexpr DAQParams singleBinSpec{
+inline constexpr DAQParams<UniformRangeMapping<0.0, 30.0, 2>> singleBinSpec{
     .wavelengthM = 1.55e-6, .zeroWindMHz = 1.5,
-    .rangeStartM = 0, .rangeStepM = 15,
     .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-    .rangeGateCount = 2, .frequencyBinCount = 1,
+    .frequencyBinCount = 1,
 };
 class SingleBinFrame final : public TypedDAQCollector<DAQChannel<singleBinSpec>>
 {

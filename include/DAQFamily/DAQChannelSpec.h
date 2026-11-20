@@ -15,107 +15,67 @@
 namespace DAQDetail {
 [[nodiscard]] constexpr bool finite(double value) noexcept
 { return value >= std::numeric_limits<double>::lowest() && value <= std::numeric_limits<double>::max(); }
-
-// 分段距离参数的结构检查：形状为 {起点, 门数, 门宽, …}，门数须为正整数。
-// 起点、门宽与展开后的边界是否可用由 ValidDAQGrid 判定，不在这里拒绝。
-template<auto Segments>
-[[nodiscard]] consteval bool segmentedShape() noexcept
-{
-    if (Segments.size() < 3 || Segments.size() % 2 == 0) return false;
-    for (std::size_t i = 1; i < Segments.size(); i += 2)
-    {
-        const double count = Segments[i];
-        if (!finite(count) || count < 1.0 || count > static_cast<double>(std::numeric_limits<int>::max()))
-            return false;
-        if (count != static_cast<double>(static_cast<int>(count))) return false; // 门数须是整数
-    }
-    return true;
-}
-
-template<auto Segments>
-[[nodiscard]] consteval int segmentedGateCount() noexcept
-{
-    int gates = 0;
-    for (std::size_t i = 1; i < Segments.size(); i += 2)
-        gates += static_cast<int>(Segments[i]);
-    return gates;
-}
-
-// 按段展开成逐门边界：段内等宽，段间可不等；末项是覆盖终点。
-template<auto Segments>
-[[nodiscard]] consteval auto segmentedEdges() noexcept
-{
-    std::array<double, static_cast<std::size_t>(segmentedGateCount<Segments>()) + 1> edges{};
-    double position = Segments[0];
-    std::size_t gate = 0;
-    for (std::size_t i = 1; i < Segments.size(); i += 2)
-        for (int k = 0, count = static_cast<int>(Segments[i]); k < count; ++k)
-        {
-            edges[gate++] = position;
-            position += Segments[i + 1];
-        }
-    edges[gate] = position;
-    return edges;
-}
 } // namespace DAQDetail
 
+// 均匀距离门：起点、终点、门数是静态模板值，步长由此导出（逐门坐标不再进类型）。
+template<double Start, double Stop, int GateCount>
 struct UniformRangeMapping
 {
-    double start;
-    double step;
+    static_assert(GateCount > 0, "门数须为正");
+    static_assert(DAQDetail::finite(Start) && DAQDetail::finite(Stop) && Stop > Start,
+                  "距离范围须有限且 Stop > Start");
+    static constexpr bool uniform = true;
+    static constexpr double start = Start;
+    static constexpr double stop = Stop;
+    static constexpr int gateCount = GateCount;
+    static constexpr double step = (Stop - Start) / static_cast<double>(GateCount);
 
-    [[nodiscard]] constexpr double operator[](std::size_t gate) const noexcept
-    { return start + step * static_cast<double>(gate); }
+    [[nodiscard]] static constexpr double at(std::size_t gate) noexcept
+    { return Start + step * static_cast<double>(gate); }
 };
 
-// 非均匀距离门的分段参数：{首门起点, 门数₁, 门宽₁, 门数₂, 门宽₂, …}，按值作为模板实参交入
-// （std::array<double, N>）。段内等宽、段间可不等；门数须是正整数。类型即值：同一组分段在不同位置
-// 声明得到同一类型，帧与规格实例均不持有副本；展开后的边界表按类型保留一个静态副本，末项是覆盖终点。
-template<auto Segments>
+// 非均匀距离门（小表）：逐门起点加末门右边界，按值作为模板实参交入（std::array<double, N>）。
+// 大表放不进值模板：421 个边界写进类型会让 QML 元类型签名膨胀到超出 constexpr 步数上限，
+// 这种型号改为定义满足 RangeMapping 的具名类型，逐门坐标留在类型的静态成员里。
+template<auto Edges>
 struct NonUniformRangeMapping
 {
-    static_assert(DAQDetail::segmentedShape<Segments>(),
-                  "分段距离参数须为 {起点, 门数, 门宽, …}，门数须为正整数");
-    static constexpr int gateCount = DAQDetail::segmentedGateCount<Segments>();
-    static constexpr std::array<double, static_cast<std::size_t>(gateCount) + 1> kEdges =
-        DAQDetail::segmentedEdges<Segments>();
-    static constexpr std::span<const double> edges{kEdges.data(), kEdges.size()};
+    static_assert(Edges.size() > 1, "非均匀距离门至少需要首门起点和覆盖终点");
+    static constexpr bool uniform = false;
+    static constexpr int gateCount = static_cast<int>(Edges.size()) - 1;
+    static constexpr double stop = Edges.back();
+    static constexpr std::span<const double> edges{Edges.data(), Edges.size()};
 
-    [[nodiscard]] constexpr double operator[](std::size_t gate) const noexcept { return edges[gate]; }
+    [[nodiscard]] static constexpr double at(std::size_t gate) noexcept { return Edges[gate]; }
 };
 
-// 均匀通道的数值规格。起点和步长独立给定，兼容现有均匀通道的构造。
+// 距离门映射的接口：均匀用 UniformRangeMapping，非均匀用 NonUniformRangeMapping 或型号自己的
+// 具名类型。具名类型承载大表，类型签名只带类型名；非均匀类型还要提供 edges（逐门坐标视图）。
+template<class T>
+concept RangeMapping = requires(std::size_t gate) {
+    { T::uniform } -> std::convertible_to<bool>;
+    { T::gateCount } -> std::convertible_to<int>;
+    { T::stop } -> std::convertible_to<double>;
+    { T::at(gate) } -> std::same_as<double>;
+} && (T::uniform || requires { T::edges; });
+
+// 通道数值规格：距离门映射由类型给出，波长、频率与频点数仍是值。
+// 帧类按规格值确定数组尺寸，因此同一映射类型加同一组数值就是同一规格。
+template<RangeMapping Range>
 struct DAQParams
 {
     double wavelengthM = 0.0;
     double zeroWindMHz = 0.0;
-    double rangeStartM = 0.0;
-    double rangeStepM = 0.0;
-    double frequencyStartMHz = 0.0;
-    double frequencyStepMHz = 0.0;
-    int rangeGateCount = 0;
-    int frequencyBinCount = 0;
-    static constexpr bool uniformRange = true;
-
-    [[nodiscard]] constexpr double rangeAt(std::size_t gate) const noexcept
-    { return UniformRangeMapping{rangeStartM, rangeStepM}[gate]; }
-    [[nodiscard]] constexpr double rangeStopM() const noexcept { return rangeAt(rangeGateCount); }
-};
-
-template<auto Segments>
-struct NonUniformDAQParams
-{
-    double wavelengthM = 0.0;
-    double zeroWindMHz = 0.0;
     double frequencyStartMHz = 0.0;
     double frequencyStepMHz = 0.0;
     int frequencyBinCount = 0;
-    static constexpr NonUniformRangeMapping<Segments> range{};
-    static constexpr int rangeGateCount = NonUniformRangeMapping<Segments>::gateCount;
-    static constexpr bool uniformRange = false;
 
-    [[nodiscard]] static constexpr double rangeAt(std::size_t gate) noexcept { return range[gate]; }
-    [[nodiscard]] static constexpr double rangeStopM() noexcept { return range[rangeGateCount]; }
+    static constexpr Range range{};
+    static constexpr int rangeGateCount = Range::gateCount;
+    static constexpr bool uniformRange = Range::uniform;
+
+    [[nodiscard]] static constexpr double rangeAt(std::size_t gate) noexcept { return Range::at(gate); }
+    [[nodiscard]] static constexpr double rangeStopM() noexcept { return Range::stop; }
 };
 
 namespace DAQDetail {
@@ -123,7 +83,7 @@ template<auto P>
 [[nodiscard]] consteval bool validRange()
 {
     if constexpr (P.uniformRange)
-        return finite(P.rangeStartM) && finite(P.rangeStepM) && P.rangeStepM > 0 && finite(P.rangeStopM());
+        return finite(P.range.start) && P.range.step > 0.0 && finite(P.range.stop);
     else
     {
         auto before = P.rangeAt(0);
@@ -232,12 +192,12 @@ struct VerticalWindProfileUnit : public std::array<std::optional<LinAlg::Vec3>, 
     { return std::sin(elevationDeg * std::numbers::pi / 180.0); }
     [[nodiscard]] double heightStartM() const noexcept { return P.rangeAt(0) * heightScale(); }
     [[nodiscard]] double heightStepM() const noexcept requires (P.uniformRange)
-    { return P.rangeStepM * heightScale(); }
+    { return P.range.step * heightScale(); }
     [[nodiscard]] double heightAt(std::size_t gate) const noexcept
     {
         const auto scale = heightScale();
         if constexpr (P.uniformRange)
-            return P.rangeStartM * scale + (P.rangeStepM * scale) * static_cast<double>(gate);
+            return P.range.start * scale + (P.range.step * scale) * static_cast<double>(gate);
         else
             return P.rangeAt(gate) * scale;
     }

@@ -88,20 +88,19 @@ bool modelStorageTransfer()
 }
 
 template<int Gates, int Start = 0, int Step = 15>
-constexpr DAQParams profileParams() {
+constexpr DAQParams<UniformRangeMapping<static_cast<double>(Start), static_cast<double>(Start + Step * Gates), Gates>>
+profileParams() {
     return {.wavelengthM = 1.55e-6, .zeroWindMHz = 80,
-            .rangeStartM = Start, .rangeStepM = Step,
             .frequencyStartMHz = 0, .frequencyStepMHz = 1,
-            .rangeGateCount = Gates, .frequencyBinCount = 1};
+            .frequencyBinCount = 1};
 }
 template<int ZeroWind>
-constexpr DAQParams spectrumParams() {
+constexpr DAQParams<UniformRangeMapping<30.0, 60.0, 2>> spectrumParams() {
     return {.wavelengthM = 1.55e-6, .zeroWindMHz = ZeroWind,
-            .rangeStartM = 30, .rangeStepM = 15,
             .frequencyStartMHz = 10, .frequencyStepMHz = 2,
-            .rangeGateCount = 2, .frequencyBinCount = 9};
+            .frequencyBinCount = 9};
 }
-template<DAQParams P> auto wind(std::initializer_list<double> values)
+template<auto P> auto wind(std::initializer_list<double> values)
 {
     auto frame = std::make_shared<RadialWind<P>>();
     std::copy(values.begin(), values.end(), frame->begin());
@@ -150,7 +149,7 @@ int main()
             spectrum[gate * 9 + bin] = shiftedSpectrum[gate * 9 + bin] = outOfBandSpectrum[gate * 9 + bin]
                 = 1.0 + 100.0 * std::exp(-(bin - 4.0) * (bin - 4.0) / 2.0);
     const auto calm = RadialWindCalculation::Calc(spectrum);
-    if (calm.ws->size() != 2 || spectrumParams<18>().rangeStartM != 30.0 || spectrumParams<18>().rangeStepM != 15.0
+    if (calm.ws->size() != 2 || spectrumParams<18>().range.start != 30.0 || spectrumParams<18>().range.step != 15.0
         || std::abs((*calm.ws)[0]) > 0.01) return 11;
     const auto shifted = RadialWindCalculation::Calc(shiftedSpectrum);
     if (std::abs((*shifted.ws)[1] - 2.0 * 0.775) > 0.01) return 12;
