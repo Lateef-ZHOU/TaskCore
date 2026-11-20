@@ -7,7 +7,7 @@
 #include <utility>
 
 
-#include "GMBFamily/GimbalModel.h" // PanTiltModel（目标 / 实测位形；distance）
+#include "GMBFamily/GimbalModel.h" // PanTiltModel 与逐轴圆周角距离
 #include "RunBase.h" // Collector<FeedT, ParamsT> 契约基类
 
 // 一次运动请求的按值参数：云台位形目标、停稳等待及两轴速度（°/s），速度必须成组携带。
@@ -48,7 +48,10 @@ public:
     // 出圈即清零重新计时；须连续在圈内（样本首末时刻相差达到 hold）才完成。
 protected:
     explicit GMBCollector(const GMBParameters &parameters, const double tolerance)
-        : Collector(parameters), GMBParameters(parameters), tolerance_(tolerance)
+        : GMBCollector(parameters, tolerance, tolerance) {}
+
+    GMBCollector(const GMBParameters &parameters, const double panTolerance, const double tiltTolerance)
+        : Collector(parameters), GMBParameters(parameters), panTolerance_(panTolerance), tiltTolerance_(tiltTolerance)
     {
     }
     // 族基不拥有对象，销毁由具体类型的 shared_ptr 控制块负责。
@@ -78,7 +81,8 @@ private:
     void onFeed(const PanTiltModel &sample, RxTime) override
     {
         last_ = sample;
-        if (PanTiltModel::distance(sample, parameters.target) > tolerance_)
+        if (AngularDistance(sample.pan(), parameters.target.pan()) > panTolerance_
+            || AngularDistance(sample.tilt(), parameters.target.tilt()) > tiltTolerance_)
         {
             hitInterval_.reset();
             return;
@@ -90,7 +94,8 @@ private:
             hitInterval_->second = now;
     }
 
-    const double tolerance_;
+    const double panTolerance_;
+    const double tiltTolerance_;
     // ── 收集区（[仅 worker] 可写；判齐后 worker 不再触斗，主线程只读）──
     std::optional<PanTiltModel> last_;       // 最近一次采样（给 measured()，与判据无关）
     // 本段连续圈内回报的首末时刻；空 = 尚未进圈或已出圈。
