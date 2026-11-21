@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.28)
 project(LidarFamilyCore LANGUAGES CXX)
 add_subdirectory(models)
 find_package(OpenMP REQUIRED)
@@ -37,7 +37,7 @@ if(FAMILYCORE_WITH_TASK_SUPPORT OR FAMILYCORE_WITH_QML)
     if(NOT TARGET Lidar::ChartCore)
         FetchContent_Declare(lidar_chartcore
             GIT_REPOSITORY https://github.com/Lateef-ZHOU/ChartCore.git
-            GIT_TAG 6ef9911d8e2b5d26d90899aabd596a9732d7e2fe)
+            GIT_TAG 47b6f310d4633848fbd0f9c343a04697dff56efc)
         FetchContent_MakeAvailable(lidar_chartcore)
     endif()
 endif()

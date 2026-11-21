@@ -1,4 +1,4 @@
-﻿include(entry-consistency/Register.cmake)
+include(entry-consistency/Register.cmake)
 
 # DAQ 头现在使用绘图库提供的数据容器；只取头文件的接口目标，不链 Qt Quick。
 include(FetchContent)
@@ -12,7 +12,7 @@ if(NOT TARGET Lidar::ChartData)
     if(NOT TARGET Lidar::ChartCore)
         FetchContent_Declare(lidar_chartcore
             GIT_REPOSITORY https://github.com/Lateef-ZHOU/ChartCore.git
-            GIT_TAG 6ef9911d8e2b5d26d90899aabd596a9732d7e2fe)
+            GIT_TAG 47b6f310d4633848fbd0f9c343a04697dff56efc)
         FetchContent_MakeAvailable(lidar_chartcore)
     endif()
 endif()
