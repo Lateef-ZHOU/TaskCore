@@ -52,21 +52,31 @@ struct DAQChannel
     // 风速由型号交入的「下标 → 风速」映射换算；族基不认识波长与零风速参考。
     // 有风速映射值时可显式交入；省略则用类型上的 Wind{}。
     explicit DAQChannel(std::unique_ptr<Grid2D<Range, Frequency>> values, const char* channelName = nullptr)
-        : DAQChannel(RadialWindCalculation::Calc(*values, Wind{}), values, channelName) {}
+        : DAQChannel(RadialWindCalculation::Calc(*values, Wind{}), values, values, channelName) {}
     explicit DAQChannel(std::unique_ptr<Grid2D<Range, Frequency>> values, Wind windMapping, const char* channelName = nullptr)
-        : DAQChannel(RadialWindCalculation::Calc(*values, windMapping), values, channelName) {}
+        : DAQChannel(RadialWindCalculation::Calc(*values, windMapping), values, values, channelName) {}
 
     using RangeType = Range;
     using WindType = Wind;
 
-    std::shared_ptr<const Grid2D<Range, Frequency>> spectrum;
+    // 去噪是必经的中间步：spectrum 保存原谱（落盘），denoised 画图并从它拟合风速/CNR。
+    explicit DAQChannel(std::unique_ptr<Grid2D<Range, Frequency>> values,
+        std::unique_ptr<Grid2D<Range, Frequency>> denoisedValues, Wind windMapping, const char* channelName = nullptr)
+        : DAQChannel(RadialWindCalculation::Calc(*denoisedValues, windMapping), values, denoisedValues, channelName) {}
+
+    std::shared_ptr<const Grid2D<Range, Frequency>> spectrum; // 原谱：落盘
+    std::shared_ptr<const Grid2D<Range, Frequency>> denoised; // 去噪谱：绘图与风速/CNR 计算
+    [[nodiscard]] const std::shared_ptr<const Grid2D<Range, Frequency>> &displaySpectrum() const noexcept
+    { return denoised ? denoised : spectrum; }
     std::shared_ptr<const Array1D<Range>> radialWind;
     std::shared_ptr<const Array1D<Range>> cnr;
     static constexpr Wind wind{};
 private:
     // 以引用交接唯一份额：拟合结束后才移入成员，不依赖实参求值顺序。
-    DAQChannel(RadialWindCalculation::Result<Range> radial, std::unique_ptr<Grid2D<Range, Frequency>> &values, const char* channelName)
-        : name(channelName), spectrum(std::move(values)), radialWind(std::move(radial.ws)), cnr(std::move(radial.cnr)) {}
+    DAQChannel(RadialWindCalculation::Result<Range> radial, std::unique_ptr<Grid2D<Range, Frequency>> &values,
+        std::unique_ptr<Grid2D<Range, Frequency>> &denoisedValues, const char* channelName)
+        : name(channelName), spectrum(std::move(values)), denoised(std::move(denoisedValues)),
+          radialWind(std::move(radial.ws)), cnr(std::move(radial.cnr)) {}
 };
 
 template<class> inline constexpr bool isDAQChannel = false;
